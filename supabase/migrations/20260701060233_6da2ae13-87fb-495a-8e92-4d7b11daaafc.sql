@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "public insert blaze_results" ON public.blaze_results;

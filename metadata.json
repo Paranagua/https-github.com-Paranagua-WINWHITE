@@ -1,0 +1,6 @@
+{
+  "name": "Histórico Freitas da Blaze",
+  "description": "Plataforma de histórico, análise preditiva e geração de sinais de roleta para Blaze Double.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
