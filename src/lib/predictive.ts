@@ -1,6 +1,6 @@
 /**
  * Motor Preditivo FreitasWhite
- * Arquitetura Unificada: 7 Análises, Limites de 14 tempos, 120 min timeout, Janela de 6 Gatilhos.
+ * Arquitetura Unificada: Análises estatísticas com limite de 14 tempos, 120 min timeout, Janela de 6 Gatilhos.
  */
 import { parseUtcDate } from "@/lib/utils";
 export type Row = { id: number; roll: string; color: string; created_at: string };
@@ -9,7 +9,7 @@ export type RecAlert = { type: string; triggerAt: Date; duration: number };
 
 export type Cycle = {
   value: number;
-  analysis: 1 | 2 | 3 | 4 | 5 | 6 | 7 | number; // 1-7 main, 100+ secondary
+  analysis: number; // 1-5 main, 10-21 sequence & condition triggers, 100+ secondary
   isSecondary?: boolean;
 
   triggerAt: Date;
@@ -60,37 +60,51 @@ export function buildA1(rows: Row[]): Cycle[] {
   return out;
 }
 
-/** Análise 2 — pedras iguais consecutivas (0..14), gatilho na segunda. */
+/** Análise 2 — Repetição Simples: pedra sai igual à anterior (P1 == P2). */
 export function buildA2(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
   for (let i = 1; i < rows.length; i++) {
+    const n = Number(rows[i].roll);
     const prev = Number(rows[i - 1].roll);
-    const cur = Number(rows[i].roll);
-    if (!Number.isFinite(cur) || cur < 0 || cur > 14 || cur !== prev) continue;
+    if (!Number.isFinite(n) || n < 0 || n > 14) continue;
+    if (n !== prev) continue;
     const dt = parseUtcDate(rows[i].created_at);
     if (Number.isNaN(dt.getTime())) continue;
-    out.push({ value: cur, analysis: 2, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
+    out.push({ value: n, analysis: 2, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
   }
   return out;
 }
 
-/** Análise 3 — repetição consecutiva (0..9) com unidade do minuto casada. */
+/** Análise 3 — 2ª Pedra do Minuto 9 (09, 19, 29, 39, 49, 59). */
 export function buildA3(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
-  for (let i = 1; i < rows.length; i++) {
-    const prev = Number(rows[i - 1].roll);
-    const cur = Number(rows[i].roll);
-    if (!Number.isFinite(cur) || cur < 0 || cur > 9 || cur !== prev) continue;
-    const dtPrev = parseUtcDate(rows[i - 1].created_at);
-    const dt = parseUtcDate(rows[i].created_at);
-    if (Number.isNaN(dt.getTime()) || Number.isNaN(dtPrev.getTime())) continue;
-    if (dtPrev.getMinutes() % 10 !== cur && dt.getMinutes() % 10 !== cur) continue;
-    out.push({ value: cur, analysis: 3, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
-  }
+  const processedKeys = new Set<string>();
+  const minuteCounts = new Map<string, number>();
+
+  rows.forEach((r, i) => {
+    const dt = parseUtcDate(r.created_at);
+    if (Number.isNaN(dt.getTime())) return;
+
+    const minutes = dt.getMinutes();
+    if (minutes % 10 !== 9) return;
+
+    const key = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}-${dt.getHours()}-${minutes}`;
+    const count = (minuteCounts.get(key) || 0) + 1;
+    minuteCounts.set(key, count);
+
+    if (count !== 2) return;
+    if (processedKeys.has(key)) return;
+    processedKeys.add(key);
+
+    const n = Number(r.roll);
+    if (!Number.isFinite(n) || n < 0 || n > 14) return;
+
+    out.push({ value: n, analysis: 3, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
+  });
   return out;
 }
 
-/** Análise 4 — Primeira Pedra da Dezena (virada do minuto 00, 10, 20, 30, 40, 50). */
+/** Análise 4 — 1ª Pedra do Minuto 0 (00, 10, 20, 30, 40, 50). */
 export function buildA4(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
   const processedKeys = new Set<string>();
@@ -100,7 +114,6 @@ export function buildA4(rows: Row[]): Cycle[] {
     if (Number.isNaN(dt.getTime())) return;
 
     const minutes = dt.getMinutes();
-    // Gatilho: minutos terminados em 0 (00, 10, 20, 30, 40, 50)
     if (minutes % 10 !== 0) return;
 
     const key = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}-${dt.getHours()}-${minutes}`;
@@ -115,12 +128,10 @@ export function buildA4(rows: Row[]): Cycle[] {
   return out;
 }
 
-/** Análise 5 — Segunda Pedra da Dezena (virada do minuto 00, 10, 20, 30, 40, 50). */
+/** Análise 5 — 2ª Pedra do Minuto 0 (00, 10, 20, 30, 40, 50). */
 export function buildA5(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
   const processedKeys = new Set<string>();
-
-  // Dicionário para contar pedras no mesmo minuto
   const minuteCounts = new Map<string, number>();
 
   rows.forEach((r, i) => {
@@ -134,7 +145,6 @@ export function buildA5(rows: Row[]): Cycle[] {
     const count = (minuteCounts.get(key) || 0) + 1;
     minuteCounts.set(key, count);
 
-    // Gatilho apenas na SEGUNDA pedra enviada no minuto
     if (count !== 2) return;
     if (processedKeys.has(key)) return;
     processedKeys.add(key);
@@ -147,143 +157,39 @@ export function buildA5(rows: Row[]): Cycle[] {
   return out;
 }
 
-/** Análise 6 (O Pão) — Padrão Sanduíche (A - B - A) focando no alinhamento das pontas A. */
-export function buildA6(rows: Row[]): Cycle[] {
-  const out: Cycle[] = [];
-  for (let i = 2; i < rows.length; i++) {
-    const a1 = Number(rows[i - 2].roll);
-    const a2 = Number(rows[i].roll);
-    if (!Number.isFinite(a1) || !Number.isFinite(a2) || a1 !== a2 || a1 < 0 || a1 > 14) continue;
-    const dt = parseUtcDate(rows[i].created_at);
-    if (Number.isNaN(dt.getTime())) continue;
-    out.push({ value: a2, analysis: 6, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
-  }
-  return out;
-}
-
-/** Análise 7 (A Carne) — Padrão Sanduíche (A - B - A) focando na reação da pedra B recheio. */
-export function buildA7(rows: Row[]): Cycle[] {
-  const out: Cycle[] = [];
-  for (let i = 2; i < rows.length; i++) {
-    const a1 = Number(rows[i - 2].roll);
-    const b = Number(rows[i - 1].roll);
-    const a2 = Number(rows[i].roll);
-    if (
-      !Number.isFinite(a1) ||
-      !Number.isFinite(a2) ||
-      !Number.isFinite(b) ||
-      a1 !== a2 ||
-      b < 0 ||
-      b > 14
-    )
-      continue;
-    const dt = parseUtcDate(rows[i].created_at);
-    if (Number.isNaN(dt.getTime())) continue;
-    out.push({ value: b, analysis: 7, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
-  }
-  return out;
-}
-
-/**
- * ESTRATÉGIA A8 - BRANCO DUPLO (Gatilho: 2 Brancos Seguidos - ⚪⚪)
- * Gatilhos G1-G6 baseados em hora/minuto e pedras adjacentes.
- * Delta = G6 + G4 + G5
- */
-export function buildA8(rows: Row[]): Cycle[] {
-  const out: Cycle[] = [];
-  // Percorremos o histórico procurando por dois brancos seguidos
-  for (let i = 2; i < rows.length - 1; i++) {
-    const b1 = Number(rows[i - 1].roll);
-    const b2 = Number(rows[i].roll);
-    if (b1 !== 0 || b2 !== 0) continue;
-
-    const dt1 = parseUtcDate(rows[i - 1].created_at);
-    const dt2 = parseUtcDate(rows[i].created_at);
-    if (Number.isNaN(dt1.getTime()) || Number.isNaN(dt2.getTime())) continue;
-
-    const g1 = dt1.getHours();
-    const g2 = dt1.getMinutes();
-    const g3 = dt2.getMinutes();
-    const g4 = Number(rows[i - 2].roll); // Pedra anterior ao 1º branco
-    const g5 = Number(rows[i + 1].roll); // Pedra posterior ao 2º branco
-    const g6 = g1 + g2 + g3; // Soma Temporal
-
-    if (!Number.isFinite(g4) || !Number.isFinite(g5)) continue;
-
-    const delta = g6 + g4 + g5;
-
-    // Projeção: Horário Alvo = Timestamp do 2º Branco + deltaMinutes.
-    // Usamos 'gaps' para transportar o delta para o motor.
-    out.push({
-      value: 0,
-      analysis: 8,
-      triggerAt: dt2,
-      gaps: [delta],
-    });
-  }
-  return out;
-}
-
-/**
- * GATILHO 8-11: [8 -> 11]
- * Soma(Ant1 + Ant2) + Minuto da pedra 8
- */
+/** Análise 10 — Gatilho 8-11: [8 -> 11]. Coleta os próximos 14 brancos. */
 export function buildA8_11(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
-  for (let i = 3; i < rows.length; i++) {
+  for (let i = 1; i < rows.length; i++) {
     const p1 = Number(rows[i - 1].roll);
     const p2 = Number(rows[i].roll);
     if (p1 !== 8 || p2 !== 11) continue;
 
-    const dt8 = parseUtcDate(rows[i - 1].created_at);
-    if (Number.isNaN(dt8.getTime())) continue;
+    const dt = parseUtcDate(rows[i].created_at);
+    if (Number.isNaN(dt.getTime())) continue;
 
-    const ant1 = Number(rows[i - 2].roll); // Pedra anterior ao 8
-    const ant2 = Number(rows[i - 3].roll); // Pedra anterior à pedra anterior ao 8
-    if (!Number.isFinite(ant1) || !Number.isFinite(ant2)) continue;
-
-    const delta = ant1 + ant2;
-    out.push({ value: 811, analysis: 10, triggerAt: dt8, gaps: [delta] });
+    out.push({ value: 811, analysis: 10, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
   }
   return out;
 }
 
-/**
- * GATILHO 11-11: [11 -> 11]
- * Soma(Ant1 + Ant2 + Post1 + Post2) + Minuto da 1ª 11 + 10
- */
+/** Análise 11 — Gatilho 11-11: [11 -> 11]. Coleta os próximos 14 brancos. */
 export function buildA11_11(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
-  for (let i = 3; i < rows.length - 2; i++) {
+  for (let i = 1; i < rows.length; i++) {
     const p1 = Number(rows[i - 1].roll);
     const p2 = Number(rows[i].roll);
     if (p1 !== 11 || p2 !== 11) continue;
 
-    const dt11_1 = parseUtcDate(rows[i - 1].created_at);
-    if (Number.isNaN(dt11_1.getTime())) continue;
+    const dt = parseUtcDate(rows[i].created_at);
+    if (Number.isNaN(dt.getTime())) continue;
 
-    const a1 = Number(rows[i - 2].roll); // Ant 1
-    const a2 = Number(rows[i - 3].roll); // Ant 2
-    const post1 = Number(rows[i + 1].roll);
-    const post2 = Number(rows[i + 2].roll);
-    if (
-      !Number.isFinite(a1) ||
-      !Number.isFinite(a2) ||
-      !Number.isFinite(post1) ||
-      !Number.isFinite(post2)
-    )
-      continue;
-
-    const delta = a1 + a2 + post1 + post2 + 10;
-    out.push({ value: 1111, analysis: 11, triggerAt: dt11_1, gaps: [delta] });
+    out.push({ value: 1111, analysis: 11, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
   }
   return out;
 }
 
-/**
- * GATILHO 4-11: [4 -> 11]
- * Minuto da pedra 4 + 5
- */
+/** Análise 12 — Gatilho 4-11: [4 -> 11]. Coleta os próximos 14 brancos. */
 export function buildA4_11(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
   for (let i = 1; i < rows.length; i++) {
@@ -291,18 +197,15 @@ export function buildA4_11(rows: Row[]): Cycle[] {
     const p2 = Number(rows[i].roll);
     if (p1 !== 4 || p2 !== 11) continue;
 
-    const dt4 = parseUtcDate(rows[i - 1].created_at);
-    if (Number.isNaN(dt4.getTime())) continue;
+    const dt = parseUtcDate(rows[i].created_at);
+    if (Number.isNaN(dt.getTime())) continue;
 
-    out.push({ value: 411, analysis: 12, triggerAt: dt4, gaps: [5] });
+    out.push({ value: 411, analysis: 12, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
   }
   return out;
 }
 
-/**
- * GATILHO 4-14 ou 14-4: [4 -> 14] ou [14 -> 4]
- * Minuto da 2ª pedra + 1
- */
+/** Análise 13 — Gatilho 4-14 ou 14-4: [4 -> 14] ou [14 -> 4]. Coleta os próximos 14 brancos. */
 export function buildA4_14(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
   for (let i = 1; i < rows.length; i++) {
@@ -311,35 +214,15 @@ export function buildA4_14(rows: Row[]): Cycle[] {
     const isMatch = (p1 === 4 && p2 === 14) || (p1 === 14 && p2 === 4);
     if (!isMatch) continue;
 
-    const dt2 = parseUtcDate(rows[i].created_at);
-    if (Number.isNaN(dt2.getTime())) continue;
+    const dt = parseUtcDate(rows[i].created_at);
+    if (Number.isNaN(dt.getTime())) continue;
 
-    out.push({ value: 414, analysis: 13, triggerAt: dt2, gaps: [1] });
+    out.push({ value: 414, analysis: 13, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
   }
   return out;
 }
 
-/**
- * GATILHO 7-11 ou 11-7: [7 -> 11] ou [11 -> 7]
- * Minuto da 1ª pedra + 5 -> SELO VERDE
- */
-export function buildA7_11(rows: Row[]): Cycle[] {
-  const out: Cycle[] = [];
-  for (let i = 1; i < rows.length; i++) {
-    const p1 = Number(rows[i - 1].roll);
-    const p2 = Number(rows[i].roll);
-    const isMatch = (p1 === 7 && p2 === 11) || (p1 === 11 && p2 === 7);
-    if (!isMatch) continue;
-
-    const dt1 = parseUtcDate(rows[i - 1].created_at);
-    if (Number.isNaN(dt1.getTime())) continue;
-
-    out.push({ value: 711, analysis: 20711, triggerAt: dt1, gaps: [5] });
-  }
-  return out;
-}
-
-/** Análise 14 — Soma de duas pedras consecutivas igual a 17 (0..14). Coleta os próximos 14 brancos. */
+/** Análise 14 — Soma de duas pedras consecutivas igual a 17. Coleta os próximos 14 brancos. */
 export function buildASoma17(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
   for (let i = 1; i < rows.length; i++) {
@@ -356,7 +239,7 @@ export function buildASoma17(rows: Row[]): Cycle[] {
   return out;
 }
 
-/** Análise 15 — Soma de duas pedras consecutivas igual a 19 (0..14). Coleta os próximos 14 brancos. */
+/** Análise 15 — Soma de duas pedras consecutivas igual a 19. Coleta os próximos 14 brancos. */
 export function buildASoma19(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
   for (let i = 1; i < rows.length; i++) {
@@ -373,7 +256,7 @@ export function buildASoma19(rows: Row[]): Cycle[] {
   return out;
 }
 
-/** Análise 16 — Soma de duas pedras consecutivas igual a 21 (0..14). Coleta os próximos 14 brancos. */
+/** Análise 16 — Soma de duas pedras consecutivas igual a 21. Coleta os próximos 14 brancos. */
 export function buildASoma21(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
   for (let i = 1; i < rows.length; i++) {
@@ -390,7 +273,7 @@ export function buildASoma21(rows: Row[]): Cycle[] {
   return out;
 }
 
-/** Análise 17 — 1ª Pedra do Minuto 5 (virada dos minutos 05, 15, 25, 35, 45, 55). Coleta os próximos 14 brancos. */
+/** Análise 17 — 1ª Pedra do Minuto 5 (05, 15, 25, 35, 45, 55). Coleta os próximos 14 brancos. */
 export function buildA1Minuto5(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
   const processedKeys = new Set<string>();
@@ -414,7 +297,7 @@ export function buildA1Minuto5(rows: Row[]): Cycle[] {
   return out;
 }
 
-/** Análise 18 — 2ª Pedra do Minuto 5 (minutos 05, 15, 25, 35, 45, 55). Coleta os próximos 14 brancos. */
+/** Análise 18 — 2ª Pedra do Minuto 5 (05, 15, 25, 35, 45, 55). Coleta os próximos 14 brancos. */
 export function buildA2Minuto5(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
   const processedKeys = new Set<string>();
@@ -431,7 +314,6 @@ export function buildA2Minuto5(rows: Row[]): Cycle[] {
     const count = (minuteCounts.get(key) || 0) + 1;
     minuteCounts.set(key, count);
 
-    // Gatilho apenas na SEGUNDA pedra enviada no minuto
     if (count !== 2) return;
     if (processedKeys.has(key)) return;
     processedKeys.add(key);
@@ -441,6 +323,69 @@ export function buildA2Minuto5(rows: Row[]): Cycle[] {
 
     out.push({ value: n, analysis: 18, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
   });
+  return out;
+}
+
+/**
+ * Análise 19 — Padrão 3 Pedras: Pontas Iguais (P1 - P2 - P1, com P2 != P1).
+ * Verifica tempo até o branco indexado pela numeração da 1ª e última pedra (P1).
+ */
+export function buildASandwichPontas(rows: Row[]): Cycle[] {
+  const out: Cycle[] = [];
+  for (let i = 2; i < rows.length; i++) {
+    const p1 = Number(rows[i - 2].roll);
+    const p2 = Number(rows[i - 1].roll);
+    const p3 = Number(rows[i].roll);
+
+    if (!Number.isFinite(p1) || !Number.isFinite(p2) || !Number.isFinite(p3)) continue;
+    if (p1 < 0 || p1 > 14 || p2 < 0 || p2 > 14 || p3 < 0 || p3 > 14) continue;
+    if (p1 !== p3 || p2 === p1) continue;
+
+    const dt = parseUtcDate(rows[i].created_at);
+    if (Number.isNaN(dt.getTime())) continue;
+
+    out.push({ value: p1, analysis: 19, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
+  }
+  return out;
+}
+
+/**
+ * Análise 20 — Padrão 3 Pedras: Pedra do Meio (P1 - P2 - P1, com P2 != P1).
+ * Verifica tempo até o branco indexado pela numeração da segunda pedra / recheio (P2).
+ */
+export function buildASandwichMeio(rows: Row[]): Cycle[] {
+  const out: Cycle[] = [];
+  for (let i = 2; i < rows.length; i++) {
+    const p1 = Number(rows[i - 2].roll);
+    const p2 = Number(rows[i - 1].roll);
+    const p3 = Number(rows[i].roll);
+
+    if (!Number.isFinite(p1) || !Number.isFinite(p2) || !Number.isFinite(p3)) continue;
+    if (p1 < 0 || p1 > 14 || p2 < 0 || p2 > 14 || p3 < 0 || p3 > 14) continue;
+    if (p1 !== p3 || p2 === p1) continue;
+
+    const dt = parseUtcDate(rows[i].created_at);
+    if (Number.isNaN(dt.getTime())) continue;
+
+    out.push({ value: p2, analysis: 20, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
+  }
+  return out;
+}
+
+/** Análise 21 — Gatilho 7-11 ou 11-7: [7 -> 11] ou [11 -> 7]. Coleta os próximos 14 brancos. */
+export function buildA7_11(rows: Row[]): Cycle[] {
+  const out: Cycle[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const p1 = Number(rows[i - 1].roll);
+    const p2 = Number(rows[i].roll);
+    const isMatch = (p1 === 7 && p2 === 11) || (p1 === 11 && p2 === 7);
+    if (!isMatch) continue;
+
+    const dt = parseUtcDate(rows[i].created_at);
+    if (Number.isNaN(dt.getTime())) continue;
+
+    out.push({ value: 711, analysis: 21, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
+  }
   return out;
 }
 
@@ -464,89 +409,12 @@ export function buildRecAlerts(
 }
 
 /**
- * ESTRATÉGIA A9 - PÃO DE BRANCO (Gatilho: Branco + Cor Normal + Branco - ⚪🔴⚪)
- * Gatilhos G1-G6 com peso fixo 30 e pedra "Carne".
- * Delta = 30 + G2 + G3 + G4
- */
-export function buildA9(rows: Row[]): Cycle[] {
-  const out: Cycle[] = [];
-  for (let i = 2; i < rows.length - 2; i++) {
-    const b1 = Number(rows[i - 1].roll);
-    const carne = Number(rows[i].roll);
-    const b2 = Number(rows[i + 1].roll);
-
-    // Gatilho: Branco + Cor Normal + Branco
-    if (b1 !== 0 || b2 !== 0 || carne === 0) continue;
-
-    const dtCarne = parseUtcDate(rows[i].created_at);
-    if (Number.isNaN(dtCarne.getTime())) continue;
-
-    const g1 = 30; // Peso_Pães (fixo 30)
-    const g2 = carne; // Pedra_Carne
-    const g3 = Number(rows[i - 2].roll); // Pedra_Antes (anterior ao 1º pão)
-    const g4 = Number(rows[i + 2].roll); // Pedra_Depois (posterior ao 2º pão)
-    // G5 seria o timestamp da carne, G6 a soma. Seguimos a fórmula do delta:
-
-    if (!Number.isFinite(g3) || !Number.isFinite(g4)) continue;
-
-    const delta = g1 + g2 + g3 + g4;
-
-    // Projeção: Horário Alvo = Timestamp da Carne + deltaMinutes.
-    out.push({
-      value: carne,
-      analysis: 9,
-      triggerAt: dtCarne,
-      gaps: [delta],
-    });
-  }
-  return out;
-}
-
-/**
  * Análises Secundárias (#1 ao #9)
  * Utilizam a mesma lógica da A1 (leitura de pedra vs unidade do minuto),
  * mas deslocadas no tempo conforme a posição no histórico.
  */
-
-/**
- * ESTRATÉGIA DE CONFIRMAÇÃO - SELO VERDE
- * Gatilho: Pedra_Anterior >= 2 E Soma(Pedra_A + Pedra_B) in [17, 19, 21]
- */
-export function buildSeloVerde(rows: Row[]): Cycle[] {
-  const out: Cycle[] = [];
-  for (let i = 2; i < rows.length; i++) {
-    const pAnt = Number(rows[i - 2].roll);
-    const pA = Number(rows[i - 1].roll);
-    const pB = Number(rows[i].roll);
-
-    if (!Number.isFinite(pAnt) || !Number.isFinite(pA) || !Number.isFinite(pB)) continue;
-
-    // Filtro de Segurança removido conforme solicitação
-    // if (pAnt < 2) continue;
-
-    const soma = pA + pB;
-    if (![17, 18, 19, 21].includes(soma)) continue;
-
-    const dt = parseUtcDate(rows[i].created_at);
-    if (Number.isNaN(dt.getTime())) continue;
-
-    // Selo Verde usa gaps[0] para pular casas (Pedra_Anterior)
-    out.push({
-      value: soma,
-      analysis: 200 + soma, // Tag única: 217, 219, 221
-      triggerAt: dt,
-      gaps: [pAnt], // casas a pular
-      isSecondary: false,
-    });
-  }
-  return out;
-}
-
 export function buildSecondary(rows: Row[], offset: number): Cycle[] {
   const out: Cycle[] = [];
-  // offset 1-9 representa a posição no histórico
-  // Aqui interpretamos como: a pedra que saiu a 'offset' rodadas atrás
-  // deve casar com o minuto em que saiu.
   rows.forEach((r, i) => {
     if (i < offset) return;
     const targetRow = rows[i - offset];
@@ -556,7 +424,6 @@ export function buildSecondary(rows: Row[], offset: number): Cycle[] {
     const dt = parseUtcDate(r.created_at);
     if (Number.isNaN(dt.getTime())) return;
 
-    // Mesma lógica do #0: se a unidade do minuto casa com a pedra
     if (dt.getMinutes() % 10 !== n) return;
 
     out.push({

@@ -5,7 +5,7 @@ import {
   setSignals,
   type StoredSignal,
 } from "@/lib/signalsStore";
-import { Loader2, Sparkles, Target, Layers } from "lucide-react";
+import { Loader2, Sparkles, Target, Layers, Zap } from "lucide-react";
 import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
 import { parseUtcDate } from "@/lib/utils";
 import { Card } from "@/components/double/Card";
@@ -15,21 +15,18 @@ import {
   buildA3,
   buildA4,
   buildA5,
-  buildA6,
-  buildA7,
-  buildA8,
-  buildA9,
-  buildSeloVerde,
   buildA8_11,
   buildA11_11,
   buildA4_11,
   buildA4_14,
-  buildA7_11,
   buildASoma17,
   buildASoma19,
   buildASoma21,
   buildA1Minuto5,
   buildA2Minuto5,
+  buildASandwichPontas,
+  buildASandwichMeio,
+  buildA7_11,
   buildSecondary,
   buildRecAlerts,
   checkHighTendency,
@@ -49,13 +46,12 @@ type Mode1Signal = {
   pct: number;
   label: string;
   analysisCount: number;
-  sources: Array<{ analysis: number; value: number }>;
+  sources: Array<{ analysis: number; value: number; pct?: number; top3?: boolean; rank?: number }>;
   isHighTendency: boolean;
   isVerified?: boolean;
   isRare?: boolean;
   isSupreme?: boolean;
-  isGreenSeal?: boolean;
-  greenSealAssertivity?: number;
+  isAlavancagem?: boolean;
   strategyKey?: string;
   isConsecutive?: boolean;
   levelOffset?: number;
@@ -63,27 +59,29 @@ type Mode1Signal = {
   outcome?: "pending" | "green" | "red";
   resultTime?: string;
 };
+
 type Mode2Signal = {
   key: string;
   title: string;
   times: Date[];
   pct: number;
-  sources: Array<{ analysis: number; value: number; pct: number; top5: boolean }>;
+  sources: Array<{ analysis: number; value: number; pct: number; top3: boolean; rank?: number }>;
   confluence: string;
   analysisCount: number;
   isHighTendency: boolean;
   isVerified?: boolean;
   isRare?: boolean;
   isSupreme?: boolean;
+  isAlavancagem?: boolean;
   strategyKey?: string;
 
   outcome?: "pending" | "green" | "red";
   resultTime?: string;
 };
 
-const MIN_ASSERTIVIDADE_TOP1 = 45;
-const MIN_ASSERTIVIDADE_CONFLUENCIA = 40;
-const MIN_GATILHOS = 2;
+const MIN_ASSERTIVIDADE_TOP1 = 65;
+const MIN_ASSERTIVIDADE_TOP3 = 55;
+const MIN_GATILHOS = 6;
 
 function addMinutes(d: Date, m: number) {
   const out = new Date(d.getTime() + m * 60_000);
@@ -92,9 +90,9 @@ function addMinutes(d: Date, m: number) {
 }
 
 /** Quantidade de projeções consideradas como candidatas por análise/pedra. */
-const CANDIDATE_DEPTH = 10;
-/** Somente as N primeiras contam como Top 5 validador. */
-const TOP5_DEPTH = 5;
+const CANDIDATE_DEPTH = 6;
+/** Somente as N primeiras contam como Top 3 validador. */
+const TOP3_DEPTH = 3;
 
 const getMedalStyles = (
   count: number,
@@ -103,17 +101,58 @@ const getMedalStyles = (
   isTop1: boolean = true,
   category?: string,
 ) => {
-  // Para sinais do Modo 2 / Coincidência Top 5 (Análises Secundárias Top 2 ao Top 5)
-  if (category === "top5_only" || !isTop1) {
+  if (category === "alavancagem") {
+    return {
+      label: `🚀 ALAVANCAGEM (${count}x Top 1)`,
+      classes:
+        "border-white bg-white text-slate-950 shadow-[0_0_30px_rgba(255,255,255,0.4)] ring-2 ring-white/80",
+      badge: "bg-slate-950 text-white border-slate-800",
+    };
+  }
+
+  if (category === "supreme" || category === "winn") {
+    return {
+      label: "🏆 WINN Supremo",
+      classes:
+        "border-purple-400 bg-purple-950/50 text-purple-200 shadow-purple-500/25 ring-1 ring-purple-500/30 animate-pulse",
+      badge: "bg-purple-400/20 text-purple-300 border-purple-400/30",
+    };
+  }
+
+  if (category === "rare") {
+    return {
+      label: `💎 Raro (${count}x Top 1)`,
+      classes: "border-cyan-400/60 bg-cyan-950/40 text-cyan-200 shadow-cyan-500/15",
+      badge: "bg-cyan-400/20 text-cyan-200 border-cyan-400/30",
+    };
+  }
+
+  if (category === "top1_top3" || category === "top1_top5") {
+    return {
+      label: "⚡ Top 1 & Top 3",
+      classes: "border-primary/60 bg-primary/20 text-blue-200 shadow-blue-500/15",
+      badge: "bg-primary/20 text-primary border-primary/30",
+    };
+  }
+
+  if (category === "top1_isolated") {
+    return {
+      label: isConsecutive ? "⚡ Consecutivo" : "🎯 Top 1",
+      classes: "border-white/10 bg-white/[0.03] text-white/90",
+      badge: "bg-white/10 text-white border-white/10",
+    };
+  }
+
+  if (category === "top3_only" || category === "top5_only" || !isTop1) {
     if (count >= 3) {
       return {
-        label: `Coincidência Top 5 (${count}x)`,
+        label: `Coincidência Top 3 (${count}x)`,
         classes: "border-indigo-400/60 bg-indigo-950/40 text-indigo-200 shadow-indigo-500/10",
         badge: "bg-indigo-400/20 text-indigo-200 border-indigo-400/30",
       };
     }
     return {
-      label: "Coincidência Top 5",
+      label: "Coincidência Top 3",
       classes: "border-indigo-500/30 bg-indigo-950/20 text-indigo-300",
       badge: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
     };
@@ -158,25 +197,29 @@ const getMedalStyles = (
       classes: "border-cyan-400 bg-cyan-950/30 text-cyan-300 shadow-cyan-500/10",
       badge: "bg-cyan-400/20 text-cyan-300 border-cyan-400/30",
     };
+
   return {
-    label: "Top 1 Isolado",
-    classes: "border-white/[0.05] bg-white/[0.02]",
-    badge: "bg-white/10 text-white border-white/20",
+    label: isConsecutive ? "⚡ Consecutivo" : "🎯 Top 1",
+    classes: "border-white/10 bg-white/[0.03] text-white/90",
+    badge: "bg-white/10 text-white border-white/10",
   };
 };
 
 const SignalCard = ({ signal: s }: { signal: any }) => {
-  if (!s) return null;
   const isTop1Signal = s.isTop1 ?? s.category !== "top5_only";
+  const top1Sources = (s.sources || []).filter((src: any) => !src.top5);
+  const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
+  const isAlavancagem = s.category === "alavancagem" || s.isAlavancagem || distinctTop1.size >= 4;
+
   const medal = getMedalStyles(
-    s.analysisCount || 0,
+    distinctTop1.size || s.analysisCount || 0,
     s.isConsecutive,
     s.levelOffset || 0,
     isTop1Signal,
-    s.category,
+    isAlavancagem ? "alavancagem" : s.category,
   );
 
-  const rawAssertivity = s.isGreenSeal ? (s.greenSealAssertivity ?? 0) : (s.pct ?? 0);
+  const rawAssertivity = s.pct ?? 0;
   const safeAssertivity = Number.isFinite(Number(rawAssertivity))
     ? Number(rawAssertivity).toFixed(1)
     : "0.0";
@@ -192,14 +235,28 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
     <div
       key={s.key}
       className={`rounded-2xl border px-5 py-4 backdrop-blur-sm transition-all duration-300 ${
-        medal ? medal.classes : "border-white/[0.05] bg-white/[0.02]"
+        isAlavancagem
+          ? "border-white bg-white text-slate-950 shadow-[0_0_30px_rgba(255,255,255,0.4)] ring-2 ring-white"
+          : medal
+            ? medal.classes
+            : "border-white/[0.05] bg-white/[0.02]"
       }`}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <div className="text-xs font-semibold text-muted-foreground opacity-80 flex items-center gap-1.5">
+          <div
+            className={`text-xs font-semibold flex items-center gap-1.5 ${
+              isAlavancagem ? "text-slate-600" : "text-muted-foreground opacity-80"
+            }`}
+          >
             {s.title || "Sinal"}
-            <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-white/40">
+            <span
+              className={`text-[9px] px-1.5 py-0.5 rounded border ${
+                isAlavancagem
+                  ? "bg-slate-100 border-slate-300 text-slate-800 font-bold"
+                  : "bg-white/5 border-white/10 text-white/40"
+              }`}
+            >
               {s.sources?.[0]?.analysis ? `A${s.sources[0].analysis}` : "AUTO"}
             </span>
           </div>
@@ -208,58 +265,84 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
               ✓ SELO AZUL
             </span>
           )}
-          {s.isSupreme && (
+          {isAlavancagem ? (
+            <span className="flex items-center gap-0.5 rounded-full bg-slate-950 px-2 py-0.5 text-[8px] font-black text-white border border-slate-800 shadow-sm animate-pulse">
+              🚀 ALAVANCAGEM
+            </span>
+          ) : s.isSupreme ? (
             <span className="flex items-center gap-0.5 rounded-full bg-purple-500/25 px-1.5 py-0.5 text-[8px] font-black text-purple-300 border border-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.25)] animate-pulse">
               👑 SUPREMO
             </span>
-          )}
-          {s.isRare && !s.isSupreme && (
+          ) : s.isRare ? (
             <span className="flex items-center gap-0.5 rounded-full bg-cyan-500/20 px-1.5 py-0.5 text-[8px] font-black text-cyan-300 border border-cyan-500/30 shadow-[0_0_10px_rgba(6,182,212,0.2)]">
               💎 RARO
             </span>
-          )}
+          ) : null}
           {s.isRecAlert && (
-            <span className="flex items-center gap-0.5 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[8px] font-black text-amber-400 border border-amber-500/30">
+            <span className="flex items-center gap-0.5 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[8px] font-black text-amber-600 border border-amber-500/30">
               🙌 possível rec
             </span>
           )}
         </div>
         {medal && (
           <span
-            className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${medal.badge}`}
+            className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${
+              isAlavancagem ? "bg-slate-950 text-white border-slate-800" : medal.badge
+            }`}
           >
-            {medal.label}
+            {isAlavancagem
+              ? `🚀 ALAVANCAGEM (${distinctTop1.size || s.analysisCount}x)`
+              : medal.label}
           </span>
         )}
       </div>
 
       <div className="mt-1 flex items-center justify-between">
-        <div className="text-3xl font-black tabular-nums text-white font-outfit">{displayTime}</div>
+        <div
+          className={`text-3xl font-black tabular-nums font-outfit ${
+            isAlavancagem ? "text-slate-950" : "text-white"
+          }`}
+        >
+          {displayTime}
+        </div>
         {s.isHighTendency && (
-          <span className="flex items-center gap-1 rounded-md bg-red-500/20 px-1.5 py-0.5 text-[9px] font-black text-red-400 animate-pulse border border-red-500/30">
+          <span className="flex items-center gap-1 rounded-md bg-red-500/20 px-1.5 py-0.5 text-[9px] font-black text-red-500 animate-pulse border border-red-500/30">
             🔥 Alta Tendência
           </span>
         )}
       </div>
-      <div className="mt-1 text-[11px] tabular-nums font-bold flex items-center gap-1.5">
-        <span className={medal ? "text-inherit" : "text-primary"}>{safeAssertivity}%</span>
-        {s.isGreenSeal && (
-          <span className="flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[8px] font-black text-emerald-400 border border-emerald-500/30">
-            ✓ SELADO
-          </span>
-        )}
+      <div
+        className={`mt-1 text-[11px] tabular-nums font-bold flex items-center gap-1.5 ${
+          isAlavancagem ? "text-slate-900" : "text-primary"
+        }`}
+      >
+        <span>{safeAssertivity}%</span>
         <span className="opacity-50 text-[10px]">·</span>
+        <span className={isAlavancagem ? "text-slate-600 font-semibold" : "text-white/60"}>
+          {isAlavancagem ? "Confluência Máxima (4+ Top 1)" : s.label || "Entrada"}
+        </span>
       </div>
       <div className="mt-2 flex flex-wrap gap-1">
         {Array.isArray(s.sources) &&
           s.sources.map((src: any, idx: number) => {
             if (!src) return null;
+            const pctStr = src.pct ? `${Math.round(src.pct)}%` : "";
+            const isTop3Secondary = !!src.top3;
             return (
               <span
                 key={idx}
-                className="rounded-full border border-white/10 bg-white/[0.05] px-1.5 py-0.5 text-[9px] font-black text-white/70"
+                className={`rounded-full border px-1.5 py-0.5 text-[9px] font-black ${
+                  isAlavancagem
+                    ? "border-slate-300 bg-slate-100 text-slate-900 font-bold"
+                    : isTop3Secondary
+                      ? "border-indigo-500/30 bg-indigo-500/10 text-indigo-300"
+                      : "border-white/10 bg-white/[0.05] text-white/80"
+                }`}
+                title={`Análise ${src.analysis} (Pedra ${src.value}) - ${pctStr} ${isTop3Secondary ? "Top 3" : "Top 1"}`}
               >
-                A{src.analysis}·{src.value}
+                A{src.analysis}
+                {"·"}
+                {src.value} {pctStr && <span className="opacity-75 font-normal">({pctStr})</span>}
               </span>
             );
           })}
@@ -272,120 +355,64 @@ export function PredictiveSignals() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-  const [mode1, setMode1] = useState<Mode1Signal[] | null>(null);
-  const [mode2, setMode2] = useState<Mode2Signal[] | null>(null);
+
+  const [mode1, setMode1] = useState<Mode1Signal[]>([]);
+  const [mode2, setMode2] = useState<Mode2Signal[]>([]);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
+  const [activeRecAlerts, setActiveRecAlerts] = useState<
+    Array<{ type: string; start: number; end: number }>
+  >([]);
 
-  // 1. FILTRAGEM DOS ARRAYS NO ESTADO REACT
-  const activeSignals = useMemo(() => {
-    try {
-      const m1Signals = (mode1 || [])
-        .map((s) => {
-          if (!s) return null;
-          // Logic to assign category for M1 signals
-          let category = "top1_isolated";
-          if (s.isSupreme || (s.isConsecutive && s.levelOffset && s.levelOffset >= 4)) {
-            category = "winn";
-          } else if (s.isRare || (s.analysisCount && s.analysisCount >= 2)) {
-            category = "rare";
-          } else if (s.isVerified || (s.analysisCount && s.analysisCount >= 1 && s.isVerified)) {
-            // Top 1 + Confluência / Selo Azul
-            category = "top1_top5";
-          }
-
-          return {
-            ...s,
-            isTop1: true,
-            top1Count: s.analysisCount || 0,
-            hasTop5Confluence: !!s.isVerified,
-            category,
-            at: s.at,
-          };
-        })
-        .filter(Boolean);
-
-      const m2Signals = (mode2 || [])
-        .map((s) => {
-          if (!s) return null;
-          const category = "top5_only";
-          const firstTime = Array.isArray(s.times) && s.times.length > 0 ? s.times[0] : undefined;
-          return {
-            ...s,
-            isTop1: false,
-            top1Count: 0,
-            hasTop5Confluence: true,
-            category,
-            at: firstTime,
-          };
-        })
-        .filter(Boolean);
-
-      return [...m1Signals, ...m2Signals] as any[];
-    } catch (e) {
-      console.error("[PredictiveSignals] activeSignals error:", e);
-      return [];
-    }
-  }, [mode1, mode2]);
-
-  const winnSignals = useMemo(
-    () => activeSignals.filter((s) => s.category === "winn"),
-    [activeSignals],
-  );
-  const rareSignals = useMemo(
-    () => activeSignals.filter((s) => s.category === "rare"),
-    [activeSignals],
-  );
-  const top1Top5Signals = useMemo(
-    () => activeSignals.filter((s) => s.category === "top1_top5"),
-    [activeSignals],
-  );
-  const top1IsolatedSignals = useMemo(
-    () => activeSignals.filter((s) => s.category === "top1_isolated"),
-    [activeSignals],
-  );
-  const top5OnlySignals = useMemo(
-    () => activeSignals.filter((s) => s.category === "top5_only"),
-    [activeSignals],
-  );
-
+  // 1. Carrega dados e sincroniza via realtime
   useEffect(() => {
     let alive = true;
-    const fetchRows = async () => {
+
+    async function loadInitial() {
       try {
+        setLoading(true);
         const { data, error } = await supabase
           .from("blaze_results")
           .select("id, roll, color, created_at")
-          .order("created_at", { ascending: false })
-          .limit(5000);
+          .order("id", { ascending: false })
+          .limit(3000);
+
+        if (error) throw error;
         if (!alive) return;
-        if (error) {
-          setErr(error.message);
-          console.error("[PredictiveSignals] Supabase error:", error);
-          setLoading(false);
-          return;
-        }
-        setErr(null);
-        setRows(((data ?? []) as Row[]).slice().reverse());
-      } catch (e) {
-        if (alive) {
-          setErr("Erro ao carregar resultados.");
-          console.error("[PredictiveSignals] Fetch error:", e);
-        }
+
+        const sorted = (data || []).slice().sort((a, b) => a.id - b.id);
+        setRows(sorted);
+      } catch (e: any) {
+        if (!alive) return;
+        setErr(e?.message || "Erro ao carregar dados do banco");
       } finally {
         if (alive) setLoading(false);
       }
-    };
+    }
 
-    fetchRows();
+    loadInitial();
 
-    // Polling a cada 15 segundos para manter a base sempre viva
-    const pollInterval = setInterval(() => {
-      if (alive) void fetchRows();
-    }, 15000);
+    const pollInterval = setInterval(async () => {
+      try {
+        const { data } = await supabase
+          .from("blaze_results")
+          .select("id, roll, color, created_at")
+          .order("id", { ascending: false })
+          .limit(10);
+        if (data && data.length > 0 && alive) {
+          setRows((prev) => {
+            const existingIds = new Set(prev.map((r) => r.id));
+            const newRows = data.filter((r) => !existingIds.has(r.id)).reverse();
+            if (newRows.length === 0) return prev;
+            return [...prev, ...newRows];
+          });
+        }
+      } catch (e) {
+        console.error("[PredictiveSignals] Polling error:", e);
+      }
+    }, 5000);
 
-    // Inscrição Realtime no Supabase
     const channel = supabase
-      .channel("blaze_predictive_realtime")
+      .channel("predictive_signals_realtime")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "blaze_results" },
@@ -415,14 +442,6 @@ export function PredictiveSignals() {
         3: buildA3(rows),
         4: buildA4(rows),
         5: buildA5(rows),
-        6: buildA6(rows),
-        7: buildA7(rows),
-        8: (buildA8 as any)(rows),
-        9: (buildA9 as any)(rows),
-        217: buildSeloVerde(rows).filter((c) => c.value === 17),
-        218: buildSeloVerde(rows).filter((c) => c.value === 18),
-        219: buildSeloVerde(rows).filter((c) => c.value === 19),
-        221: buildSeloVerde(rows).filter((c) => c.value === 21),
         10: buildA8_11(rows),
         11: buildA11_11(rows),
         12: buildA4_11(rows),
@@ -432,7 +451,9 @@ export function PredictiveSignals() {
         16: buildASoma21(rows),
         17: buildA1Minuto5(rows),
         18: buildA2Minuto5(rows),
-        20711: buildA7_11(rows),
+        19: buildASandwichPontas(rows),
+        20: buildASandwichMeio(rows),
+        21: buildA7_11(rows),
       };
       const secondary: Record<number, Cycle[]> = {};
       for (let i = 1; i <= 9; i++) {
@@ -449,7 +470,7 @@ export function PredictiveSignals() {
   const active = useMemo(() => {
     try {
       const out: Array<{ analysis: number; value: number; open: Cycle }> = [];
-      const mainIds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
+      const mainIds = [1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
       mainIds.forEach((a) => {
         const cycles = engine[a] || [];
         const latest = latestByValue(cycles);
@@ -466,6 +487,7 @@ export function PredictiveSignals() {
     }
   }, [engine]);
 
+  /** Ciclos secundários ativos (#1..#9). */
   const secondaryActive = useMemo(() => {
     try {
       const out: Array<{ analysis: number; value: number; open: Cycle }> = [];
@@ -474,7 +496,9 @@ export function PredictiveSignals() {
         const cycles = engine[a] || [];
         const latest = latestByValue(cycles);
         latest.forEach((cycle, value) => {
-          if (cycle.gaps.length < MAX_ZEROS) out.push({ analysis: a, value, open: cycle });
+          if (cycle.gaps.length < MAX_ZEROS) {
+            out.push({ analysis: a, value, open: cycle });
+          }
         });
       }
       return out;
@@ -489,480 +513,451 @@ export function PredictiveSignals() {
   const generate = useCallback(async () => {
     try {
       const now = new Date();
-      // round to nearest minute for comparison
       now.setSeconds(0, 0);
       now.setMilliseconds(0);
       setGeneratedAt(now);
 
       // Alertas de Segurança ("possível rec")
       const recAlerts = buildRecAlerts(rows);
-      const activeAlerts = recAlerts.filter((alert: RecAlert) => {
+      const activeAlerts = recAlerts.filter((alert) => {
         const diff = (now.getTime() - alert.triggerAt.getTime()) / 60000;
         return diff >= 0 && diff <= alert.duration;
       });
 
-      // Dispara evento global para o SinaisSection alternar para "Rodadas Atuais"
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("switch-audit-filter", { detail: "hoje" }));
       }
 
-      const byTime = new Map<
-        number,
-        {
-          values: number[];
-          analyses: Set<number>;
-          pct: number;
-          label: string;
-          sources: Array<{ analysis: number; value: number }>;
-          isHighTendency: boolean;
-          isPossibleRec: boolean;
-          isGreenSeal?: boolean;
-          strategyKey?: string;
-        }
-      >();
+      // Estratégia Unificada: Mapeamento de Projeções Top 1 e Top 3 por Minuto
+      type MinuteProj = {
+        top1: Array<{ analysis: number; value: number; pct: number; top3: false }>;
+        top3: Array<{ analysis: number; value: number; pct: number; top3: true; rank: number }>;
+        isHighTendency: boolean;
+        isPossibleRec: boolean;
+        strategyKey?: string;
+      };
 
-      const greenSealIds = [217, 218, 219, 221, 20711];
-
-      // Mapeamento de Green Seal para aplicação em outros cards
-      const activeGreenSeals = new Map<number, { id: number; at: number }>();
-      greenSealIds.forEach((gsId) => {
-        const gsCycles = engine[gsId] || [];
-        if (!gsCycles || gsCycles.length === 0) return;
-        const lastGs = gsCycles[gsCycles.length - 1];
-        if (!lastGs || !lastGs.gaps || lastGs.gaps.length === 0) return;
-
-        let gsMinutes = 0;
-        if (gsId === 20711) {
-          gsMinutes = lastGs.gaps[0];
-        } else {
-          gsMinutes = Math.ceil(lastGs.gaps[0] * 0.5) + 1;
-        }
-
-        const gsAt = addMinutes(lastGs.triggerAt, gsMinutes).getTime();
-        activeGreenSeals.set(gsAt, { id: gsId, at: gsAt });
-      });
+      const minuteProjections = new Map<number, MinuteProj>();
 
       for (const item of active) {
-        const isA8A9 = [8, 9, 10, 11, 12, 13].includes(item.analysis);
         const hist = (engine[item.analysis] || []).filter((c) => c.value === item.value).slice(-6);
+        // Regra: Mínimo de 6 ocorrências/gatilhos para uma análise ser elegível
+        if (hist.length < MIN_GATILHOS) continue;
 
-        let targetMinutes = 0;
-        let displayPct = 0;
-        let displayLabel = "";
-        const strategyKey = `A${item.analysis}`;
+        const candidates = computeTop(hist, CANDIDATE_DEPTH);
+        if (!candidates.length) continue;
 
-        if (isA8A9) {
-          targetMinutes = item.open.gaps[0] || 0;
-          displayPct = 100;
-          displayLabel = targetMinutes.toString();
-        } else {
-          if (hist.length < 1) continue;
-          const candidates = computeTop(hist, CANDIDATE_DEPTH);
-          if (!candidates.length) continue;
+        // 1. Projeção Top 1 Principal (Regra: Top 1 >= 65%)
+        const top1Candidate = candidates[0];
+        if (top1Candidate && top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP1) {
+          let targetMinutes = top1Candidate.m;
+          if ([17, 18].includes(item.analysis)) targetMinutes += 1;
+          const at = addMinutes(item.open.triggerAt, targetMinutes);
+          const t = at.getTime();
 
-          // Encontra o melhor candidato que projeta um horário no futuro (ou no minuto atual)
-          const futureCand =
-            candidates.find((g) => {
-              let m = g.m;
-              if ([17, 18, 19].includes(item.analysis)) m += 1;
-              const at = addMinutes(item.open.triggerAt, m);
-              return at.getTime() >= now.getTime();
-            }) || candidates[0];
+          if (t >= now.getTime()) {
+            const isTendency = checkHighTendency(engine[item.analysis] || [], item.value);
+            const isPossibleRec = activeAlerts.some((alert) => {
+              const signalTime = at.getTime();
+              const alertStart = alert.triggerAt.getTime();
+              const alertEnd = alertStart + alert.duration * 60000;
+              return signalTime >= alertStart && signalTime <= alertEnd;
+            });
 
-          if (!futureCand) continue;
-
-          targetMinutes = futureCand.m;
-          if ([17, 18, 19].includes(item.analysis)) {
-            targetMinutes += 1;
+            let cur = minuteProjections.get(t);
+            if (!cur) {
+              cur = {
+                top1: [],
+                top3: [],
+                isHighTendency: isTendency,
+                isPossibleRec,
+                strategyKey: `A${item.analysis}`,
+              };
+              minuteProjections.set(t, cur);
+            }
+            cur.top1.push({
+              analysis: item.analysis,
+              value: item.value,
+              pct: top1Candidate.pct,
+              top3: false,
+            });
+            if (isTendency) cur.isHighTendency = true;
+            if (isPossibleRec) cur.isPossibleRec = true;
           }
-
-          displayPct = futureCand.pct;
-          displayLabel = targetMinutes.toString();
         }
 
-        const at = addMinutes(item.open.triggerAt, targetMinutes);
-        const t = at.getTime();
+        // 2. Projeções Secundárias Top 2 ao Top 3 (Validadores: Regra Top 3 >= 55%)
+        candidates.slice(1, TOP3_DEPTH).forEach((cand, idx) => {
+          if (cand.pct < MIN_ASSERTIVIDADE_TOP3) return;
 
-        // Detection if a Green Seal applies to this card
-        const hasGreenSeal = Array.from(activeGreenSeals.values()).some(
-          (gs) => Math.abs(gs.at - t) <= 60000,
-        );
+          let m = cand.m;
+          if ([17, 18].includes(item.analysis)) m += 1;
+          const at = addMinutes(item.open.triggerAt, m);
+          const t = at.getTime();
 
-        const isTendency = isA8A9
-          ? true
-          : checkHighTendency(engine[item.analysis] || [], item.value);
-        const isPossibleRec = activeAlerts.some((alert: RecAlert) => {
-          const signalTime = at.getTime();
-          const alertStart = alert.triggerAt.getTime();
-          const alertEnd = alertStart + alert.duration * 60000;
-          return signalTime >= alertStart && signalTime <= alertEnd;
+          if (t >= now.getTime()) {
+            const isTendency = checkHighTendency(engine[item.analysis] || [], item.value);
+            const isPossibleRec = activeAlerts.some((alert) => {
+              const signalTime = at.getTime();
+              const alertStart = alert.triggerAt.getTime();
+              const alertEnd = alertStart + alert.duration * 60000;
+              return signalTime >= alertStart && signalTime <= alertEnd;
+            });
+
+            let cur = minuteProjections.get(t);
+            if (!cur) {
+              cur = {
+                top1: [],
+                top3: [],
+                isHighTendency: isTendency,
+                isPossibleRec,
+                strategyKey: `A${item.analysis}`,
+              };
+              minuteProjections.set(t, cur);
+            }
+            cur.top3.push({
+              analysis: item.analysis,
+              value: item.value,
+              pct: cand.pct,
+              top3: true,
+              rank: idx + 2,
+            });
+            if (isTendency) cur.isHighTendency = true;
+            if (isPossibleRec) cur.isPossibleRec = true;
+          }
         });
-
-        const cur = byTime.get(t);
-        if (!cur) {
-          byTime.set(t, {
-            values: [item.value],
-            analyses: new Set([item.analysis]),
-            pct: displayPct,
-            label: displayLabel,
-            sources: [{ analysis: item.analysis, value: item.value }],
-            isHighTendency: isTendency,
-            isPossibleRec,
-            isGreenSeal: hasGreenSeal,
-            strategyKey,
-          });
-        } else {
-          if (!cur.values.includes(item.value)) cur.values.push(item.value);
-          cur.analyses.add(item.analysis);
-          cur.sources.push({ analysis: item.analysis, value: item.value });
-          if (isTendency) cur.isHighTendency = true;
-          if (isPossibleRec) cur.isPossibleRec = true;
-          if (hasGreenSeal) cur.isGreenSeal = true;
-          if (displayPct > cur.pct) {
-            cur.pct = displayPct;
-            cur.label = displayLabel;
-            cur.strategyKey = strategyKey;
-          }
-        }
       }
-      const m1: Mode1Signal[] = Array.from(byTime.entries())
-        .sort((a: [number, any], b: [number, any]) => a[0] - b[0])
-        .map(([t, info]: [number, any]) => {
-          const values = info.values.slice().sort((a: number, b: number) => a - b);
-          return {
+
+      // Constrói listas m1 e m2
+      const m1: Mode1Signal[] = [];
+      const m2: Mode2Signal[] = [];
+
+      for (const [t, info] of Array.from(minuteProjections.entries()).sort((a, b) => a[0] - b[0])) {
+        if (info.top1.length > 0) {
+          const values = Array.from(new Set(info.top1.map((p) => p.value))).sort((a, b) => a - b);
+          const distinctTop1 = new Set(info.top1.map((p) => p.analysis));
+          // Top 3 de análises complementares
+          const secondaryTop3 = info.top3.filter((p) => !distinctTop1.has(p.analysis));
+          const allSources = [...info.top1, ...secondaryTop3];
+          const maxPct = Math.max(...info.top1.map((p) => p.pct));
+
+          // Classificações
+          const isAlavancagem = distinctTop1.size >= 4;
+          const isSupreme = distinctTop1.size >= 2 && secondaryTop3.length >= 1;
+          const isRare = distinctTop1.size >= 2;
+
+          m1.push({
             key: `m1-${t}`,
             title: `Análise ${values.join(" + ")}`,
             at: new Date(t),
-            pct: info.pct,
-            label: info.label,
-            analysisCount: info.analyses.size,
-            sources: info.sources,
+            pct: maxPct,
+            label: info.top1[0].value.toString(),
+            analysisCount: new Set(allSources.map((s) => s.analysis)).size,
+            sources: allSources,
             isHighTendency: info.isHighTendency,
-            isPossibleRec: info.isPossibleRec,
-            isGreenSeal: info.isGreenSeal,
             strategyKey: info.strategyKey,
-          };
-        });
-      setMode1(m1);
-
-      const usedTimes = new Set<number>(m1.map((s) => s.at.getTime()));
-
-      // ---- Modo 2: Estratégia de Coincidência ----
-      type Proj = { analysis: number; value: number; pct: number; top5: boolean };
-      const byMinute = new Map<number, Proj[]>();
-
-      for (const item of active) {
-        const hist = (engine[item.analysis] || []).filter((c) => c.value === item.value).slice(-6);
-        if (hist.length < 1) continue;
-
-        const list = computeTop(hist, CANDIDATE_DEPTH);
-        list.forEach((g, idx) => {
-          let m = g.m;
-          if ([17, 18, 19].includes(item.analysis)) m += 1;
-          const at = addMinutes(item.open.triggerAt, m).getTime();
-          const arr = byMinute.get(at) ?? [];
-          arr.push({
-            analysis: item.analysis,
-            value: item.value,
-            pct: g.pct,
-            top5: idx < TOP5_DEPTH,
+            isAlavancagem,
+            isSupreme,
+            isRare,
           });
-          byMinute.set(at, arr);
-        });
+        } else if (info.top3.length >= 2) {
+          const distinctAnalyses = new Set(info.top3.map((p) => p.analysis));
+          if (distinctAnalyses.size >= 2) {
+            const avgPct = info.top3.reduce((s, p) => s + p.pct, 0) / info.top3.length;
+            if (avgPct >= MIN_ASSERTIVIDADE_TOP3) {
+              const sortedSources = info.top3.slice().sort((a, b) => b.pct - a.pct);
+              const confluence = sortedSources.map((p) => `A${p.analysis}·${p.value}`).join(", ");
+
+              m2.push({
+                key: `m2-${t}`,
+                title: Array.from(distinctAnalyses)
+                  .sort()
+                  .map((a) => `Análise ${a}`)
+                  .join(" + "),
+                times: [new Date(t)],
+                pct: avgPct,
+                sources: sortedSources,
+                confluence,
+                analysisCount: distinctAnalyses.size,
+                isHighTendency: info.isHighTendency,
+                strategyKey: sortedSources[0] ? `A${sortedSources[0].analysis}` : undefined,
+              });
+            }
+          }
+        }
       }
 
-      const m2: Mode2Signal[] = [];
-      for (const [at, projs] of byMinute) {
-        const distinctAnalyses = new Set(projs.map((p) => p.analysis));
-        if (distinctAnalyses.size < 2) continue;
-
-        const validators = projs.filter((p) => p.top5);
-        if (!validators.length) continue;
-
-        const pct = projs.reduce((s, p) => s + p.pct, 0) / projs.length;
-
-        // FILTRO DE ASSERTIVIDADE RÍGIDO (55% para confluências)
-        if (pct < MIN_ASSERTIVIDADE_CONFLUENCIA) continue;
-
-        if (usedTimes.has(at)) continue;
-        usedTimes.add(at);
-
-        const sources = projs.slice().sort((a, b) => b.pct - a.pct);
-        const confluence = validators
-          .slice()
-          .sort((a, b) => b.pct - a.pct)
-          .map((p) => `A${p.analysis}·${p.value}`)
-          .join(", ");
-
-        const isHighTendency = projs.some((p) =>
-          checkHighTendency(engine[p.analysis] || [], p.value),
-        );
-
-        m2.push({
-          key: `m2-${at}`,
-          title: Array.from(distinctAnalyses)
-            .sort()
-            .map((a) => `Análise ${a}`)
-            .join(" + "),
-          times: [new Date(at)],
-          pct,
-          sources,
-          confluence,
-          analysisCount: distinctAnalyses.size,
-          isHighTendency,
-          strategyKey: sources[0] ? `A${sources[0].analysis}` : undefined,
-        });
-      }
-      m2.sort((a, b) => a.times[0].getTime() - b.times[0].getTime());
       setMode2(m2);
 
       // ---- Level Elevation, Unification and Proximity Filtering ----
       const rawUnifiedM1: Mode1Signal[] = [];
-      const sortedM1 = Array.from(byTime.entries()).sort(
-        (a: [number, any], b: [number, any]) => a[0] - b[0],
-      );
 
-      for (let i = 0; i < sortedM1.length; i++) {
-        const [t, info]: [number, any] = sortedM1[i];
-        const next1 = sortedM1[i + 1];
-        const next2 = sortedM1[i + 2];
+      for (let i = 0; i < m1.length; i++) {
+        const sig = m1[i];
+        const next1 = m1[i + 1];
+        const next2 = m1[i + 2];
 
         const isConsecutive3 =
           next1 &&
           next2 &&
-          Math.abs(next1[0] - t) <= 60000 &&
-          Math.abs(next2[0] - next1[0]) <= 60000;
-
-        const isConsecutive2 = !isConsecutive3 && next1 && Math.abs(next1[0] - t) <= 60000;
+          next1.at.getTime() - sig.at.getTime() === 60000 &&
+          next2.at.getTime() - next1.at.getTime() === 60000;
 
         if (isConsecutive3) {
-          const middleTime = next1[0];
-          const combinedSources = [
-            ...(info?.sources || []),
-            ...(next1[1]?.sources || []),
-            ...(next2[1]?.sources || []),
-          ];
-          const combinedAnalyses = new Set([
-            ...(info?.analyses || []),
-            ...(next1[1]?.analyses || []),
-            ...(next2[1]?.analyses || []),
-          ]);
-          const maxPct = Math.max(info?.pct || 0, next1[1]?.pct || 0, next2[1]?.pct || 0);
+          // Fusão de 3 minutos consecutivos no minuto central (T+1)
+          const allSources = [...sig.sources, ...next1.sources, ...next2.sources];
+          const top1Sources = allSources.filter((s) => !s.top3);
+          const top3Sources = allSources.filter((s) => s.top3);
+          const distinctTop1 = new Set(top1Sources.map((s) => s.analysis));
+          const allAnalyses = new Set(allSources.map((s) => s.analysis));
+          const maxPct = Math.max(sig.pct, next1.pct, next2.pct);
+          const allValues = Array.from(new Set(top1Sources.map((s) => s.value))).sort(
+            (a: number, b: number) => a - b,
+          );
+
+          const isAlavancagem = distinctTop1.size >= 4;
+          const isSupreme = distinctTop1.size >= 2 && top3Sources.length >= 1;
+          const isRare = distinctTop1.size >= 2;
 
           rawUnifiedM1.push({
-            key: `m1-c3-${middleTime}`,
-            title: `Supremo · ${(info?.values || []).join("+")}`,
-            at: new Date(middleTime),
+            key: `m1-unified-${next1.at.getTime()}`,
+            title: `Análise ${allValues.join(" + ")}`,
+            at: next1.at,
             pct: maxPct,
-            label: info?.label || "",
-            analysisCount: combinedAnalyses.size,
+            label: "3 Consecutivos",
+            analysisCount: allAnalyses.size,
+            sources: allSources,
+            isHighTendency: sig.isHighTendency || next1.isHighTendency || next2.isHighTendency,
             isConsecutive: true,
             levelOffset: 4,
-            sources: combinedSources,
-            isHighTendency: !!(
-              info?.isHighTendency ||
-              next1[1]?.isHighTendency ||
-              next2[1]?.isHighTendency
-            ),
-            isVerified: false,
-            isGreenSeal: !!(info?.isGreenSeal || next1[1]?.isGreenSeal || next2[1]?.isGreenSeal),
-            strategyKey: info?.strategyKey,
-          });
-          i += 2;
-        } else if (isConsecutive2) {
-          const best =
-            (info?.pct || 0) >= (next1[1]?.pct || 0)
-              ? { t, info }
-              : { t: next1[0], info: next1[1] };
-          const combinedSources = [...(info?.sources || []), ...(next1[1]?.sources || [])];
-          const combinedAnalyses = new Set([
-            ...(info?.analyses || []),
-            ...(next1[1]?.analyses || []),
-          ]);
-
-          rawUnifiedM1.push({
-            key: `m1-c2-${best.t}`,
-            title: `Confluência · ${(best.info?.values || []).join("+")}`,
-            at: new Date(best.t),
-            pct: best.info?.pct || 0,
-            label: best.info?.label || "",
-            analysisCount: combinedAnalyses.size,
-            isConsecutive: true,
-            levelOffset: 1,
-            sources: combinedSources,
-            isHighTendency: !!(info?.isHighTendency || next1[1]?.isHighTendency),
-            isVerified: false,
-            isGreenSeal: !!(info?.isGreenSeal || next1[1]?.isGreenSeal),
-            strategyKey: info?.strategyKey,
-          });
-          i += 1;
-        } else {
-          rawUnifiedM1.push({
-            key: `m1-${t}`,
-            title: `Análise ${(info?.values || []).join(" + ")}`,
-            at: new Date(t),
-            pct: info?.pct || 0,
-            label: info?.label || "",
-            analysisCount: info?.analyses?.size || 0,
-            sources: info?.sources || [],
-            isHighTendency: !!info?.isHighTendency,
-            isVerified: false,
-            isGreenSeal: !!info?.isGreenSeal,
-            strategyKey: info?.strategyKey,
-          });
-        }
-      }
-
-      // TRAVA DE VIZINHANÇA PARA MINUTOS SEGUIDOS
-      const unifiedM1: Mode1Signal[] = [];
-      for (let i = 0; i < rawUnifiedM1.length; i++) {
-        const current = rawUnifiedM1[i];
-        const next = rawUnifiedM1[i + 1];
-
-        const isCurrentTop1Confluence = (current.analysisCount || 0) >= 2;
-        const isNextTop1Confluence = next && (next.analysisCount || 0) >= 2;
-
-        if (
-          isCurrentTop1Confluence &&
-          isNextTop1Confluence &&
-          Math.abs(next.at.getTime() - current.at.getTime()) <= 60000
-        ) {
-          if ((current.analysisCount || 0) > (next.analysisCount || 0)) {
-            unifiedM1.push(current);
-          } else if ((next.analysisCount || 0) > (current.analysisCount || 0)) {
-            unifiedM1.push(next);
-          } else {
-            unifiedM1.push(next);
-          }
-          i++;
-        } else {
-          unifiedM1.push(current);
-        }
-      }
-
-      // Secondary Verification Selo Azul Logic
-      const secondaryProjections = new Map<number, Set<number>>();
-      for (const item of (secondaryActive || []) as any) {
-        if (!item || !item.open) continue;
-        const hist = (engine[item.analysis] || [])
-          .filter((c: any) => c.value === item.value)
-          .slice(-6);
-        if (hist.length < 6) continue;
-        const top1 = computeTop(hist, 1)[0];
-        if (!top1) continue;
-        const at = addMinutes(item.open.triggerAt, top1.m).getTime();
-        if (!secondaryProjections.has(at)) secondaryProjections.set(at, new Set());
-        secondaryProjections.get(at)!.add(item.value);
-      }
-
-      const finalM1 = await Promise.all(
-        unifiedM1.map(async (s) => {
-          if (!s || !s.at) return s;
-          const t = s.at.getTime();
-          const secValues = secondaryProjections.get(t);
-          const isVerified =
-            secValues &&
-            Array.isArray(s.sources) &&
-            s.sources.some((src) => secValues.has(src.value));
-
-          const top1Count = s.analysisCount || 0;
-          const top5Projs = byMinute.get(t) ?? [];
-          const top5Count = new Set(top5Projs.filter((p) => p.top5).map((p) => p.analysis)).size;
-
-          const isSupreme = top1Count >= 2 && top5Count >= 2;
-          const isRare = top1Count >= 2;
-          const strategyKey = s.strategyKey;
-
-          let isGreenSeal = false;
-          let greenSealAssertivity = 0;
-
-          const greenSource = Array.isArray(s.sources)
-            ? s.sources.find(
-                (src) => (src.analysis >= 217 && src.analysis <= 221) || src.analysis === 20711,
-              )
-            : undefined;
-          if (greenSource) {
-            const gsCycles = engine[greenSource.analysis] ?? [];
-            const total = gsCycles.length;
-            const completed = gsCycles.filter((c) => c.gaps && c.gaps.length > 0).length;
-            const pct = total > 0 ? (completed / total) * 100 : 80;
-            greenSealAssertivity = Math.max(70, Math.min(95, Math.round(pct)));
-            isGreenSeal = true;
-          }
-
-          return {
-            ...s,
-            isVerified: !!isVerified,
-            isRare,
+            isAlavancagem,
             isSupreme,
-            isGreenSeal,
-            greenSealAssertivity,
-            strategyKey,
-          };
-        }),
-      );
+            isRare,
+            strategyKey: next1.strategyKey || sig.strategyKey,
+          });
 
-      setMode1(finalM1);
+          i += 2;
+          continue;
+        }
+
+        rawUnifiedM1.push(sig);
+      }
+
+      // Regra de Proximidade (Mínimo 2 minutos de distância)
+      const filteredM1: Mode1Signal[] = [];
+      let lastAcceptedTime = -Infinity;
+
+      for (const sig of rawUnifiedM1) {
+        const sigTime = sig.at.getTime();
+        if (sigTime - lastAcceptedTime < 2 * 60000) {
+          const prevSig = filteredM1[filteredM1.length - 1];
+          if (prevSig && (sig.pct > prevSig.pct || sig.isConsecutive)) {
+            filteredM1[filteredM1.length - 1] = sig;
+            lastAcceptedTime = sigTime;
+          }
+          continue;
+        }
+        filteredM1.push(sig);
+        lastAcceptedTime = sigTime;
+      }
+
+      setMode1(filteredM1);
+
+      const alertWindow = activeAlerts.map((a) => ({
+        type: a.type,
+        start: a.triggerAt.getTime(),
+        end: a.triggerAt.getTime() + a.duration * 60000,
+      }));
+      setActiveRecAlerts(alertWindow);
     } catch (err) {
-      console.error("[PredictiveSignals] generate error:", err);
+      console.error("[PredictiveSignals] Signal generation error:", err);
     }
-  }, [active, engine, rows, secondaryActive]);
+  }, [rows, active, engine]);
 
+  // Executa geração automática quando os dados estiverem prontos
+  const initialGenerated = useRef(false);
   useEffect(() => {
-    if (active.length > 0 && !loading) {
-      void generate();
+    if (rows.length > 0 && !loading && !initialGenerated.current) {
+      initialGenerated.current = true;
+      generate();
     }
-  }, [active.length, loading, generate]);
+  }, [rows.length, loading, generate]);
 
-  // Alertas de Recuperação "possível rec"
-  const activeRecAlerts = useMemo(() => {
-    const alerts: Array<{ type: string; start: number; end: number }> = [];
-    const now = Date.now();
+  // Lista unificada de todos os sinais
+  const activeSignals = useMemo(() => {
+    return [
+      ...mode1.map((s) => {
+        const top1Sources = (s.sources || []).filter((src: any) => !src.top3 && !src.top5);
+        const top3Sources = (s.sources || []).filter((src: any) => src.top3 || src.top5);
+        const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
 
-    if (!Array.isArray(rows) || rows.length < 2) return alerts;
-    // Procurar gatilhos no histórico recente (últimas 20 pedras para garantir cobertura da janela)
-    const recent = rows.slice(-20);
-    for (let i = 1; i < recent.length; i++) {
-      if (!recent[i - 1] || !recent[i]) continue;
-      const p1 = Number(recent[i - 1].roll);
-      const p2 = Number(recent[i].roll);
-      const dt = parseUtcDate(recent[i].created_at).getTime();
-      if (Number.isNaN(dt)) continue;
+        let category = "top1_isolated";
+        if (distinctTop1.size >= 4) {
+          category = "alavancagem";
+        } else if (distinctTop1.size >= 2 && top3Sources.length >= 1) {
+          category = "supreme";
+        } else if (distinctTop1.size >= 2) {
+          category = "rare";
+        } else if (distinctTop1.size === 1 && top3Sources.length >= 1) {
+          category = "top1_top3";
+        } else {
+          category = "top1_isolated";
+        }
 
-      // Gatilho 7-14: 14 min
-      if (p1 === 7 && p2 === 14) alerts.push({ type: "7-14", start: dt, end: dt + 14 * 60000 });
-      // Gatilho 4-7: 9 min
-      if (p1 === 4 && p2 === 7) alerts.push({ type: "4-7", start: dt, end: dt + 9 * 60000 });
-      // Gatilho 5-14: 14 min
-      if (p1 === 5 && p2 === 14) alerts.push({ type: "5-14", start: dt, end: dt + 14 * 60000 });
-    }
-    return alerts.filter((a) => a.end > now);
-  }, [rows]);
+        return {
+          ...s,
+          category,
+          isTop1: true,
+          isAlavancagem: category === "alavancagem" || distinctTop1.size >= 4,
+          isSupreme: category === "supreme",
+          isRare: category === "rare" || category === "supreme" || category === "alavancagem",
+          times: [s.at],
+        };
+      }),
+      ...mode2.map((s) => ({
+        ...s,
+        category: "top3_only",
+        isTop1: false,
+        isAlavancagem: false,
+        isSupreme: false,
+        isRare: false,
+        at: s.times[0],
+      })),
+    ].sort((a, b) => {
+      const tA = a.at instanceof Date ? a.at.getTime() : 0;
+      const tB = b.at instanceof Date ? b.at.getTime() : 0;
+      return tA - tB;
+    });
+  }, [mode1, mode2]);
 
+  // 0. 🚀 ALAVANCAGEM (4 ou mais análises Top 1)
+  const alavancagemSignals = useMemo(() => {
+    return activeSignals.filter((s) => {
+      const top1Sources = (s.sources || []).filter((src: any) => !src.top3);
+      const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
+      return distinctTop1.size >= 4 || s.category === "alavancagem";
+    });
+  }, [activeSignals]);
+
+  // 1. 🏆 WINN (Super Confluência Suprema: >= 2 Top 1 E >= 1 Top 3)
+  const winnSignals = useMemo(() => {
+    return activeSignals.filter((s) => {
+      if (alavancagemSignals.some((a) => a.key === s.key)) return false;
+      const top1Sources = (s.sources || []).filter((src: any) => !src.top3);
+      const top3Sources = (s.sources || []).filter((src: any) => src.top3);
+      const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
+      return distinctTop1.size >= 2 && top3Sources.length >= 1;
+    });
+  }, [activeSignals, alavancagemSignals]);
+
+  // 2. 💎 RARO (Múltiplas análises Top 1: >= 2 Top 1)
+  const rareSignals = useMemo(() => {
+    return activeSignals.filter((s) => {
+      if (
+        alavancagemSignals.some((a) => a.key === s.key) ||
+        winnSignals.some((w) => w.key === s.key)
+      )
+        return false;
+      const top1Sources = (s.sources || []).filter((src: any) => !src.top3);
+      const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
+      return distinctTop1.size >= 2;
+    });
+  }, [activeSignals, alavancagemSignals, winnSignals]);
+
+  // 3. ⚡ TOP 1 & TOP 3 (Confluência Principal + Secundária: 1 Top 1 E >= 1 Top 3)
+  const top1Top3Signals = useMemo(() => {
+    return activeSignals.filter((s) => {
+      if (
+        alavancagemSignals.some((a) => a.key === s.key) ||
+        winnSignals.some((w) => w.key === s.key) ||
+        rareSignals.some((r) => r.key === s.key)
+      )
+        return false;
+      const top1Sources = (s.sources || []).filter((src: any) => !src.top3);
+      const top3Sources = (s.sources || []).filter((src: any) => src.top3);
+      const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
+      return distinctTop1.size === 1 && top3Sources.length >= 1;
+    });
+  }, [activeSignals, alavancagemSignals, winnSignals, rareSignals]);
+
+  // 4. 🎯 TOP 1 ISOLADO (Análise Principal Única: 1 Top 1 apenas)
+  const top1IsolatedSignals = useMemo(() => {
+    return activeSignals.filter((s) => {
+      if (
+        alavancagemSignals.some((a) => a.key === s.key) ||
+        winnSignals.some((w) => w.key === s.key) ||
+        rareSignals.some((r) => r.key === s.key) ||
+        top1Top3Signals.some((t) => t.key === s.key)
+      )
+        return false;
+      const top1Sources = (s.sources || []).filter((src: any) => !src.top3);
+      const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
+      return s.isTop1 && distinctTop1.size === 1;
+    });
+  }, [activeSignals, alavancagemSignals, winnSignals, rareSignals, top1Top3Signals]);
+
+  // 5. 📊 COINCIDÊNCIA TOP 3 (Análises Secundárias Top 2 ao Top 3: apenas Top 3, 0 Top 1)
+  const top3OnlySignals = useMemo(() => {
+    return activeSignals.filter((s) => {
+      if (
+        alavancagemSignals.some((a) => a.key === s.key) ||
+        winnSignals.some((w) => w.key === s.key) ||
+        rareSignals.some((r) => r.key === s.key) ||
+        top1Top3Signals.some((t) => t.key === s.key) ||
+        top1IsolatedSignals.some((i) => i.key === s.key)
+      )
+        return false;
+      return s.category === "top3_only" || s.category === "top5_only" || !s.isTop1;
+    });
+  }, [
+    activeSignals,
+    alavancagemSignals,
+    winnSignals,
+    rareSignals,
+    top1Top3Signals,
+    top1IsolatedSignals,
+  ]);
+
+  // Sincroniza os sinais gerados no `signalsStore`
   useEffect(() => {
-    if (rows.length > 0 && !loading && mode1 && mode2) {
+    if (!loading && rows.length > 0) {
       const existing = getPredictiveSignals();
       const existingMap = new Map(existing.map((s) => [s.key, s]));
 
-      const syncSignals: any[] = [
+      const syncSignals = [
         ...(mode1 || []).map((s) => {
           if (!s) return null;
           const prev = existingMap.get(s.key);
-          const atTime = s.at instanceof Date ? s.at.getTime() : new Date(s.at).getTime();
+          const atTime = s.at instanceof Date ? s.at.getTime() : new Date(s.at || 0).getTime();
+          const top1Sources = (s.sources || []).filter((src: any) => !src.top3);
+          const top3Sources = (s.sources || []).filter((src: any) => src.top3);
+          const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
+
+          let category = "top1_isolated";
+          if (distinctTop1.size >= 4) {
+            category = "alavancagem";
+          } else if (distinctTop1.size >= 2 && top3Sources.length >= 1) {
+            category = "supreme";
+          } else if (distinctTop1.size >= 2) {
+            category = "rare";
+          } else if (distinctTop1.size === 1 && top3Sources.length >= 1) {
+            category = "top1_top3";
+          }
+
           return {
             key: s.key,
             time: fmtClock(s.at),
             pct: Number.isFinite(s.pct) ? s.pct : 0,
-            label: s.label || "",
-            confluence: Array.isArray(s.sources)
+            label: s.label || "Top 1",
+            confluence: s.sources
               ? s.sources.map((src) => `A${src.analysis}·${src.value}`).join(", ")
               : "",
             medal: getMedalStyles(
-              s.analysisCount || 0,
+              distinctTop1.size || s.analysisCount || 0,
               s.isConsecutive,
               s.levelOffset || 0,
               true,
-              "top1",
+              category,
             )?.label,
             entryDate: s.at,
             outcome: prev?.outcome || "pending",
@@ -970,11 +965,11 @@ export function PredictiveSignals() {
             completedAt: prev?.completedAt,
             isHighTendency: !!s.isHighTendency,
             isVerified: !!s.isVerified,
-            isRare: !!s.isRare,
-            isSupreme: !!s.isSupreme,
-            isGreenSeal: !!s.isGreenSeal,
-            greenSealAssertivity: s.greenSealAssertivity,
+            isAlavancagem: category === "alavancagem" || distinctTop1.size >= 4,
+            isRare: category === "rare" || category === "supreme" || category === "alavancagem",
+            isSupreme: category === "supreme",
             strategyKey: s.strategyKey,
+            sources: s.sources,
             isRecAlert: activeRecAlerts.some(
               (a) => !Number.isNaN(atTime) && atTime >= a.start && atTime <= a.end,
             ),
@@ -996,12 +991,13 @@ export function PredictiveSignals() {
             pct: Number.isFinite(s.pct) ? s.pct : 0,
             label: "Confluência",
             confluence: s.confluence || "",
-            medal: getMedalStyles(s.analysisCount || 0, false, 0, false, "top5_only")?.label,
+            medal: getMedalStyles(s.analysisCount || 0, false, 0, false, "top3_only")?.label,
             entryDate: rawTime,
             outcome: prev?.outcome || "pending",
             resultTime: prev?.resultTime,
             completedAt: prev?.completedAt,
             isHighTendency: !!s.isHighTendency,
+            isAlavancagem: false,
             strategyKey: s.strategyKey,
             isRecAlert: activeRecAlerts.some(
               (a) => !Number.isNaN(firstTime) && firstTime >= a.start && firstTime <= a.end,
@@ -1085,6 +1081,21 @@ export function PredictiveSignals() {
 
         {!err && (
           <div className="space-y-8">
+            {/* 0. 🚀 ALAVANCAGEM (4+ Análises Top 1) */}
+            {alavancagemSignals.length > 0 && (
+              <section className="space-y-3">
+                <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-white">
+                  <Zap className="h-4 w-4 text-white fill-white animate-pulse" /> 🚀 ALAVANCAGEM (4+
+                  Sinais Top 1)
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {alavancagemSignals.map((s) => (
+                    <SignalCard key={s.key} signal={s} />
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* 1. 🏆 WINN (Super Confluência Suprema) */}
             {winnSignals.length > 0 && (
               <section className="space-y-3">
@@ -1113,15 +1124,15 @@ export function PredictiveSignals() {
               </section>
             )}
 
-            {/* 3. ⚡ TOP 1 & TOP 5 (Confluência Principal + Secundária) */}
-            {top1Top5Signals.length > 0 && (
+            {/* 3. ⚡ TOP 1 & TOP 3 (Confluência Principal + Secundária) */}
+            {top1Top3Signals.length > 0 && (
               <section className="space-y-3">
                 <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
-                  <Layers className="h-3.5 w-3.5" /> ⚡ TOP 1 & TOP 5 (Confluência Principal +
+                  <Layers className="h-3.5 w-3.5" /> ⚡ TOP 1 & TOP 3 (Confluência Principal +
                   Secundária)
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {top1Top5Signals.map((s) => (
+                  {top1Top3Signals.map((s) => (
                     <SignalCard key={s.key} signal={s} />
                   ))}
                 </div>
@@ -1142,16 +1153,16 @@ export function PredictiveSignals() {
               </section>
             )}
 
-            {/* 5. 📊 COINCIDÊNCIA TOP 5 (Análises Secundárias Top 2 ao Top 5) */}
-            {top5OnlySignals.length > 0 && (
+            {/* 5. 📊 COINCIDÊNCIA TOP 3 (Análises Secundárias Top 2 ao Top 3) */}
+            {top3OnlySignals.length > 0 && (
               <section className="space-y-3">
                 <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/70">
-                  <Layers className="h-3.5 w-3.5" /> 📊 COINCIDÊNCIA TOP 5 (Análises Secundárias Top
-                  2 ao Top 5)
+                  <Layers className="h-3.5 w-3.5" /> 📊 COINCIDÊNCIA TOP 3 (Análises Secundárias Top
+                  2 ao Top 3)
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {top5OnlySignals
-                    .filter((s) => s.category === "top5_only")
+                  {top3OnlySignals
+                    .filter((s) => s.category === "top3_only" || s.category === "top5_only")
                     .map((signal) => (
                       <SignalCard key={signal.key} signal={signal} />
                     ))}

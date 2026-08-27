@@ -46,6 +46,13 @@ const NAVEGACAO: MenuItem[] = [
     badgeClass: "bg-emerald-500 text-black",
   },
   { id: "sinais", title: "Sinais", icon: Radio },
+  {
+    id: "validador",
+    title: "Validador de Sinais",
+    icon: ShieldCheck,
+    badge: "AUDITORIA",
+    badgeClass: "bg-emerald-500 text-black",
+  },
   { id: "estrategias", title: "Estratégias", icon: Network },
   { id: "videos", title: "Vídeos", icon: PlayCircle },
   { id: "blaze", title: "Blaze Dashboard", icon: Activity },
@@ -60,7 +67,6 @@ const NAVEGACAO: MenuItem[] = [
 
 const FERRAMENTAS: MenuItem[] = [
   { id: "notificador", title: "Notificador", icon: Bell, isTool: true },
-  { id: "validador", title: "Validador de Padrão", icon: ShieldCheck, isTool: true },
   { id: "simulador", title: "Simulador", icon: Dice5, isTool: true, soon: true },
 ];
 

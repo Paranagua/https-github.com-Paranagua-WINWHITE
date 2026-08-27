@@ -9,29 +9,43 @@ import {
   type PredictiveSignal,
 } from "@/lib/signalsStore";
 import { useSignalStatsStore } from "@/lib/signalStatsStore";
-import { Radio, Power, Cpu, AlertCircle } from "lucide-react";
+import {
+  Radio,
+  Power,
+  Cpu,
+  AlertCircle,
+  ShieldCheck,
+  RotateCcw,
+  CheckCircle2,
+  XCircle,
+  Clock,
+} from "lucide-react";
+import { setSection } from "@/lib/sectionStore";
 import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
-import { ResultCircle } from "@/components/double/ResultCircle";
 import { colorOf, fmtTime, type Color } from "@/components/double/types";
 import { parseUtcDate } from "@/lib/utils";
-import { AnimatePresence } from "framer-motion";
 import { Switch } from "@/components/ui/switch";
-import { Card } from "@/components/double/Card";
 import { PredictiveSignals } from "@/components/double/PredictiveSignals";
-import {
-  buildA1,
-  buildA2,
-  buildA3,
-  buildA4,
-  buildA5,
-  buildA6,
-  buildA7,
-  buildASoma17,
-  buildASoma19,
-  buildASoma21,
-  buildA1Minuto5,
-  buildA2Minuto5,
-} from "@/lib/predictive";
+
+const ALL_ANALYSES_METADATA = [
+  { key: "A1", label: "A1 · P=M" },
+  { key: "A2", label: "A2 · Rep. Simples" },
+  { key: "A3", label: "A3 · 2ª Pedra (Min 9)" },
+  { key: "A4", label: "A4 · 1ª Dezena (Min 0)" },
+  { key: "A5", label: "A5 · 2ª Dezena (Min 0)" },
+  { key: "A10", label: "A10 · Gatilho 8→11" },
+  { key: "A11", label: "A11 · Gatilho 11→11" },
+  { key: "A12", label: "A12 · Gatilho 4→11" },
+  { key: "A13", label: "A13 · Gatilho 4↔14" },
+  { key: "A14", label: "A14 · Soma 17" },
+  { key: "A15", label: "A15 · Soma 19" },
+  { key: "A16", label: "A16 · Soma 21" },
+  { key: "A17", label: "A17 · 1ª Pedra (Min 5)" },
+  { key: "A18", label: "A18 · 2ª Pedra (Min 5)" },
+  { key: "A19", label: "A19 · Sanduíche (Pontas)" },
+  { key: "A20", label: "A20 · Sanduíche (Meio)" },
+  { key: "A21", label: "A21 · Gatilho 7↔11" },
+];
 
 type Result = {
   id: string;
@@ -126,8 +140,12 @@ function SinaisSectionContent() {
   const [robotOn, setRobotOn] = useState(getRobotEnabled());
   const [predictiveList, setPredictiveList] = useState<PredictiveSignal[]>(getPredictiveSignals());
   const [auditFilter, setAuditFilter] = useState<"geral" | "hoje">("geral");
-  const updateStats = useSignalStatsStore((state) => state.updateStats);
-  const getAssertivity = useSignalStatsStore((state) => state.getAssertivity);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  const stats = useSignalStatsStore((state) => state.stats);
+  const recentSignals = useSignalStatsStore((state) => state.recentSignals);
+  const recordCompletedSignal = useSignalStatsStore((state) => state.recordCompletedSignal);
+  const clearStats = useSignalStatsStore((state) => state.clearStats);
 
   const [isLoading, setIsLoading] = useState(false);
 
@@ -138,7 +156,7 @@ function SinaisSectionContent() {
         .from("blaze_results")
         .select("id, roll, color, created_at")
         .order("created_at", { ascending: false })
-        .limit(1000);
+        .limit(500);
       if (data) setResultsForValidation(data.map(rowToResult));
     } catch (err) {
       console.error("Error loading blaze results:", err);
@@ -173,54 +191,24 @@ function SinaisSectionContent() {
     };
   }, []);
 
-  // Estatísticas de Estratégias calculadas confiavelmente em memória direto dos resultados
+  // Estatísticas de Visão Geral: alimentadas em tempo real a partir dos sinais auditados
   const strategyStats = useMemo(() => {
-    if (!resultsForValidation || resultsForValidation.length === 0) return [];
-    try {
-      const rows = resultsForValidation
-        .map((r) => ({
-          id: Number(r.id),
-          roll: String(r.roll),
-          color: r.color,
-          created_at: r.createdAt,
-        }))
-        .slice()
-        .reverse();
-
-      const analyses = [
-        { key: "A1", label: "A1 · P=M", cycles: buildA1(rows) || [] },
-        { key: "A2", label: "A2 · Rep. Simples", cycles: buildA2(rows) || [] },
-        { key: "A3", label: "A3 · Rep. Casada", cycles: buildA3(rows) || [] },
-        { key: "A4", label: "A4 · 1ª Dezena (Min 0)", cycles: buildA4(rows) || [] },
-        { key: "A5", label: "A5 · 2ª Dezena (Min 0)", cycles: buildA5(rows) || [] },
-        { key: "A6", label: "A6 · Soma", cycles: buildA6(rows) || [] },
-        { key: "A7", label: "A7 · Diferença", cycles: buildA7(rows) || [] },
-        { key: "A14", label: "A14 · Soma 17", cycles: buildASoma17(rows) || [] },
-        { key: "A15", label: "A15 · Soma 19", cycles: buildASoma19(rows) || [] },
-        { key: "A16", label: "A16 · Soma 21", cycles: buildASoma21(rows) || [] },
-        { key: "A17", label: "A17 · 1ª Pedra (Min 5)", cycles: buildA1Minuto5(rows) || [] },
-        { key: "A18", label: "A18 · 2ª Pedra (Min 5)", cycles: buildA2Minuto5(rows) || [] },
-      ];
-
-      return analyses
-        .map((a) => {
-          const total = a.cycles?.length || 0;
-          const wins = (a.cycles || []).filter((c) => (c?.gaps?.length ?? 0) > 0).length;
-          const losses = Math.max(0, total - wins);
-          const assertividade = total > 0 ? (wins / total) * 100 : 85;
-          return {
-            analise: a.label,
-            assertividade: Math.min(100, Math.max(50, assertividade)),
-            wins,
-            losses,
-          };
-        })
-        .sort((a, b) => b.assertividade - a.assertividade);
-    } catch (err) {
-      console.error("[SinaisSection] strategyStats calculation error:", err);
-      return [];
-    }
-  }, [resultsForValidation]);
+    return ALL_ANALYSES_METADATA.map((a) => {
+      const s = stats[a.key];
+      const wins = s?.green || 0;
+      const losses = s?.red || 0;
+      const total = wins + losses;
+      const assertividade = total > 0 ? (wins / total) * 100 : null;
+      return {
+        key: a.key,
+        analise: a.label,
+        assertividade,
+        wins,
+        losses,
+        total,
+      };
+    });
+  }, [stats]);
 
   // Auditoria dos sinais preditivos contra os resultados reais
   useEffect(() => {
@@ -250,28 +238,43 @@ function SinaisSectionContent() {
               return s;
             }
 
-            // Janela de auditoria: Horário -1 minuto até +1 minuto
-            const rangeStart = entryTime - 60_000;
-            const rangeEnd = entryTime + 60_000;
+            // Obtenção precisa do início do minuto alvo (ex: 14:05 -> 14:05:00.000)
+            const targetMinuteStart = Math.floor(entryTime / 60_000) * 60_000;
+
+            // Janela de auditoria exata de 3 minutos completos (6 casas / 2 casas por minuto):
+            // Minuto M - 1 (1 min antes):     [targetMinuteStart - 60_000, targetMinuteStart - 1]
+            // Minuto M     (horário do sinal): [targetMinuteStart, targetMinuteStart + 59_999]
+            // Minuto M + 1 (1 min depois):    [targetMinuteStart + 60_000, targetMinuteStart + 119_999]
+            const rangeStart = targetMinuteStart - 60_000;
+            const rangeEnd = targetMinuteStart + 120_000 - 1; // 23:59:59.999 do minuto posterior
 
             // 1. Se o horário da entrada (-1 min) ainda NÃO chegou, fica pendente
             if (now < rangeStart) {
               return s.outcome === "pending" ? s : { ...s, outcome: "pending" as const };
             }
 
-            // 2. Se entrou na janela, verifica se saiu branco
+            // 2. Busca qualquer saída de branco (roll === 0 ou color === "white") nas 6 casas
             const matchedResult = (resultsForValidation || []).find((r) => {
               if (!r) return false;
-              const isWhite = r.roll === 0 || r.color === "white";
+              const isWhite = Number(r.roll) === 0 || r.color === "white";
               if (!isWhite) return false;
               const rt = parseUtcDate(r.createdAt).getTime();
-              return rt >= rangeStart && rt <= rangeEnd;
+              return rt >= rangeStart - 3_000 && rt <= rangeEnd + 3_000;
             });
 
             if (matchedResult) {
               if (s.outcome !== "green") {
                 hasChanged = true;
-                if (s.strategyKey) updateStats(s.strategyKey, "green");
+                recordCompletedSignal({
+                  key: s.key,
+                  time: s.time,
+                  outcome: "green",
+                  label: s.label,
+                  confluence: s.confluence,
+                  resultTime: fmtTime(matchedResult.createdAt),
+                  strategyKey: s.strategyKey,
+                  sources: s.sources,
+                });
               }
               return {
                 ...s,
@@ -282,15 +285,23 @@ function SinaisSectionContent() {
               };
             }
 
-            // 3. Se ainda estamos dentro da janela com margem de 30s
-            if (now <= rangeEnd + 30_000) {
+            // 3. Se ainda estamos dentro da janela dos 3 minutos (+35s para aguardar a resolução do 2º giro do minuto M+1)
+            if (now <= rangeEnd + 35_000) {
               return s.outcome === "pending" ? s : { ...s, outcome: "pending" as const };
             }
 
-            // 4. Se expirou e nenhum branco saiu, computa LOSS
+            // 4. Se a janela encerrou completamente e nenhum branco saiu, computa LOSS
             if (s.outcome !== "red") {
               hasChanged = true;
-              if (s.strategyKey) updateStats(s.strategyKey, "red");
+              recordCompletedSignal({
+                key: s.key,
+                time: s.time,
+                outcome: "red",
+                label: s.label,
+                confluence: s.confluence,
+                strategyKey: s.strategyKey,
+                sources: s.sources,
+              });
             }
             return {
               ...s,
@@ -311,22 +322,20 @@ function SinaisSectionContent() {
     } catch (err) {
       console.error("[SinaisSection] Validation error:", err);
     }
-  }, [resultsForValidation, updateStats]);
+  }, [resultsForValidation, recordCompletedSignal]);
 
-  // Estatísticas das Rodadas Atuais
-  const activeStats = useMemo(() => {
-    try {
-      const list = Array.isArray(predictiveList) ? predictiveList : [];
-      const finished = list.filter((s) => s && s.outcome && s.outcome !== "pending");
-      const wins = finished.filter((s) => s.outcome === "green").length;
-      const losses = finished.filter((s) => s.outcome === "red").length;
-      const total = wins + losses;
-      const pct = total > 0 ? (wins / total) * 100 : 100;
-      return { wins, losses, pct };
-    } catch {
-      return { wins: 0, losses: 0, pct: 100 };
-    }
-  }, [predictiveList]);
+  // Estatísticas das Rodadas Atuais: calculadas com base nos 10 ÚLTIMOS sinais do histórico
+  const last10Signals = useMemo(() => {
+    return (recentSignals || []).slice(0, 10);
+  }, [recentSignals]);
+
+  const last10Stats = useMemo(() => {
+    const total = last10Signals.length;
+    const wins = last10Signals.filter((s) => s.outcome === "green").length;
+    const losses = last10Signals.filter((s) => s.outcome === "red").length;
+    const pct = total > 0 ? (wins / total) * 100 : 100;
+    return { total, wins, losses, pct };
+  }, [last10Signals]);
 
   return (
     <div className="mx-auto min-h-screen max-w-[1440px] bg-[#090909] px-4 py-6 space-y-6">
@@ -346,98 +355,250 @@ function SinaisSectionContent() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 backdrop-blur-md">
-          <Power className="h-4 w-4 text-emerald-500" />
-          <div className="text-xs leading-tight">
-            <div className="text-[#9CA3AF] font-bold tracking-widest text-[9px] uppercase">
-              ROBÔ · SINAIS
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setSection("validador")}
+            className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-400 hover:bg-emerald-500/20 transition-all shadow-lg shadow-emerald-500/5"
+          >
+            <ShieldCheck className="h-4 w-4" />
+            <span className="hidden sm:inline">Auditar Porcentagens</span>
+            <span className="sm:hidden">Validador</span>
+          </button>
+
+          <div className="flex items-center gap-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 backdrop-blur-md">
+            <Power className="h-4 w-4 text-emerald-500" />
+            <div className="text-xs leading-tight">
+              <div className="text-[#9CA3AF] font-bold tracking-widest text-[9px] uppercase">
+                ROBÔ · SINAIS
+              </div>
+              <div className="font-black text-emerald-400 text-sm font-outfit">
+                {robotOn ? "ACTIVE" : "STANDBY"}
+              </div>
             </div>
-            <div className="font-black text-emerald-400 text-sm font-outfit">
-              {robotOn ? "ACTIVE" : "STANDBY"}
-            </div>
+            <Switch
+              checked={robotOn}
+              onCheckedChange={(v) => {
+                setRobotOn(v);
+                setRobotEnabled(v);
+              }}
+            />
           </div>
-          <Switch
-            checked={robotOn}
-            onCheckedChange={(v) => {
-              setRobotOn(v);
-              setRobotEnabled(v);
-            }}
-          />
         </div>
       </div>
 
       <div className="flex flex-col gap-6">
         {/* Card de Auditoria */}
         <div className="rounded-2xl border border-white/5 bg-[#0c0c0c] overflow-hidden shadow-2xl">
-          <div className="flex items-center justify-between border-b border-white/5 bg-white/[0.02] px-6 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 bg-white/[0.02] px-6 py-4">
             <div className="flex items-center gap-3">
               <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary/10 text-primary">
                 <Cpu className="h-4 w-4" />
               </div>
-              <h3 className="text-sm font-black uppercase tracking-widest text-white font-outfit">
-                Painel de Auditoria
-              </h3>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-widest text-white font-outfit">
+                  Painel de Auditoria
+                </h3>
+                <p className="text-[10px] text-muted-foreground">
+                  {auditFilter === "geral"
+                    ? "Alimentação em tempo real das análises ativas"
+                    : `Assertividade dos últimos ${last10Stats.total} de 10 sinais`}
+                </p>
+              </div>
             </div>
-            <div className="flex bg-black/40 p-1 rounded-lg border border-white/5">
-              <button
-                onClick={() => setAuditFilter("geral")}
-                className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-md transition-all ${auditFilter === "geral" ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-white/40 hover:text-white/60"}`}
-              >
-                Visão Geral
-              </button>
-              <button
-                onClick={() => setAuditFilter("hoje")}
-                className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-md transition-all ${auditFilter === "hoje" ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-white/40 hover:text-white/60"}`}
-              >
-                Rodadas Atuais
-              </button>
+
+            <div className="flex items-center gap-2">
+              {showClearConfirm ? (
+                <div className="flex items-center gap-1.5 bg-red-500/10 border border-red-500/30 rounded-lg p-1">
+                  <span className="text-[10px] text-red-300 font-bold px-1.5">Zerar dados?</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearStats();
+                      const current = getPredictiveSignals();
+                      const resetSignals = (current || []).map((s) => ({
+                        ...s,
+                        outcome: "pending" as const,
+                        label: undefined,
+                        resultTime: undefined,
+                        completedAt: undefined,
+                      }));
+                      setPredictiveSignals(resetSignals);
+                      setPredictiveList(resetSignals);
+                      setShowClearConfirm(false);
+                    }}
+                    className="px-2 py-1 bg-red-500 text-white rounded text-[10px] font-black uppercase hover:bg-red-600 transition-colors"
+                  >
+                    Sim, Limpar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowClearConfirm(false)}
+                    className="px-2 py-1 bg-white/10 text-white/70 rounded text-[10px] font-bold hover:bg-white/20 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirm(true)}
+                  title="Limpar histórico de auditoria e recomeçar do zero"
+                  className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[10px] font-bold text-muted-foreground hover:bg-white/10 hover:text-white transition-colors"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  <span>Limpar Dados</span>
+                </button>
+              )}
+
+              <div className="flex bg-black/40 p-1 rounded-lg border border-white/5">
+                <button
+                  onClick={() => setAuditFilter("geral")}
+                  className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-md transition-all ${auditFilter === "geral" ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-white/40 hover:text-white/60"}`}
+                >
+                  Visão Geral
+                </button>
+                <button
+                  onClick={() => setAuditFilter("hoje")}
+                  className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-md transition-all ${auditFilter === "hoje" ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-white/40 hover:text-white/60"}`}
+                >
+                  Rodadas Atuais (10 Sinais)
+                </button>
+              </div>
             </div>
           </div>
 
           <div className="p-6">
             {auditFilter === "geral" ? (
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3">
-                {strategyStats.map((s, i) => (
-                  <div
-                    key={i}
-                    className="flex flex-col gap-1 p-3 rounded-xl bg-white/[0.02] border border-white/5"
-                  >
-                    <span className="text-[9px] font-black text-white/40 uppercase tracking-tighter truncate">
-                      {s.analise}
-                    </span>
-                    <span className="text-xl font-black text-white font-outfit">
-                      {Number(s.assertividade || 0).toFixed(0)}%
-                    </span>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <span className="text-[9px] font-bold text-emerald-500">{s.wins}W</span>
-                      <span className="text-[9px] font-bold text-red-500">{s.losses}L</span>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-9 gap-2.5">
+                  {strategyStats.map((s, i) => (
+                    <div
+                      key={i}
+                      className="flex flex-col gap-1 p-3 rounded-xl bg-white/[0.02] border border-white/5 hover:border-white/10 transition-colors"
+                    >
+                      <span className="text-[9px] font-black text-white/50 uppercase tracking-tighter truncate">
+                        {s.analise}
+                      </span>
+                      <span
+                        className={`text-xl font-black font-outfit ${s.total > 0 ? "text-white" : "text-zinc-600 font-normal"}`}
+                      >
+                        {s.assertividade !== null ? `${s.assertividade.toFixed(0)}%` : "--"}
+                      </span>
+                      <div className="flex items-center justify-between text-[9px] font-bold pt-1 border-t border-white/5">
+                        <span
+                          className={s.wins > 0 ? "text-emerald-400 font-black" : "text-zinc-600"}
+                        >
+                          {s.wins}W
+                        </span>
+                        <span
+                          className={s.losses > 0 ? "text-red-400 font-black" : "text-zinc-600"}
+                        >
+                          {s.losses}L
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                {strategyStats.every((s) => s.total === 0) && (
+                  <p className="text-center text-[11px] text-muted-foreground/60 py-1">
+                    ✨ Painel zerado. Os dados serão alimentados automaticamente conforme novos
+                    sinais forem auditados em tempo real.
+                  </p>
+                )}
               </div>
             ) : (
-              <div className="flex items-center justify-around py-2">
-                <div className="text-center">
-                  <div className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">
-                    Assertividade Real
+              <div className="space-y-6">
+                <div className="flex flex-wrap items-center justify-around gap-6 py-2">
+                  <div className="text-center">
+                    <div className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">
+                      Assertividade (Últimos 10 Sinais)
+                    </div>
+                    <div className="text-4xl sm:text-5xl font-black text-white font-outfit">
+                      {last10Stats.total > 0 ? `${last10Stats.pct.toFixed(1)}%` : "--"}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-1">
+                      {last10Stats.total > 0
+                        ? `Amostra: ${last10Stats.total} ${last10Stats.total === 1 ? "sinal" : "sinais"} concluídos`
+                        : "Aguardando conclusão de sinais"}
+                    </div>
                   </div>
-                  <div className="text-4xl font-black text-white font-outfit">
-                    {Number(activeStats.pct || 0).toFixed(1)}%
+
+                  <div className="hidden sm:block h-16 w-px bg-white/5" />
+
+                  <div className="text-center">
+                    <div className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">
+                      Placar (Últimos 10)
+                    </div>
+                    <div className="flex items-baseline gap-2 justify-center">
+                      <span className="text-3xl sm:text-4xl font-black text-emerald-500 font-outfit">
+                        {last10Stats.wins}W
+                      </span>
+                      <span className="text-xl font-black text-white/20">/</span>
+                      <span className="text-3xl sm:text-4xl font-black text-red-500 font-outfit">
+                        {last10Stats.losses}L
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-1">
+                      {last10Stats.total > 0
+                        ? `${last10Stats.wins} vitórias em ${last10Stats.total} rodadas`
+                        : "0 entradas registradas"}
+                    </div>
                   </div>
                 </div>
-                <div className="h-12 w-px bg-white/5" />
-                <div className="text-center">
-                  <div className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">
-                    Placar (Hoje)
+
+                {/* Linha dos 10 Últimos Sinais */}
+                <div className="space-y-2 pt-4 border-t border-white/5">
+                  <div className="flex items-center justify-between text-[11px] text-white/50 font-bold uppercase tracking-wider">
+                    <span>Sequência dos 10 Últimos Sinais (Mais Recente → Mais Antigo)</span>
+                    <span>{last10Stats.total}/10 Registrados</span>
                   </div>
-                  <div className="flex items-baseline gap-2 justify-center">
-                    <span className="text-3xl font-black text-emerald-500 font-outfit">
-                      {activeStats.wins}
-                    </span>
-                    <span className="text-lg font-black text-white/20">/</span>
-                    <span className="text-3xl font-black text-red-500 font-outfit">
-                      {activeStats.losses}
-                    </span>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-5 md:grid-cols-10 gap-2">
+                    {Array.from({ length: 10 }).map((_, idx) => {
+                      const sig = last10Signals[idx];
+                      if (!sig) {
+                        return (
+                          <div
+                            key={idx}
+                            className="flex flex-col items-center justify-center p-2.5 rounded-xl border border-dashed border-white/10 bg-white/[0.01] text-zinc-600 text-center min-h-[64px]"
+                          >
+                            <span className="text-[9px] font-bold opacity-40">#{idx + 1}</span>
+                            <span className="text-[10px] font-medium opacity-40">Aguardando</span>
+                          </div>
+                        );
+                      }
+
+                      const isGreen = sig.outcome === "green";
+                      return (
+                        <div
+                          key={sig.key || idx}
+                          className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all ${
+                            isGreen
+                              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                              : "border-red-500/30 bg-red-500/10 text-red-300"
+                          }`}
+                        >
+                          <div className="flex items-center gap-1 text-[9px] font-bold opacity-75">
+                            <Clock className="h-2.5 w-2.5" />
+                            <span>{sig.time}</span>
+                          </div>
+                          <div className="flex items-center gap-1 my-0.5">
+                            {isGreen ? (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                            ) : (
+                              <XCircle className="h-3.5 w-3.5 text-red-400" />
+                            )}
+                            <span className="text-xs font-black font-outfit">
+                              {isGreen ? "WIN" : "LOSS"}
+                            </span>
+                          </div>
+                          <span className="text-[8px] font-mono opacity-80 truncate max-w-[85px]">
+                            {sig.confluence || sig.label || "Top 1"}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

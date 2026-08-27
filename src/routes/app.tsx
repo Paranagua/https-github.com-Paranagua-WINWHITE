@@ -74,10 +74,12 @@ import { AppHeader } from "@/components/AppHeader";
 import { useSection } from "@/lib/sectionStore";
 import { useSidebarStore } from "@/lib/sidebarStore";
 import { cn } from "@/lib/utils";
-const SinaisPage = lazy(() => import("@/components/sections/SinaisSection"));
-const AnaliseSection = lazy(() => import("@/components/sections/AnaliseSection"));
-const EstrategiasSection = lazy(() => import("@/components/sections/EstrategiasSection"));
-const HostmanSection = lazy(() => import("@/components/sections/HostmanSection"));
+import freitasLogo from "@/assets/freitas-logo.jpg.asset.json";
+import SinaisPage from "@/components/sections/SinaisSection";
+import AnaliseSection from "@/components/sections/AnaliseSection";
+import EstrategiasSection from "@/components/sections/EstrategiasSection";
+import HostmanSection from "@/components/sections/HostmanSection";
+import ValidadorSection from "@/components/sections/ValidadorSection";
 
 function SectionFallback() {
   return (
@@ -171,7 +173,6 @@ function spTimeWithSeconds(spin: Spin): string {
 }
 
 const BRANCO_IMG = "/images/branco.svg";
-import freitasLogo from "@/assets/freitas-logo.jpg.asset.json";
 
 // Retorna YYYY-MM-DD para uma data no fuso America/Sao_Paulo.
 function spYmd(d: Date = new Date()): string {
@@ -955,6 +956,10 @@ function Index() {
           {section === "sinais" ? (
             <Suspense fallback={<SectionFallback />}>
               <SinaisPage />
+            </Suspense>
+          ) : section === "validador" ? (
+            <Suspense fallback={<SectionFallback />}>
+              <ValidadorSection />
             </Suspense>
           ) : section === "analise" ? (
             <Suspense fallback={<SectionFallback />}>

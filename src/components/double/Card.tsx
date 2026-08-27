@@ -1,6 +1,5 @@
 import { memo, ReactNode } from "react";
 import { motion } from "framer-motion";
-import { ShieldCheck } from "lucide-react";
 
 type Props = {
   title?: string;
@@ -12,8 +11,7 @@ type Props = {
   className?: string;
   isRare?: boolean;
   isSupreme?: boolean;
-  isGreenSeal?: boolean;
-  greenSealAssertivity?: number;
+  isAlavancagem?: boolean;
   outcome?: "pending" | "green" | "red";
 };
 
@@ -27,8 +25,7 @@ export const Card = memo(function Card({
   className = "",
   isRare,
   isSupreme,
-  isGreenSeal,
-  greenSealAssertivity,
+  isAlavancagem,
   outcome,
 }: Props) {
   return (
@@ -63,23 +60,19 @@ export const Card = memo(function Card({
       )}
 
       <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
-        {isSupreme && (
+        {isAlavancagem && (
+          <div className="flex items-center gap-1 rounded-full border border-slate-800 bg-white px-2 py-0.5 text-[9px] font-black tracking-wider text-slate-950 shadow-[0_0_15px_rgba(255,255,255,0.4)] animate-pulse">
+            <span>🚀 ALAVANCAGEM</span>
+          </div>
+        )}
+        {isSupreme && !isAlavancagem && (
           <div className="flex items-center gap-1 rounded-full border border-purple-400/40 bg-purple-500/10 px-2 py-0.5 text-[9px] font-black tracking-wider text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.25)] animate-pulse">
             <span>👑 SUPREMO</span>
           </div>
         )}
-        {isRare && !isSupreme && (
+        {isRare && !isSupreme && !isAlavancagem && (
           <div className="flex items-center gap-1 rounded-full border border-cyan-400/40 bg-cyan-500/10 px-2 py-0.5 text-[9px] font-black tracking-wider text-cyan-300 shadow-[0_0_10px_rgba(6,182,212,0.2)]">
             <span>💎 RARO</span>
-          </div>
-        )}
-        {isGreenSeal && (
-          <div className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold tracking-wider text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.1)]">
-            <ShieldCheck className="h-3 w-3" />
-            <span>SELADO</span>
-            {greenSealAssertivity != null && !Number.isNaN(Number(greenSealAssertivity)) && (
-              <span className="opacity-60 ml-1">{Number(greenSealAssertivity).toFixed(0)}%</span>
-            )}
           </div>
         )}
       </div>

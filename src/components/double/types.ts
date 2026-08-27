@@ -27,14 +27,20 @@ export function colorOf(n: number): Color {
   return "black";
 }
 
-export function fmtTime(iso: string): string {
-  // Supabase timestamptz costuma vir como "2026-07-01T07:16:37+00:00" ou com "Z".
-  // Se o valor chegar sem indicação de fuso, force UTC para não ser interpretado
-  // como horário local do navegador.
-  const raw = (iso ?? "").trim();
-  const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(raw);
-  const normalized = hasTz ? raw : `${raw.replace(" ", "T")}Z`;
-  const d = new Date(normalized);
+export function fmtTime(iso: string | number | Date | null | undefined): string {
+  if (iso === null || iso === undefined) return "--:--";
+  let d: Date;
+  if (iso instanceof Date) {
+    d = iso;
+  } else if (typeof iso === "number") {
+    d = new Date(iso);
+  } else {
+    const raw = String(iso).trim();
+    if (!raw) return "--:--";
+    const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(raw);
+    const normalized = hasTz ? raw : `${raw.replace(" ", "T")}Z`;
+    d = new Date(normalized);
+  }
   if (Number.isNaN(d.getTime())) return "--:--";
   return new Intl.DateTimeFormat("pt-BR", {
     timeZone: "America/Sao_Paulo",

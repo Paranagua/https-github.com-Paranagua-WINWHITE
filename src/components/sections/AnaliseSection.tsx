@@ -10,11 +10,18 @@ import {
   buildA3,
   buildA4,
   buildA5,
+  buildA8_11,
+  buildA11_11,
+  buildA4_11,
+  buildA4_14,
   buildASoma17,
   buildASoma19,
   buildASoma21,
   buildA1Minuto5,
   buildA2Minuto5,
+  buildASandwichPontas,
+  buildASandwichMeio,
+  buildA7_11,
   type Cycle as EngineCycle,
   type Row,
 } from "@/lib/predictive";
@@ -30,9 +37,9 @@ type UiCycle = {
 };
 
 const ALL_NUMBERS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
-const TOP_N = 5;
+const TOP_N = 3;
 const MAX_ZEROS = 14;
-const MAX_DETAIL_ROWS = 5;
+const MAX_DETAIL_ROWS = 6;
 const BRAZIL_TIME_ZONE = "America/Sao_Paulo";
 
 function diffMinutes(a: Date, b: Date) {
@@ -46,7 +53,7 @@ type GroupResult = {
   pct: number;
 };
 
-function computeTop5(cycles: UiCycle[]): { rows: GroupResult[]; totalRows: number } {
+function computeTop3(cycles: UiCycle[]): { rows: GroupResult[]; totalRows: number } {
   const rowSets: Set<number>[] = cycles.map((c) => new Set(c.gaps));
   const totalRows = cycles.length;
   const candidates: GroupResult[] = [];
@@ -70,7 +77,7 @@ function computeTop5(cycles: UiCycle[]): { rows: GroupResult[]; totalRows: numbe
         if (inPlus) hasPlus = true;
       }
     }
-    if (count === 0) continue;
+    if (!count) continue;
     const parts: string[] = [];
     if (hasMinus) parts.push(`${m - 1}`);
     if (hasM) parts.push(`${m}`);
@@ -79,7 +86,7 @@ function computeTop5(cycles: UiCycle[]): { rows: GroupResult[]; totalRows: numbe
       m,
       label: parts.join(" - "),
       count,
-      pct: totalRows ? (count / totalRows) * 100 : 0,
+      pct: totalRows > 0 ? (count / totalRows) * 100 : 0,
     });
   }
 
@@ -94,32 +101,21 @@ function computeTop5(cycles: UiCycle[]): { rows: GroupResult[]; totalRows: numbe
     nums.forEach((n) => used.add(n));
     if (picked.length >= TOP_N) break;
   }
+
   return { rows: picked, totalRows };
 }
 
-function fmtTime(d: Date) {
-  if (Number.isNaN(d.getTime())) return "--:--";
-  return d.toLocaleTimeString("pt-BR", {
+function fmtTime(d: Date | string | null | undefined): string {
+  if (!d) return "--:--";
+  const date = d instanceof Date ? d : parseUtcDate(d);
+  if (Number.isNaN(date.getTime())) return "--:--";
+  return date.toLocaleTimeString("pt-BR", {
     timeZone: BRAZIL_TIME_ZONE,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   });
 }
-
-type PanelProps = {
-  eyebrow: string;
-  title: string;
-  subtitle?: string;
-  loading: boolean;
-  err: string | null;
-  emptyLabel: string;
-  cycles: EngineCycle[];
-  pedra: number | string;
-  now: Date;
-  maxZeros?: number;
-  detailFormatter?: (c: EngineCycle) => string;
-};
 
 function AnalysisPanel({
   eyebrow,
@@ -128,189 +124,181 @@ function AnalysisPanel({
   loading,
   err,
   emptyLabel,
-  cycles: rawCycles,
+  cycles,
   pedra,
   now,
   maxZeros = MAX_ZEROS,
   detailFormatter,
-}: PanelProps) {
-  const windowed = useMemo<UiCycle[]>(() => {
-    // Pegamos os últimos MAX_DETAIL_ROWS (5) gatilhos gerados para esta pedra
-    const filtered = rawCycles.filter((c) => c.value === Number(pedra));
-    const recent = filtered.slice(-MAX_DETAIL_ROWS);
+}: {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  loading: boolean;
+  err: string | null;
+  emptyLabel: string;
+  cycles: EngineCycle[];
+  pedra: number;
+  now: Date;
+  maxZeros?: number;
+  detailFormatter?: (c: EngineCycle) => string;
+}) {
+  const filtered = useMemo(() => {
+    return cycles.filter((c) => c.value === pedra).slice(-MAX_DETAIL_ROWS);
+  }, [cycles, pedra]);
 
-    return recent.map((r, i) => {
-      const gaps = r.gaps ?? [];
-      const defaultDetail = detailFormatter
-        ? detailFormatter(r)
-        : `min ${String(r.triggerAt.getMinutes()).padStart(2, "0")}`;
-
+  const uiCycles: UiCycle[] = useMemo(() => {
+    return filtered.map((c, i) => {
+      const dt = c.triggerAt;
+      const elapsed = diffMinutes(dt, now);
+      const pending = Math.max(0, maxZeros - c.gaps.length);
       return {
         index: i + 1,
-        triggerAt: r.triggerAt,
-        triggerLabel: `${r.value}`,
-        triggerDetail: defaultDetail,
-        gaps,
-        pending: gaps.length >= maxZeros ? 0 : 1,
-        elapsed: diffMinutes(r.triggerAt, now),
+        triggerAt: dt,
+        triggerLabel: fmtTime(dt),
+        triggerDetail: detailFormatter
+          ? detailFormatter(c)
+          : `minuto ${String(dt.getMinutes()).padStart(2, "0")}`,
+        gaps: c.gaps,
+        pending,
+        elapsed,
       };
     });
-  }, [rawCycles, pedra, now, maxZeros, detailFormatter]);
+  }, [filtered, now, maxZeros, detailFormatter]);
 
-  const { rows: top5, totalRows } = useMemo(() => computeTop5(windowed), [windowed]);
-  const details = windowed;
-  const fullyCompleted = windowed.filter((c) => c.gaps.length >= maxZeros).length;
-  const totalGaps = windowed.reduce((a, c) => a + c.gaps.length, 0);
-  const avg = totalGaps
-    ? Math.round(windowed.reduce((a, c) => a + c.gaps.reduce((x, y) => x + y, 0), 0) / totalGaps)
-    : null;
+  const { rows: topRows, totalRows } = useMemo(() => computeTop3(uiCycles), [uiCycles]);
 
-  const chartData = top5.map((it) => ({ label: it.label, count: it.count }));
+  const chartData = useMemo(() => {
+    return topRows.map((r, i) => ({
+      name: `Top ${i + 1} (${r.label}m)`,
+      pct: Number(r.pct.toFixed(1)),
+      count: r.count,
+    }));
+  }, [topRows]);
 
   return (
-    <Card className="glass-card overflow-hidden">
-      <div className="p-6">
-        <div className="mb-6 flex items-baseline justify-between gap-3">
-          <div>
-            <div className="text-[10px] font-black uppercase tracking-[0.4em] text-primary mb-1 font-outfit">
-              {eyebrow}
-            </div>
-            <h3 className="text-xl font-black text-white font-outfit uppercase tracking-tight">
-              {title}
-            </h3>
-            {subtitle && <p className="mt-1 text-xs text-[#9CA3AF]">{subtitle}</p>}
-            <p className="mt-1 text-[11px] text-[#9CA3AF] font-medium">
-              {windowed.length} gatilhos (últimos {MAX_DETAIL_ROWS}) ·{" "}
-              <span className="text-white">{fullyCompleted} completos</span> ·{" "}
-              <span className="text-white">{totalGaps} zeros coletados</span>
-              {avg !== null ? ` · média ${avg} min` : ""}
-            </p>
+    <Card className="glass-card p-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-[0.4em] text-primary font-outfit">
+            {eyebrow}
           </div>
+          <h3 className="text-xl font-black text-white sm:text-2xl font-outfit uppercase tracking-tighter">
+            {title}
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
+        </div>
+        <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
+          <span>
+            {uiCycles.length} de {cycles.filter((c) => c.value === pedra).length} ciclos recentes
+          </span>
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-20 text-muted-foreground">
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando estatísticas...
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
-      ) : err ? (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
+      )}
+
+      {err && (
+        <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-xs text-red-300">
           {err}
         </div>
-      ) : totalRows === 0 ? (
-        <div className="rounded-lg border border-white/10 bg-white/[0.03] p-8 text-center text-sm text-muted-foreground">
-          {emptyLabel}
-        </div>
-      ) : (
-        <>
-          <div className="h-72 w-full rounded-xl border border-white/10 bg-white/[0.02] p-3">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 10, right: 16, bottom: 4, left: -12 }}>
-                <CartesianGrid stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
-                <XAxis dataKey="label" stroke="rgba(255,255,255,0.4)" tick={{ fontSize: 11 }} />
-                <YAxis
-                  stroke="rgba(255,255,255,0.4)"
-                  tick={{ fontSize: 11 }}
-                  allowDecimals={false}
-                  label={{
-                    value: "Ocorrências",
-                    angle: -90,
-                    position: "insideLeft",
-                    fill: "rgba(255,255,255,0.4)",
-                    fontSize: 11,
-                  }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: "rgba(15,15,20,0.95)",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                  formatter={(v: number) => [`${v}x`, "Ocorrências"]}
-                />
-                <Bar dataKey="count" fill="#34d399" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+      )}
 
-          <div className="mt-5 overflow-x-auto rounded-xl border border-white/10">
-            <div className="border-b border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-              Top {TOP_N} · grupos (M-1, M, M+1)
-            </div>
-            <table className="w-full text-xs tabular-nums">
+      {!loading && !err && uiCycles.length === 0 && (
+        <div className="mt-4 py-8 text-center text-xs text-muted-foreground">{emptyLabel}</div>
+      )}
+
+      {!loading && !err && uiCycles.length > 0 && (
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
+          {/* Tabela de ciclos */}
+          <div className="overflow-x-auto lg:col-span-7">
+            <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-white/10 bg-white/[0.02] text-muted-foreground">
-                  <th className="px-3 py-2 text-left font-medium">#</th>
-                  <th className="px-3 py-2 text-left font-medium">Minutos</th>
-                  <th className="px-3 py-2 text-right font-medium">Linhas</th>
-                  <th className="px-3 py-2 text-right font-medium">Assertividade</th>
+                <tr className="border-b border-white/10 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <th className="pb-2 font-bold">Gatilho</th>
+                  <th className="pb-2 font-bold">Detalhe</th>
+                  <th className="pb-2 font-bold">Latência até Brancos (min)</th>
+                  <th className="pb-2 text-right font-bold">Status</th>
                 </tr>
               </thead>
-              <tbody>
-                {top5.map((it, i) => (
-                  <tr
-                    key={`${it.m}-${i}`}
-                    className={`border-b border-white/5 last:border-0 ${i === 0 ? "bg-emerald-500/5" : ""}`}
-                  >
-                    <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
-                    <td className="px-3 py-2 text-foreground">{it.label}</td>
-                    <td className="px-3 py-2 text-right text-foreground">{it.count}x</td>
-                    <td className="px-3 py-2 text-right text-emerald-300">{it.pct.toFixed(1)}%</td>
+              <tbody className="divide-y divide-white/[0.05]">
+                {uiCycles.map((c) => (
+                  <tr key={c.index} className="hover:bg-white/[0.02]">
+                    <td className="py-2.5 font-mono font-bold text-white">{c.triggerLabel}</td>
+                    <td className="py-2.5 text-muted-foreground">{c.triggerDetail}</td>
+                    <td className="py-2.5">
+                      <div className="flex flex-wrap gap-1">
+                        {c.gaps.map((g, gi) => (
+                          <span
+                            key={gi}
+                            className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-mono font-bold text-white"
+                          >
+                            {g}m
+                          </span>
+                        ))}
+                        {c.gaps.length === 0 && (
+                          <span className="text-[10px] text-muted-foreground">
+                            Aguardando brancos...
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-2.5 text-right font-mono text-[10px]">
+                      {c.pending === 0 ? (
+                        <span className="text-emerald-400 font-bold">Completo</span>
+                      ) : (
+                        <span className="text-amber-400 font-bold">Faltam {c.pending}</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          <div className="mt-5 overflow-x-auto rounded-xl border border-white/10">
-            <div className="border-b border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-              Detalhes dos ciclos · últimos {MAX_DETAIL_ROWS} gatilhos · até {maxZeros} contagens
-              até 0
+          {/* Gráfico Top 3 */}
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 lg:col-span-5">
+            <div className="mb-3 text-[10px] font-black uppercase tracking-wider text-primary">
+              Top 3 Tempos mais Recorrentes ({totalRows} ciclos)
             </div>
-            <table className="w-full text-xs tabular-nums">
-              <thead>
-                <tr className="border-b border-white/10 bg-white/[0.02] text-muted-foreground">
-                  <th className="px-3 py-2 text-left font-medium">#</th>
-                  <th className="px-3 py-2 text-left font-medium">Gatilho</th>
-                  <th className="px-3 py-2 text-left font-medium">Detalhe</th>
-                  <th className="px-3 py-2 text-left font-medium">Minutos até 0</th>
-                  <th className="px-3 py-2 text-left font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {details
-                  .slice()
-                  .reverse()
-                  .map((c) => {
-                    const isComplete = c.gaps.length >= maxZeros;
-                    return (
-                      <tr
-                        key={`${c.triggerAt.getTime()}-${c.triggerLabel}-${c.index}`}
-                        className="border-b border-white/5 last:border-0"
-                      >
-                        <td className="px-3 py-2 text-muted-foreground">{c.index}</td>
-                        <td className="px-3 py-2 text-foreground">{fmtTime(c.triggerAt)}</td>
-                        <td className="px-3 py-2 text-muted-foreground">{c.triggerDetail}</td>
-                        <td className="px-3 py-2 text-foreground">
-                          {c.gaps.length ? c.gaps.join(" · ") : "—"}
-                        </td>
-                        <td className="px-3 py-2">
-                          {isComplete ? (
-                            <span className="text-emerald-300">Completo ({c.gaps.length})</span>
-                          ) : (
-                            <span className="text-amber-300">
-                              ativo · {c.gaps.length}/{maxZeros} · {c.elapsed} min
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
+            {chartData.length > 0 ? (
+              <div className="h-44 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+                    <XAxis dataKey="name" stroke="#ffffff40" fontSize={9} tickLine={false} />
+                    <YAxis
+                      stroke="#ffffff40"
+                      fontSize={9}
+                      tickLine={false}
+                      domain={[0, 100]}
+                      tickFormatter={(v) => `${v}%`}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#0f172a",
+                        borderColor: "#ffffff20",
+                        borderRadius: "8px",
+                        fontSize: "11px",
+                      }}
+                      formatter={(value: any, _: any, item: any) => [
+                        `${value}% (${item.payload.count}x)`,
+                        "Frequência",
+                      ]}
+                    />
+                    <Bar dataKey="pct" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="flex h-44 items-center justify-center text-xs text-muted-foreground">
+                Dados insuficientes para gerar Top 3
+              </div>
+            )}
           </div>
-        </>
+        </div>
       )}
     </Card>
   );
@@ -321,58 +309,58 @@ export default function AnaliseSection() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [selected, setSelected] = useState<number>(1);
-  const [now, setNow] = useState<Date>(() => new Date());
+  const [now, setNow] = useState<Date>(new Date());
 
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 30_000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNow(new Date()), 10000);
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
     let alive = true;
-    const fetchRows = async () => {
+
+    async function loadData() {
       try {
+        setLoading(true);
         const { data, error } = await supabase
           .from("blaze_results")
           .select("id, roll, color, created_at")
-          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
           .limit(3000);
 
+        if (error) throw error;
         if (!alive) return;
-        if (error) {
-          setErr(error.message);
-          return;
-        }
-        setRows(((data ?? []) as Row[]).slice().reverse());
-        setErr(null);
-      } catch (e) {
-        if (alive) {
-          setErr(e instanceof Error ? e.message : "Falha ao carregar resultados");
-        }
+
+        const sorted = (data || []).slice().sort((a, b) => a.id - b.id);
+        setRows(sorted);
+      } catch (e: any) {
+        if (!alive) return;
+        setErr(e?.message || "Erro ao carregar dados do banco");
       } finally {
         if (alive) setLoading(false);
       }
-    };
+    }
 
-    void fetchRows();
-    const interval = setInterval(fetchRows, 15000);
+    loadData();
 
     const channel = supabase
-      .channel("analise-section-realtime")
+      .channel("analise_section_realtime")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "blaze_results" },
         (payload) => {
-          if (payload.new && alive) {
-            setRows((prev) => [...prev, payload.new as Row].slice(-3000));
-          }
+          if (!alive || !payload.new) return;
+          setRows((prev) => {
+            const newItem = payload.new as Row;
+            if (prev.some((r) => String(r.id) === String(newItem.id))) return prev;
+            return [...prev, newItem];
+          });
         },
       )
       .subscribe();
 
     return () => {
       alive = false;
-      clearInterval(interval);
       supabase.removeChannel(channel);
     };
   }, []);
@@ -388,6 +376,13 @@ export default function AnaliseSection() {
   const aSoma21Cycles = useMemo(() => buildASoma21(rows), [rows]);
   const a1Min5Cycles = useMemo(() => buildA1Minuto5(rows), [rows]);
   const a2Min5Cycles = useMemo(() => buildA2Minuto5(rows), [rows]);
+  const aSandwichPontasCycles = useMemo(() => buildASandwichPontas(rows), [rows]);
+  const aSandwichMeioCycles = useMemo(() => buildASandwichMeio(rows), [rows]);
+  const a8_11Cycles = useMemo(() => buildA8_11(rows), [rows]);
+  const a11_11Cycles = useMemo(() => buildA11_11(rows), [rows]);
+  const a4_11Cycles = useMemo(() => buildA4_11(rows), [rows]);
+  const a4_14Cycles = useMemo(() => buildA4_14(rows), [rows]);
+  const a7_11Cycles = useMemo(() => buildA7_11(rows), [rows]);
 
   // Estatísticas agregadas para o seletor superior de pedras 0..14
   const stats = useMemo(() => {
@@ -397,7 +392,6 @@ export default function AnaliseSection() {
     > = {};
     ALL_NUMBERS.forEach((n) => (s[n] = { total: 0, fullyCompleted: 0, totalGaps: 0, sumGaps: 0 }));
 
-    // Agrega ciclos da A1
     a1Cycles.forEach((c) => {
       const n = c.value;
       if (s[n]) {
@@ -490,29 +484,28 @@ export default function AnaliseSection() {
       />
       <AnalysisPanel
         key={`${selected}-a3`}
-        eyebrow="Análise 3 · Repetição Casada"
+        eyebrow="Análise 3 · Segunda Pedra do Minuto #9"
         title={`PEDRA ${selected}`}
-        subtitle="Gatilho: repetição da pedra coincidindo com o minuto. Analisa até 14 tempos de Branco."
+        subtitle="Segunda pedra registrada no minuto #9 (09, 19, 29, 39, 49, 59). Analisa até 14 tempos de Branco."
         loading={loading}
         err={err}
-        emptyLabel="Nenhum gatilho de repetição casada registrado recentemente."
+        emptyLabel="Nenhum gatilho de segunda pedra do minuto #9 registrado recentemente."
         cycles={a3Cycles}
         pedra={selected}
         now={now}
-        detailFormatter={(c) => `Casada min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
+        detailFormatter={(c) => `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
       />
       <AnalysisPanel
         key={`${selected}-a4`}
         eyebrow="Análise 4 · Primeira Pedra da Dezena"
         title={`PEDRA ${selected}`}
-        subtitle="Primeira pedra registrada na virada do minuto (00, 10, 20, 30, 40, 50). Analisa até 20 tempos de Branco."
+        subtitle="Primeira pedra registrada na virada do minuto (00, 10, 20, 30, 40, 50). Analisa até 14 tempos de Branco."
         loading={loading}
         err={err}
         emptyLabel="Nenhum gatilho de virada de minuto registrado recentemente."
         cycles={a4Cycles}
         pedra={selected}
         now={now}
-        maxZeros={20}
         detailFormatter={(c) =>
           `1ª dezena min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
         }
@@ -521,14 +514,13 @@ export default function AnaliseSection() {
         key={`${selected}-a5`}
         eyebrow="ANÁLISE 5 · SEGUNDA PEDRA DA DEZENA"
         title={`PEDRA ${selected}`}
-        subtitle="Segunda pedra registrada na virada do minuto (00, 10, 20, 30, 40, 50). Analisa até 20 tempos de Branco."
+        subtitle="Segunda pedra registrada na virada do minuto (00, 10, 20, 30, 40, 50). Analisa até 14 tempos de Branco."
         loading={loading}
         err={err}
         emptyLabel="Nenhum gatilho de segunda pedra da dezena registrado recentemente."
         cycles={a5Cycles}
         pedra={selected}
         now={now}
-        maxZeros={20}
         detailFormatter={(c) =>
           `2ª dezena min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
         }
@@ -558,6 +550,32 @@ export default function AnaliseSection() {
         pedra={selected}
         now={now}
         detailFormatter={(c) => `2ª min 5 (${String(c.triggerAt.getMinutes()).padStart(2, "0")})`}
+      />
+      <AnalysisPanel
+        key={`${selected}-a19`}
+        eyebrow="Análise 19 · Sanduíche (Pontas Iguais)"
+        title={`PEDRA ${selected}`}
+        subtitle="Gatilho: P1 - P2 - P1 com P2 != P1. Tempo até o branco indexado pela numeração da 1ª e última pedra (P1)."
+        loading={loading}
+        err={err}
+        emptyLabel={`Nenhum gatilho de sanduíche com pontas na pedra ${selected} registrado.`}
+        cycles={aSandwichPontasCycles}
+        pedra={selected}
+        now={now}
+        detailFormatter={(c) => `Sanduíche Ponta (${c.value})`}
+      />
+      <AnalysisPanel
+        key={`${selected}-a20`}
+        eyebrow="Análise 20 · Sanduíche (Pedra do Meio)"
+        title={`PEDRA ${selected}`}
+        subtitle="Gatilho: P1 - P2 - P1 com P2 != P1. Tempo até o branco indexado pela numeração da pedra do meio (P2)."
+        loading={loading}
+        err={err}
+        emptyLabel={`Nenhum gatilho de sanduíche com meio na pedra ${selected} registrado.`}
+        cycles={aSandwichMeioCycles}
+        pedra={selected}
+        now={now}
+        detailFormatter={(c) => `Sanduíche Meio (${c.value})`}
       />
       <AnalysisPanel
         key="soma-17"
@@ -598,6 +616,73 @@ export default function AnaliseSection() {
         now={now}
         detailFormatter={(c) => `Soma 21 às ${fmtTime(c.triggerAt)}`}
       />
+      <AnalysisPanel
+        key="gatilho-8-11"
+        eyebrow="Análise 10 · Gatilho 8→11"
+        title="GATILHO 8 → 11"
+        subtitle="Gatilho: sequência [8 -> 11]. Analisa até 14 tempos de Branco."
+        loading={loading}
+        err={err}
+        emptyLabel="Nenhum gatilho 8→11 registrado recentemente."
+        cycles={a8_11Cycles}
+        pedra={811}
+        now={now}
+        detailFormatter={(c) => `8→11 às ${fmtTime(c.triggerAt)}`}
+      />
+      <AnalysisPanel
+        key="gatilho-11-11"
+        eyebrow="Análise 11 · Gatilho 11→11"
+        title="GATILHO 11 → 11"
+        subtitle="Gatilho: sequência [11 -> 11]. Analisa até 14 tempos de Branco."
+        loading={loading}
+        err={err}
+        emptyLabel="Nenhum gatilho 11→11 registrado recentemente."
+        cycles={a11_11Cycles}
+        pedra={1111}
+        now={now}
+        detailFormatter={(c) => `11→11 às ${fmtTime(c.triggerAt)}`}
+      />
+      <AnalysisPanel
+        key="gatilho-4-11"
+        eyebrow="Análise 12 · Gatilho 4→11"
+        title="GATILHO 4 → 11"
+        subtitle="Gatilho: sequência [4 -> 11]. Analisa até 14 tempos de Branco."
+        loading={loading}
+        err={err}
+        emptyLabel="Nenhum gatilho 4→11 registrado recentemente."
+        cycles={a4_11Cycles}
+        pedra={411}
+        now={now}
+        detailFormatter={(c) => `4→11 às ${fmtTime(c.triggerAt)}`}
+      />
+      <AnalysisPanel
+        key="gatilho-4-14"
+        eyebrow="Análise 13 · Gatilho 4↔14"
+        title="GATILHO 4 ↔ 14"
+        subtitle="Gatilho: sequências [4 -> 14] ou [14 -> 4]. Analisa até 14 tempos de Branco."
+        loading={loading}
+        err={err}
+        emptyLabel="Nenhum gatilho 4↔14 registrado recentemente."
+        cycles={a4_14Cycles}
+        pedra={414}
+        now={now}
+        detailFormatter={(c) => `4↔14 às ${fmtTime(c.triggerAt)}`}
+      />
+      <AnalysisPanel
+        key="gatilho-7-11"
+        eyebrow="Análise 21 · Gatilho 7↔11"
+        title="GATILHO 7 ↔ 11"
+        subtitle="Gatilho: sequências [7 -> 11] ou [11 -> 7]. Analisa até 14 tempos de Branco."
+        loading={loading}
+        err={err}
+        emptyLabel="Nenhum gatilho 7↔11 registrado recentemente."
+        cycles={a7_11Cycles}
+        pedra={711}
+        now={now}
+        detailFormatter={(c) => `7↔11 às ${fmtTime(c.triggerAt)}`}
+      />
     </main>
   );
 }
+
+export { AnaliseSection };

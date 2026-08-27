@@ -9,7 +9,8 @@ export type SectionId =
   | "estrategias"
   | "videos"
   | "blaze"
-  | "hostman";
+  | "hostman"
+  | "validador";
 
 const STORAGE_KEY = "freitas-white-active-section";
 

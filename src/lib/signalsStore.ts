@@ -110,10 +110,10 @@ export type PredictiveSignal = {
   isVerified?: boolean;
   isRare?: boolean;
   isSupreme?: boolean;
-  isGreenSeal?: boolean;
-  greenSealAssertivity?: number;
+  isAlavancagem?: boolean;
   completedAt?: number;
   strategyKey?: string;
+  sources?: Array<{ analysis: number; value: number; pct?: number; top3?: boolean }>;
 };
 
 let lastPredictiveSerialized = "";
@@ -131,7 +131,7 @@ export function setPredictiveSignals(signals: PredictiveSignal[]) {
       outcome: s.outcome,
       resultTime: s.resultTime,
       strategyKey: s.strategyKey,
-      isGreenSeal: s.isGreenSeal,
+      isAlavancagem: s.isAlavancagem,
       isSupreme: s.isSupreme,
       isRare: s.isRare,
       isVerified: s.isVerified,
