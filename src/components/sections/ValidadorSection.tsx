@@ -68,6 +68,7 @@ type SignalAuditItem = {
 export default function SignalPercentageValidator() {
   const [loading, setLoading] = useState(true);
   const [rawRows, setRawRows] = useState<Row[]>([]);
+  const [timeTick, setTimeTick] = useState(Date.now());
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterStrategy, setFilterStrategy] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -132,6 +133,39 @@ export default function SignalPercentageValidator() {
 
   useEffect(() => {
     loadHistory();
+
+    // Inscrição em tempo real para novos giros
+    const channel = supabase
+      .channel("validador_section_blaze_results")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "blaze_results" },
+        (payload) => {
+          if (!payload.new) return;
+          const r = payload.new as any;
+          const newRow: Row = {
+            id: Number(r.id),
+            roll: String(r.roll),
+            color: String(r.color),
+            created_at: r.created_at,
+          };
+          setRawRows((prev) => {
+            if (prev.some((item) => item.id === newRow.id)) return prev;
+            return [...prev, newRow];
+          });
+        },
+      )
+      .subscribe();
+
+    // Timer a cada 5 segundos para reavaliar janelas temporais de status pendente
+    const tickInterval = setInterval(() => {
+      setTimeTick(Date.now());
+    }, 5000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(tickInterval);
+    };
   }, [loadHistory]);
 
   // Executa o Backtesting / Auditoria de todos os sinais gerados pelo motor no histórico
@@ -384,7 +418,7 @@ export default function SignalPercentageValidator() {
       },
       byStrategy,
     };
-  }, [rawRows, maxSignalsToEvaluate, feedMode, baselineTime]);
+  }, [rawRows, maxSignalsToEvaluate, feedMode, baselineTime, timeTick]);
 
   // Filtros da tabela
   const filteredSignals = useMemo(() => {

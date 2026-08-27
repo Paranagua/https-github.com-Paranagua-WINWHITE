@@ -148,6 +148,7 @@ function SinaisSectionContent() {
   const clearStats = useSignalStatsStore((state) => state.clearStats);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [timeTick, setTimeTick] = useState(Date.now());
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -167,6 +168,33 @@ function SinaisSectionContent() {
 
   useEffect(() => {
     loadData();
+
+    // Atualização em tempo real ao chegar novos giros da Blaze
+    const channel = supabase
+      .channel("sinais_section_blaze_results")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "blaze_results" },
+        (payload) => {
+          if (!payload.new) return;
+          const newResult = rowToResult(payload.new as any);
+          setResultsForValidation((prev) => {
+            if (prev.some((r) => r.id === newResult.id)) return prev;
+            return [newResult, ...prev].slice(0, 500);
+          });
+        },
+      )
+      .subscribe();
+
+    // Timer a cada 5 segundos para reavaliar o avanço do tempo das janelas (M-1, M, M+1)
+    const tickInterval = setInterval(() => {
+      setTimeTick(Date.now());
+    }, 5000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(tickInterval);
+    };
   }, [loadData]);
 
   // Sincroniza lista com as emissões do store de preditivos
@@ -322,7 +350,7 @@ function SinaisSectionContent() {
     } catch (err) {
       console.error("[SinaisSection] Validation error:", err);
     }
-  }, [resultsForValidation, recordCompletedSignal]);
+  }, [resultsForValidation, recordCompletedSignal, timeTick]);
 
   // Estatísticas das Rodadas Atuais: calculadas com base nos 10 ÚLTIMOS sinais do histórico
   const last10Signals = useMemo(() => {
