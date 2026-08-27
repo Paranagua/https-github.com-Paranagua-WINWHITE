@@ -64,11 +64,16 @@ import {
 
 import {
   getSignals,
+  getSignalsServerSnapshot,
   subscribeSignals,
   type StoredSignal,
   getRobotEnabled,
   subscribeRobot,
+  getPredictiveSignals,
+  getPredictiveServerSnapshot,
+  subscribePredictive,
 } from "@/lib/signalsStore";
+import { getSignalTypeBadge } from "@/lib/signalBadgeUtils";
 import { Sidebar } from "@/components/Sidebar";
 import { AppHeader } from "@/components/AppHeader";
 import { useSection } from "@/lib/sectionStore";
@@ -767,7 +772,16 @@ function Index() {
     [counts.byNumber],
   );
 
-  const storedSignals = useSyncExternalStore(subscribeSignals, getSignals, getSignals);
+  const storedSignals = useSyncExternalStore(
+    subscribeSignals,
+    getSignals,
+    getSignalsServerSnapshot,
+  );
+  const predictiveSignals = useSyncExternalStore(
+    subscribePredictive,
+    getPredictiveSignals,
+    getPredictiveServerSnapshot,
+  );
 
   type GridRow = { key: string; label: string; order: number; cells: Spin[][] };
 
@@ -917,16 +931,50 @@ function Index() {
       hour12: false,
     });
     const map = new Map<string, StoredSignal[]>();
+
+    // 1. Predictive signals
+    for (const p of predictiveSignals) {
+      if (!p) continue;
+      const d = p.entryDate instanceof Date ? p.entryDate : new Date(p.entryDate || 0);
+      if (Number.isNaN(d.getTime())) continue;
+      const key = p.time || fmt.format(d);
+      const arr = map.get(key) ?? [];
+      arr.push({
+        id: p.key,
+        color: "white",
+        entry: 1,
+        targetIso: d.toISOString(),
+        outcome: p.outcome || "pending",
+        category: p.category,
+        groupName: p.groupName,
+        isSupreme: p.isSupreme,
+        isRare: p.isRare,
+        isAlavancagem: p.isAlavancagem,
+        isTop1: p.isTop1,
+        label: p.label,
+        confluence: p.confluence,
+        sources: p.sources,
+      });
+      map.set(key, arr);
+    }
+
+    // 2. Stored signals
     for (const s of storedSignals) {
+      if (!s) continue;
       const d = new Date(s.targetIso);
       if (Number.isNaN(d.getTime())) continue;
       const key = fmt.format(d); // "HH:MM"
       const arr = map.get(key) ?? [];
-      arr.push(s);
+      const existingIdx = arr.findIndex((x) => x.id === s.id);
+      if (existingIdx >= 0) {
+        arr[existingIdx] = { ...arr[existingIdx], ...s };
+      } else {
+        arr.push(s);
+      }
       map.set(key, arr);
     }
     return map;
-  }, [storedSignals]);
+  }, [storedSignals, predictiveSignals]);
 
   return (
     <div className="relative flex h-screen w-full bg-background text-foreground overflow-hidden">
@@ -1446,41 +1494,64 @@ function Index() {
                                     const [hh, mmPrefix] = row.label.split(":");
                                     const hm = `${hh}:${mmPrefix[0]}${ci}`;
                                     const cellSignals = signalsByHM.get(hm) ?? [];
-                                    const green = robotOn
-                                      ? cellSignals.find((s) => s.outcome === "green")
+                                    const activeSignal = robotOn
+                                      ? cellSignals.find((s) => s.outcome === "pending") ||
+                                        cellSignals.find((s) => s.outcome === "green") ||
+                                        cellSignals.find((s) => s.outcome === "red") ||
+                                        cellSignals[0]
                                       : undefined;
-                                    const pending = robotOn
-                                      ? cellSignals.find((s) => s.outcome === "pending")
-                                      : undefined;
-                                    const red = robotOn
-                                      ? cellSignals.find((s) => s.outcome === "red")
-                                      : undefined;
+                                    const green =
+                                      activeSignal?.outcome === "green" ? activeSignal : undefined;
+                                    const pending =
+                                      activeSignal?.outcome === "pending"
+                                        ? activeSignal
+                                        : undefined;
+                                    const red =
+                                      activeSignal?.outcome === "red" ? activeSignal : undefined;
+                                    const groupBadge = activeSignal
+                                      ? getSignalTypeBadge(activeSignal)
+                                      : null;
+
                                     let badge: null | {
                                       label: string;
                                       tone: "exato" | "margem" | "pending" | "loss";
+                                      cls: string;
+                                      title: string;
                                     } = null;
-                                    if (green) {
-                                      const diff = green.matchedIso
-                                        ? Math.abs(
-                                            new Date(green.matchedIso).getTime() -
-                                              new Date(green.targetIso).getTime(),
-                                          )
-                                        : 0;
-                                      badge =
-                                        diff <= 15_000
-                                          ? { label: "EXATO", tone: "exato" }
-                                          : { label: "MARGEM", tone: "margem" };
-                                    } else if (pending) {
-                                      badge = { label: "SINAL", tone: "pending" };
-                                    } else if (red) {
-                                      badge = { label: "LOSS", tone: "loss" };
+                                    if (activeSignal && groupBadge) {
+                                      if (green) {
+                                        const diff = green.matchedIso
+                                          ? Math.abs(
+                                              new Date(green.matchedIso).getTime() -
+                                                new Date(green.targetIso).getTime(),
+                                            )
+                                          : 0;
+                                        const isExato = diff <= 15_000;
+                                        badge = {
+                                          label: `${groupBadge.icon} ${groupBadge.short} ${isExato ? "WIN" : "MARG"}`,
+                                          tone: isExato ? "exato" : "margem",
+                                          cls: isExato
+                                            ? "bg-emerald-500 text-black border border-emerald-300 shadow-[0_2px_8px_rgba(16,185,129,0.4)] font-black"
+                                            : "bg-amber-400 text-black border border-amber-200 shadow-[0_2px_8px_rgba(245,158,11,0.4)] font-black",
+                                          title: `${groupBadge.name} • ${isExato ? "EXATO" : "MARGEM"}`,
+                                        };
+                                      } else if (pending) {
+                                        badge = {
+                                          label: `${groupBadge.icon} ${groupBadge.short}`,
+                                          tone: "pending",
+                                          cls: groupBadge.badgeClass,
+                                          title: `${groupBadge.name} • SINAL ATIVO`,
+                                        };
+                                      } else if (red) {
+                                        badge = {
+                                          label: `${groupBadge.icon} ${groupBadge.short} LOSS`,
+                                          tone: "loss",
+                                          cls: "bg-red-500 text-white border border-red-300 shadow-[0_2px_8px_rgba(239,68,68,0.4)] font-black",
+                                          title: `${groupBadge.name} • LOSS`,
+                                        };
+                                      }
                                     }
-                                    const badgeCls =
-                                      badge?.tone === "exato" || badge?.tone === "pending"
-                                        ? "bg-emerald-500 text-black border border-emerald-300 shadow-[0_2px_8px_rgba(16,185,129,0.35)]"
-                                        : badge?.tone === "margem"
-                                          ? "bg-amber-400 text-black border border-amber-200 shadow-[0_2px_8px_rgba(245,158,11,0.35)]"
-                                          : "bg-red-500 text-white border border-red-300 shadow-[0_2px_8px_rgba(239,68,68,0.35)]";
+                                    const badgeCls = badge ? badge.cls : "";
                                     return (
                                       <div
                                         key={ci}
@@ -1490,7 +1561,8 @@ function Index() {
                                         <div className="relative flex flex-col items-center pt-2 transition-all duration-300 bg-transparent border-0 shadow-none outline-none">
                                           {badge && (
                                             <span
-                                              className={`absolute top-0 z-10 inline-flex h-3 items-center rounded-full px-1 text-[7px] font-black tracking-wider sm:h-3.5 sm:px-1.5 sm:text-[8px] ${badgeCls}`}
+                                              title={badge.title}
+                                              className={`absolute top-0 z-10 inline-flex h-3.5 items-center gap-0.5 whitespace-nowrap rounded-full px-1.5 text-[7.5px] font-black tracking-tight ${badgeCls}`}
                                             >
                                               {badge.label}
                                             </span>
@@ -1522,11 +1594,7 @@ function Index() {
                                                       }
                                                       numbered={numerado}
                                                       timeHighlight={destaqueHorario}
-                                                      signal={
-                                                        robotOn
-                                                          ? signalsByHM.get(`${hm}-${i}`)?.[0]
-                                                          : undefined
-                                                      }
+                                                      signal={robotOn ? activeSignal : undefined}
                                                       dimmed={
                                                         (highlightKey !== null &&
                                                           highlightKey !== `col-${ci}`) ||
@@ -1679,6 +1747,7 @@ function Index() {
                                       time={exibirSegundos ? spTimeWithSeconds(spin) : spin.time}
                                       numbered={numerado}
                                       timeHighlight={destaqueHorario}
+                                      signal={robotOn ? signalsByHM.get(spin.time)?.[0] : undefined}
                                       selected={hit}
                                       dimmed={hasSel && !hit}
                                       delay={i < 20 ? i * 0.015 : 0}

@@ -1134,6 +1134,15 @@ export function PredictiveSignals() {
           entry: 1,
           targetIso: !Number.isNaN(dt.getTime()) ? dt.toISOString() : new Date().toISOString(),
           outcome: s.outcome || "pending",
+          category: s.category,
+          groupName: s.groupName,
+          isSupreme: s.isSupreme,
+          isRare: s.isRare,
+          isAlavancagem: s.isAlavancagem,
+          isTop1: s.isTop1,
+          label: s.label,
+          confluence: s.confluence,
+          sources: s.sources,
         };
       });
       setSignals(storedSignalsList);

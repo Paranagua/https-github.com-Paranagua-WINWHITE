@@ -6,6 +6,21 @@ export type StoredSignal = {
   targetIso: string; // ISO UTC do horário do sinal
   outcome: "pending" | "green" | "red";
   matchedIso?: string; // ISO UTC do resultado que bateu (se green)
+  category?: string;
+  groupName?: string;
+  isSupreme?: boolean;
+  isRare?: boolean;
+  isAlavancagem?: boolean;
+  isTop1?: boolean;
+  label?: string;
+  confluence?: string;
+  sources?: Array<{
+    analysis: number;
+    value: number;
+    pct?: number;
+    top3?: boolean;
+    top5?: boolean;
+  }>;
 };
 
 const KEY = "freitas.signals.v1";
@@ -15,17 +30,20 @@ const EVENT = "freitas:signals";
 const ROBOT_EVENT = "freitas:robot";
 const PREDICTIVE_EVENT = "freitas:predictive";
 
+const EMPTY_SIGNALS: StoredSignal[] = [];
+const EMPTY_PREDICTIVE: PredictiveSignal[] = [];
+
 function read(): StoredSignal[] {
-  if (typeof window === "undefined") return [];
+  if (typeof window === "undefined") return EMPTY_SIGNALS;
   try {
     const raw = window.localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as StoredSignal[]) : [];
+    return raw ? (JSON.parse(raw) as StoredSignal[]) : EMPTY_SIGNALS;
   } catch {
-    return [];
+    return EMPTY_SIGNALS;
   }
 }
 
-let cache: StoredSignal[] = [];
+let cache: StoredSignal[] = EMPTY_SIGNALS;
 let hydrated = false;
 
 function ensureHydrated() {
@@ -36,7 +54,7 @@ function ensureHydrated() {
 
 export function setSignals(next: StoredSignal[]) {
   if (typeof window === "undefined") return;
-  ensureHydrated();
+  hydrated = true;
   cache = next;
   try {
     window.localStorage.setItem(KEY, JSON.stringify(next));
@@ -49,6 +67,10 @@ export function setSignals(next: StoredSignal[]) {
 export function getSignals(): StoredSignal[] {
   ensureHydrated();
   return cache;
+}
+
+export function getSignalsServerSnapshot(): StoredSignal[] {
+  return EMPTY_SIGNALS;
 }
 
 export function subscribeSignals(listener: () => void): () => void {
@@ -126,6 +148,24 @@ export type PredictiveSignal = {
 };
 
 let lastPredictiveSerialized = "";
+let predictiveCache: PredictiveSignal[] = EMPTY_PREDICTIVE;
+let predictiveHydrated = false;
+
+function readPredictive(): PredictiveSignal[] {
+  if (typeof window === "undefined") return EMPTY_PREDICTIVE;
+  try {
+    const raw = window.localStorage.getItem(PREDICTIVE_KEY);
+    return raw ? (JSON.parse(raw) as PredictiveSignal[]) : EMPTY_PREDICTIVE;
+  } catch {
+    return EMPTY_PREDICTIVE;
+  }
+}
+
+function ensurePredictiveHydrated() {
+  if (predictiveHydrated) return;
+  predictiveHydrated = true;
+  predictiveCache = readPredictive();
+}
 
 export function setPredictiveSignals(signals: PredictiveSignal[]) {
   if (typeof window === "undefined") return;
@@ -151,6 +191,8 @@ export function setPredictiveSignals(signals: PredictiveSignal[]) {
     const nextStr = JSON.stringify(normalized);
     if (nextStr === lastPredictiveSerialized) return;
     lastPredictiveSerialized = nextStr;
+    predictiveHydrated = true;
+    predictiveCache = signals;
     window.localStorage.setItem(PREDICTIVE_KEY, JSON.stringify(signals));
     window.dispatchEvent(new Event(PREDICTIVE_EVENT));
   } catch {
@@ -159,22 +201,25 @@ export function setPredictiveSignals(signals: PredictiveSignal[]) {
 }
 
 export function getPredictiveSignals(): PredictiveSignal[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(PREDICTIVE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+  ensurePredictiveHydrated();
+  return predictiveCache;
+}
+
+export function getPredictiveServerSnapshot(): PredictiveSignal[] {
+  return EMPTY_PREDICTIVE;
 }
 
 export function subscribePredictive(listener: () => void): () => void {
   if (typeof window === "undefined") return () => {};
-  window.addEventListener(PREDICTIVE_EVENT, listener);
+  const onChange = () => {
+    predictiveCache = readPredictive();
+    listener();
+  };
+  window.addEventListener(PREDICTIVE_EVENT, onChange);
   window.addEventListener("storage", (e) => {
-    if (e.key === PREDICTIVE_KEY) listener();
+    if (e.key === PREDICTIVE_KEY) onChange();
   });
   return () => {
-    window.removeEventListener(PREDICTIVE_EVENT, listener);
+    window.removeEventListener(PREDICTIVE_EVENT, onChange);
   };
 }

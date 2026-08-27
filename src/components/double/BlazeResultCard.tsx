@@ -2,6 +2,7 @@ import { memo } from "react";
 const BRANCO_IMG = "/images/branco.svg";
 import type { Color } from "./types";
 import type { StoredSignal } from "@/lib/signalsStore";
+import { getSignalTypeBadge } from "@/lib/signalBadgeUtils";
 
 export const BLAZE_CARD_W = 62;
 export const BLAZE_CARD_TOP_H = 60;
@@ -51,6 +52,7 @@ export const BlazeResultCard = memo(function BlazeResultCard({
 }: Props) {
   const c = PALETTE[color];
   const isWhite = color === "white";
+  const typeBadge = signal ? getSignalTypeBadge(signal) : null;
 
   return (
     <div
@@ -101,16 +103,20 @@ export const BlazeResultCard = memo(function BlazeResultCard({
         )}
       </button>
 
-      {signal && (
-        <div className="absolute top-0 z-10 flex w-full justify-center">
+      {signal && typeBadge && (
+        <div className="absolute -top-1.5 z-20 flex w-full justify-center pointer-events-none">
           <span
-            className={`inline-flex h-3 items-center rounded-full px-1 text-[7px] font-black tracking-wider shadow-sm sm:h-3.5 sm:px-1.5 sm:text-[8px] ${
+            className={`inline-flex h-3.5 items-center gap-0.5 rounded-full px-1.5 text-[7.5px] font-black tracking-tight border shadow-md ${
               signal.outcome === "green"
-                ? "bg-emerald-500 text-black border border-emerald-300"
-                : "bg-emerald-500 text-black border border-emerald-300"
+                ? "bg-emerald-500 text-black border-emerald-300"
+                : signal.outcome === "red"
+                  ? "bg-red-500 text-white border-red-300"
+                  : typeBadge.cardBadgeClass
             }`}
+            title={`${typeBadge.name} • ${signal.outcome === "green" ? "WIN" : signal.outcome === "red" ? "LOSS" : "SINAL"}`}
           >
-            SINAL
+            <span>{typeBadge.icon}</span>
+            <span className="truncate max-w-[42px] uppercase">{typeBadge.short}</span>
           </span>
         </div>
       )}
