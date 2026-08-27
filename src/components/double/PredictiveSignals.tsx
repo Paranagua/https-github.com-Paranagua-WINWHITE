@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getPredictiveSignals,
   setPredictiveSignals,
+  subscribePredictive,
   setSignals,
   type StoredSignal,
 } from "@/lib/signalsStore";
@@ -283,6 +284,19 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
               🙌 possível rec
             </span>
           )}
+          {s.outcome === "green" ? (
+            <span className="flex items-center gap-0.5 rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-[8px] font-black text-emerald-400 border border-emerald-500/40 animate-pulse">
+              ✓ GREEN {s.resultTime ? `(${s.resultTime})` : ""}
+            </span>
+          ) : s.outcome === "red" ? (
+            <span className="flex items-center gap-0.5 rounded-full bg-red-500/20 px-1.5 py-0.5 text-[8px] font-black text-red-400 border border-red-500/30">
+              ✕ RED
+            </span>
+          ) : (
+            <span className="flex items-center gap-0.5 rounded-full bg-white/5 px-1.5 py-0.5 text-[8px] font-bold text-zinc-400 border border-white/10">
+              ⏳ PENDENTE
+            </span>
+          )}
         </div>
         {medal && (
           <span
@@ -363,7 +377,7 @@ export function PredictiveSignals() {
     Array<{ type: string; start: number; end: number }>
   >([]);
 
-  // 1. Carrega dados e sincroniza via realtime
+  // 1. Carrega dados e sincroniza via realtime + polling de alta frequência
   useEffect(() => {
     let alive = true;
 
@@ -397,7 +411,7 @@ export function PredictiveSignals() {
           .from("blaze_results")
           .select("id, roll, color, created_at")
           .order("id", { ascending: false })
-          .limit(10);
+          .limit(15);
         if (data && data.length > 0 && alive) {
           setRows((prev) => {
             const existingIds = new Set(prev.map((r) => r.id));
@@ -409,7 +423,7 @@ export function PredictiveSignals() {
       } catch (e) {
         console.error("[PredictiveSignals] Polling error:", e);
       }
-    }, 5000);
+    }, 4000);
 
     const channel = supabase
       .channel("predictive_signals_realtime")
@@ -427,10 +441,34 @@ export function PredictiveSignals() {
       )
       .subscribe();
 
+    const onVisible = () => {
+      if (!document.hidden && alive) {
+        supabase
+          .from("blaze_results")
+          .select("id, roll, color, created_at")
+          .order("id", { ascending: false })
+          .limit(20)
+          .then(({ data }) => {
+            if (data && data.length > 0 && alive) {
+              setRows((prev) => {
+                const existingIds = new Set(prev.map((r) => r.id));
+                const newRows = data.filter((r) => !existingIds.has(r.id)).reverse();
+                if (newRows.length === 0) return prev;
+                return [...prev, ...newRows];
+              });
+            }
+          });
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+
     return () => {
       alive = false;
       clearInterval(pollInterval);
       supabase.removeChannel(channel);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
     };
   }, []);
 
@@ -774,14 +812,44 @@ export function PredictiveSignals() {
     }
   }, [rows, active, engine]);
 
-  // Executa geração automática quando os dados estiverem prontos
-  const initialGenerated = useRef(false);
+  // Inscrição em tempo real para sincronizar o status de validação dos sinais (WIN/LOSS/PENDENTE)
+  const [liveStoredMap, setLiveStoredMap] = useState<Map<string, PredictiveSignal>>(() => {
+    const arr = getPredictiveSignals();
+    return new Map(arr.map((s) => [s.key, s]));
+  });
+
   useEffect(() => {
-    if (rows.length > 0 && !loading && !initialGenerated.current) {
-      initialGenerated.current = true;
+    const updateMap = () => {
+      const arr = getPredictiveSignals();
+      setLiveStoredMap(new Map(arr.map((s) => [s.key, s])));
+    };
+    return subscribePredictive(updateMap);
+  }, []);
+
+  // Executa geração automática quando os dados estiverem prontos, a cada novo giro ou a cada 8s
+  useEffect(() => {
+    if (rows.length === 0 || loading) return;
+
+    // Gera imediatamente com os novos dados
+    generate();
+
+    // Timer a cada 8 segundos para avançar janelas e projetar próximos minutos continuamente
+    const interval = setInterval(() => {
       generate();
-    }
-  }, [rows.length, loading, generate]);
+    }, 8000);
+
+    const onVisible = () => {
+      if (!document.hidden) generate();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [rows, loading, generate]);
 
   // Lista unificada de todos os sinais
   const activeSignals = useMemo(() => {
@@ -804,6 +872,8 @@ export function PredictiveSignals() {
           category = "top1_isolated";
         }
 
+        const stored = liveStoredMap.get(s.key);
+
         return {
           ...s,
           category,
@@ -812,23 +882,32 @@ export function PredictiveSignals() {
           isSupreme: category === "supreme",
           isRare: category === "rare" || category === "supreme" || category === "alavancagem",
           times: [s.at],
+          outcome: stored?.outcome || "pending",
+          resultTime: stored?.resultTime,
+          completedAt: stored?.completedAt,
         };
       }),
-      ...mode2.map((s) => ({
-        ...s,
-        category: "top3_only",
-        isTop1: false,
-        isAlavancagem: false,
-        isSupreme: false,
-        isRare: false,
-        at: s.times[0],
-      })),
+      ...mode2.map((s) => {
+        const stored = liveStoredMap.get(s.key);
+        return {
+          ...s,
+          category: "top3_only",
+          isTop1: false,
+          isAlavancagem: false,
+          isSupreme: false,
+          isRare: false,
+          at: s.times[0],
+          outcome: stored?.outcome || "pending",
+          resultTime: stored?.resultTime,
+          completedAt: stored?.completedAt,
+        };
+      }),
     ].sort((a, b) => {
       const tA = a.at instanceof Date ? a.at.getTime() : 0;
       const tB = b.at instanceof Date ? b.at.getTime() : 0;
       return tA - tB;
     });
-  }, [mode1, mode2]);
+  }, [mode1, mode2, liveStoredMap]);
 
   // 0. 🚀 ALAVANCAGEM (4 ou mais análises Top 1)
   const alavancagemSignals = useMemo(() => {
@@ -929,26 +1008,40 @@ export function PredictiveSignals() {
           if (!s) return null;
           const prev = existingMap.get(s.key);
           const atTime = s.at instanceof Date ? s.at.getTime() : new Date(s.at || 0).getTime();
-          const top1Sources = (s.sources || []).filter((src: any) => !src.top3);
-          const top3Sources = (s.sources || []).filter((src: any) => src.top3);
+          const top1Sources = (s.sources || []).filter((src: any) => !src.top3 && !src.top5);
+          const top3Sources = (s.sources || []).filter((src: any) => src.top3 || src.top5);
           const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
 
           let category = "top1_isolated";
-          if (distinctTop1.size >= 4) {
+          let groupName = "Top 1";
+          if (distinctTop1.size >= 4 || s.isAlavancagem) {
             category = "alavancagem";
-          } else if (distinctTop1.size >= 2 && top3Sources.length >= 1) {
+            groupName = "Alavancagem";
+          } else if ((distinctTop1.size >= 2 && top3Sources.length >= 1) || s.isSupreme) {
             category = "supreme";
-          } else if (distinctTop1.size >= 2) {
+            groupName = "Supremo";
+          } else if (distinctTop1.size >= 2 || s.isRare) {
             category = "rare";
+            groupName = "Raro";
           } else if (distinctTop1.size === 1 && top3Sources.length >= 1) {
             category = "top1_top3";
+            groupName = "Top 1 & Top 3";
+          } else {
+            category = "top1_isolated";
+            groupName = "Top 1";
           }
+
+          let defaultLabel = "Top 1";
+          if (category === "alavancagem") defaultLabel = "Alavancagem";
+          else if (category === "supreme") defaultLabel = "Supremo";
+          else if (category === "rare") defaultLabel = "Raro";
+          else if (category === "top1_top3") defaultLabel = "Top 1 & Top 3";
 
           return {
             key: s.key,
             time: fmtClock(s.at),
             pct: Number.isFinite(s.pct) ? s.pct : 0,
-            label: s.label || "Top 1",
+            label: s.label || defaultLabel,
             confluence: s.sources
               ? s.sources.map((src) => `A${src.analysis}·${src.value}`).join(", ")
               : "",
@@ -965,7 +1058,10 @@ export function PredictiveSignals() {
             completedAt: prev?.completedAt,
             isHighTendency: !!s.isHighTendency,
             isVerified: !!s.isVerified,
-            isAlavancagem: category === "alavancagem" || distinctTop1.size >= 4,
+            category,
+            groupName,
+            isTop1: true,
+            isAlavancagem: category === "alavancagem",
             isRare: category === "rare" || category === "supreme" || category === "alavancagem",
             isSupreme: category === "supreme",
             strategyKey: s.strategyKey,
@@ -989,7 +1085,7 @@ export function PredictiveSignals() {
             key: s.key,
             time: Array.isArray(s.times) ? s.times.map((t) => fmtClock(t)).join(" / ") : "--:--",
             pct: Number.isFinite(s.pct) ? s.pct : 0,
-            label: "Confluência",
+            label: "Confluência Top 3",
             confluence: s.confluence || "",
             medal: getMedalStyles(s.analysisCount || 0, false, 0, false, "top3_only")?.label,
             entryDate: rawTime,
@@ -997,7 +1093,12 @@ export function PredictiveSignals() {
             resultTime: prev?.resultTime,
             completedAt: prev?.completedAt,
             isHighTendency: !!s.isHighTendency,
+            category: "top3_only",
+            groupName: "Top 3",
+            isTop1: false,
             isAlavancagem: false,
+            isSupreme: false,
+            isRare: false,
             strategyKey: s.strategyKey,
             isRecAlert: activeRecAlerts.some(
               (a) => !Number.isNaN(firstTime) && firstTime >= a.start && firstTime <= a.end,

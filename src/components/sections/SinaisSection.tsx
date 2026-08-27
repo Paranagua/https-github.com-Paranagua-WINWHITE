@@ -81,6 +81,123 @@ function rowToResult(r: {
   };
 }
 
+function getSignalTypeBadge(sig: {
+  key?: string;
+  category?: string;
+  isSupreme?: boolean;
+  isRare?: boolean;
+  isAlavancagem?: boolean;
+  isTop1?: boolean;
+  confluence?: string;
+  label?: string;
+  sources?: Array<{
+    analysis: number;
+    value: number;
+    pct?: number;
+    top3?: boolean;
+    top5?: boolean;
+  }>;
+}) {
+  const cat = (sig.category || "").toLowerCase();
+  const label = (sig.label || "").toUpperCase();
+  const conf = (sig.confluence || "").toUpperCase();
+
+  const top1Sources = (sig.sources || []).filter((s: any) => !s.top3 && !s.top5);
+  const top3Sources = (sig.sources || []).filter((s: any) => s.top3 || s.top5);
+  const distinctTop1 = new Set(top1Sources.map((s: any) => s.analysis));
+
+  // 1. 🚀 Alavancagem (4+ Top 1)
+  if (
+    sig.isAlavancagem ||
+    cat.includes("alavanc") ||
+    distinctTop1.size >= 4 ||
+    label.includes("ALAVANC") ||
+    conf.includes("ALAVANC")
+  ) {
+    return {
+      name: "Alavancagem",
+      short: "Alavanc.",
+      icon: "🚀",
+      badgeClass: "bg-amber-500/20 border-amber-500/40 text-amber-300",
+    };
+  }
+
+  // 2. 👑 Supremo (2+ Top 1 E 1+ Top 3)
+  if (
+    sig.isSupreme ||
+    cat.includes("suprem") ||
+    cat.includes("winn") ||
+    (distinctTop1.size >= 2 && top3Sources.length >= 1) ||
+    label.includes("SUPREM") ||
+    conf.includes("SUPREM") ||
+    label.includes("WINN")
+  ) {
+    return {
+      name: "Supremo",
+      short: "Supremo",
+      icon: "👑",
+      badgeClass: "bg-purple-500/20 border-purple-500/40 text-purple-300",
+    };
+  }
+
+  // 3. 💎 Raro (2+ Top 1)
+  if (
+    sig.isRare ||
+    cat.includes("rare") ||
+    cat.includes("raro") ||
+    distinctTop1.size >= 2 ||
+    label.includes("RARO") ||
+    conf.includes("RARO")
+  ) {
+    return {
+      name: "Raro",
+      short: "Raro",
+      icon: "💎",
+      badgeClass: "bg-cyan-500/20 border-cyan-500/40 text-cyan-300",
+    };
+  }
+
+  // 4. ⚡ Top 1 & Top 3 (1 Top 1 E 1+ Top 3)
+  if (
+    cat.includes("top1_top3") ||
+    (distinctTop1.size === 1 && top3Sources.length >= 1) ||
+    label.includes("TOP 1 & TOP 3") ||
+    label.includes("TOP 1 & 3")
+  ) {
+    return {
+      name: "Top 1 & Top 3",
+      short: "Top 1 & 3",
+      icon: "⚡",
+      badgeClass: "bg-yellow-500/20 border-yellow-500/40 text-yellow-300",
+    };
+  }
+
+  // 5. 🥉 Top 3 (Apenas Top 3, 0 Top 1 ou chave m2)
+  if (
+    cat.includes("top3") ||
+    (sig.key && sig.key.startsWith("m2")) ||
+    sig.isTop1 === false ||
+    (distinctTop1.size === 0 && top3Sources.length > 0) ||
+    label.includes("TOP 3") ||
+    conf.includes("TOP 3")
+  ) {
+    return {
+      name: "Top 3",
+      short: "Top 3",
+      icon: "🥉",
+      badgeClass: "bg-blue-500/20 border-blue-500/40 text-blue-300",
+    };
+  }
+
+  // 6. 🥇 Top 1 (Padrão: Top 1 isolado)
+  return {
+    name: "Top 1",
+    short: "Top 1",
+    icon: "🥇",
+    badgeClass: "bg-emerald-500/20 border-emerald-500/40 text-emerald-300",
+  };
+}
+
 class SinaisErrorBoundary extends Component<
   { children: ReactNode },
   { hasError: boolean; error: Error | null }
@@ -169,7 +286,29 @@ function SinaisSectionContent() {
   useEffect(() => {
     loadData();
 
-    // Atualização em tempo real ao chegar novos giros da Blaze
+    // Polling contínuo de alta frequência a cada 3.5s para garantia absoluta de dados em tempo real
+    const pollInterval = setInterval(async () => {
+      try {
+        const { data } = await supabase
+          .from("blaze_results")
+          .select("id, roll, color, created_at")
+          .order("created_at", { ascending: false })
+          .limit(25);
+        if (data && data.length > 0) {
+          const fresh = data.map(rowToResult);
+          setResultsForValidation((prev) => {
+            const existingIds = new Set(prev.map((r) => r.id));
+            const newItems = fresh.filter((r) => !existingIds.has(r.id));
+            if (newItems.length === 0) return prev;
+            return [...newItems, ...prev].slice(0, 500);
+          });
+        }
+      } catch (err) {
+        console.error("[SinaisSection] Polling error:", err);
+      }
+    }, 3500);
+
+    // Atualização em tempo real ao chegar novos giros da Blaze via WebSocket
     const channel = supabase
       .channel("sinais_section_blaze_results")
       .on(
@@ -186,14 +325,26 @@ function SinaisSectionContent() {
       )
       .subscribe();
 
-    // Timer a cada 5 segundos para reavaliar o avanço do tempo das janelas (M-1, M, M+1)
+    // Timer a cada 2 segundos para reavaliar o avanço do tempo das janelas (M-1, M, M+1)
     const tickInterval = setInterval(() => {
       setTimeTick(Date.now());
-    }, 5000);
+    }, 2000);
+
+    const onVisible = () => {
+      if (!document.hidden) {
+        loadData();
+        setTimeTick(Date.now());
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
 
     return () => {
+      clearInterval(pollInterval);
       supabase.removeChannel(channel);
       clearInterval(tickInterval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
     };
   }, [loadData]);
 
@@ -293,6 +444,17 @@ function SinaisSectionContent() {
             if (matchedResult) {
               if (s.outcome !== "green") {
                 hasChanged = true;
+                const cat =
+                  (s as any).category ||
+                  (s.isAlavancagem
+                    ? "alavancagem"
+                    : s.isSupreme
+                      ? "supreme"
+                      : s.isRare
+                        ? "rare"
+                        : s.isTop1
+                          ? "top1_isolated"
+                          : undefined);
                 recordCompletedSignal({
                   key: s.key,
                   time: s.time,
@@ -302,6 +464,11 @@ function SinaisSectionContent() {
                   resultTime: fmtTime(matchedResult.createdAt),
                   strategyKey: s.strategyKey,
                   sources: s.sources,
+                  category: cat,
+                  isSupreme: s.isSupreme,
+                  isRare: s.isRare,
+                  isAlavancagem: s.isAlavancagem,
+                  isTop1: s.isTop1,
                 });
               }
               return {
@@ -321,6 +488,17 @@ function SinaisSectionContent() {
             // 4. Se a janela encerrou completamente e nenhum branco saiu, computa LOSS
             if (s.outcome !== "red") {
               hasChanged = true;
+              const cat =
+                (s as any).category ||
+                (s.isAlavancagem
+                  ? "alavancagem"
+                  : s.isSupreme
+                    ? "supreme"
+                    : s.isRare
+                      ? "rare"
+                      : s.isTop1
+                        ? "top1_isolated"
+                        : undefined);
               recordCompletedSignal({
                 key: s.key,
                 time: s.time,
@@ -329,6 +507,11 @@ function SinaisSectionContent() {
                 confluence: s.confluence,
                 strategyKey: s.strategyKey,
                 sources: s.sources,
+                category: cat,
+                isSupreme: s.isSupreme,
+                isRare: s.isRare,
+                isAlavancagem: s.isAlavancagem,
+                isTop1: s.isTop1,
               });
             }
             return {
@@ -589,7 +772,7 @@ function SinaisSectionContent() {
                         return (
                           <div
                             key={idx}
-                            className="flex flex-col items-center justify-center p-2.5 rounded-xl border border-dashed border-white/10 bg-white/[0.01] text-zinc-600 text-center min-h-[64px]"
+                            className="flex flex-col items-center justify-center p-2.5 rounded-xl border border-dashed border-white/10 bg-white/[0.01] text-zinc-600 text-center min-h-[72px]"
                           >
                             <span className="text-[9px] font-bold opacity-40">#{idx + 1}</span>
                             <span className="text-[10px] font-medium opacity-40">Aguardando</span>
@@ -598,30 +781,55 @@ function SinaisSectionContent() {
                       }
 
                       const isGreen = sig.outcome === "green";
+                      const typeBadge = getSignalTypeBadge(sig);
+
                       return (
                         <div
                           key={sig.key || idx}
-                          className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all ${
+                          className={`flex flex-col justify-between p-2 rounded-xl border text-left transition-all relative overflow-hidden min-h-[72px] ${
                             isGreen
-                              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                              : "border-red-500/30 bg-red-500/10 text-red-300"
+                              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300 shadow-sm shadow-emerald-500/5"
+                              : "border-red-500/30 bg-red-500/10 text-red-300 shadow-sm shadow-red-500/5"
                           }`}
                         >
-                          <div className="flex items-center gap-1 text-[9px] font-bold opacity-75">
-                            <Clock className="h-2.5 w-2.5" />
-                            <span>{sig.time}</span>
-                          </div>
-                          <div className="flex items-center gap-1 my-0.5">
-                            {isGreen ? (
-                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                            ) : (
-                              <XCircle className="h-3.5 w-3.5 text-red-400" />
-                            )}
-                            <span className="text-xs font-black font-outfit">
-                              {isGreen ? "WIN" : "LOSS"}
+                          {/* Topo: Lado Esquerdo = Tipo do Sinal | Lado Direito = Horário */}
+                          <div className="flex items-center justify-between gap-1 w-full pb-1 border-b border-white/5">
+                            <span
+                              className={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[8px] font-black uppercase tracking-tight border ${typeBadge.badgeClass}`}
+                              title={typeBadge.name}
+                            >
+                              <span>{typeBadge.icon}</span>
+                              <span className="truncate max-w-[48px]">{typeBadge.short}</span>
                             </span>
+
+                            <div className="flex items-center gap-0.5 text-[9px] font-bold font-mono opacity-80">
+                              <Clock className="h-2.5 w-2.5" />
+                              <span>{sig.time}</span>
+                            </div>
                           </div>
-                          <span className="text-[8px] font-mono opacity-80 truncate max-w-[85px]">
+
+                          {/* Centro: Status WIN / LOSS e Horário de Resolução */}
+                          <div className="flex items-center justify-between gap-1 my-1">
+                            <div className="flex items-center gap-1">
+                              {isGreen ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                              ) : (
+                                <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />
+                              )}
+                              <span className="text-xs font-black font-outfit">
+                                {isGreen ? "WIN" : "LOSS"}
+                              </span>
+                            </div>
+
+                            {isGreen && sig.resultTime && (
+                              <span className="text-[8px] font-mono font-bold text-emerald-300 bg-emerald-500/20 px-1 py-0.2 rounded border border-emerald-500/30">
+                                {sig.resultTime}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Base: Confluência ou Rótulo */}
+                          <span className="text-[7.5px] font-mono opacity-70 truncate max-w-full text-zinc-400">
                             {sig.confluence || sig.label || "Top 1"}
                           </span>
                         </div>

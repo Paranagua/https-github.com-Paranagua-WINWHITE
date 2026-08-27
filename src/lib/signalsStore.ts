@@ -111,9 +111,18 @@ export type PredictiveSignal = {
   isRare?: boolean;
   isSupreme?: boolean;
   isAlavancagem?: boolean;
+  isTop1?: boolean;
+  category?: string;
+  groupName?: string;
   completedAt?: number;
   strategyKey?: string;
-  sources?: Array<{ analysis: number; value: number; pct?: number; top3?: boolean }>;
+  sources?: Array<{
+    analysis: number;
+    value: number;
+    pct?: number;
+    top3?: boolean;
+    top5?: boolean;
+  }>;
 };
 
 let lastPredictiveSerialized = "";
@@ -134,6 +143,9 @@ export function setPredictiveSignals(signals: PredictiveSignal[]) {
       isAlavancagem: s.isAlavancagem,
       isSupreme: s.isSupreme,
       isRare: s.isRare,
+      isTop1: s.isTop1,
+      category: s.category,
+      groupName: s.groupName,
       isVerified: s.isVerified,
     }));
     const nextStr = JSON.stringify(normalized);

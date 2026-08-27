@@ -134,7 +134,34 @@ export default function SignalPercentageValidator() {
   useEffect(() => {
     loadHistory();
 
-    // Inscrição em tempo real para novos giros
+    // Polling contínuo de alta frequência a cada 3.5s para garantia de dados
+    const pollInterval = setInterval(async () => {
+      try {
+        const { data } = await supabase
+          .from("blaze_results")
+          .select("id, roll, color, created_at")
+          .order("created_at", { ascending: false })
+          .limit(25);
+        if (data && data.length > 0) {
+          const fresh = data.map((r) => ({
+            id: Number(r.id),
+            roll: String(r.roll),
+            color: String(r.color),
+            created_at: r.created_at,
+          }));
+          setRawRows((prev) => {
+            const existingIds = new Set(prev.map((item) => item.id));
+            const newRows = fresh.filter((item) => !existingIds.has(item.id)).reverse();
+            if (newRows.length === 0) return prev;
+            return [...prev, ...newRows];
+          });
+        }
+      } catch (err) {
+        console.error("[SignalValidator] Polling error:", err);
+      }
+    }, 3500);
+
+    // Inscrição em tempo real para novos giros via WebSocket
     const channel = supabase
       .channel("validador_section_blaze_results")
       .on(
@@ -157,14 +184,26 @@ export default function SignalPercentageValidator() {
       )
       .subscribe();
 
-    // Timer a cada 5 segundos para reavaliar janelas temporais de status pendente
+    // Timer a cada 2 segundos para reavaliar janelas temporais de status pendente
     const tickInterval = setInterval(() => {
       setTimeTick(Date.now());
-    }, 5000);
+    }, 2000);
+
+    const onVisible = () => {
+      if (!document.hidden) {
+        loadHistory();
+        setTimeTick(Date.now());
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
 
     return () => {
+      clearInterval(pollInterval);
       supabase.removeChannel(channel);
       clearInterval(tickInterval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
     };
   }, [loadHistory]);
 

@@ -10,6 +10,11 @@ export interface SignalHistoryEntry {
   resultTime?: string;
   timestamp: number;
   sources?: Array<{ analysis: number; value: number }>;
+  category?: string;
+  isSupreme?: boolean;
+  isRare?: boolean;
+  isAlavancagem?: boolean;
+  isTop1?: boolean;
 }
 
 export interface AnalysisStat {
@@ -31,6 +36,11 @@ interface SignalStatsStore {
     resultTime?: string;
     strategyKey?: string;
     sources?: Array<{ analysis: number; value: number }>;
+    category?: string;
+    isSupreme?: boolean;
+    isRare?: boolean;
+    isAlavancagem?: boolean;
+    isTop1?: boolean;
   }) => void;
   clearStats: () => void;
   getAssertivity: (key: string) => number;
@@ -74,6 +84,11 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
                     outcome: signal.outcome,
                     resultTime: signal.resultTime || s.resultTime,
                     sources: signal.sources || s.sources,
+                    category: signal.category || s.category,
+                    isSupreme: signal.isSupreme ?? s.isSupreme,
+                    isRare: signal.isRare ?? s.isRare,
+                    isAlavancagem: signal.isAlavancagem ?? s.isAlavancagem,
+                    isTop1: signal.isTop1 ?? s.isTop1,
                   }
                 : s,
             );
@@ -88,6 +103,11 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
                 resultTime: signal.resultTime,
                 timestamp: Date.now(),
                 sources: signal.sources,
+                category: signal.category,
+                isSupreme: signal.isSupreme,
+                isRare: signal.isRare,
+                isAlavancagem: signal.isAlavancagem,
+                isTop1: signal.isTop1,
               },
               ...state.recentSignals,
             ].slice(0, 50); // Mantém até os 50 mais recentes
