@@ -4,25 +4,22 @@ import type { PredictiveSignal, StoredSignal } from "@/lib/signalsStore";
 import type { AuditResultItem } from "@/lib/signalAuditEngine";
 
 /**
- * Hierarquia estrita e monotônica dos sinais (do mais fraco ao mais forte):
- * 1. 🥉 Top 3 (top3_only)
- * 2. 🥇 Top 1 (top1_isolated)
- * 3. ⚡ Top 1 & Top 3 (top1_top3)
- * 4. 💎 Raro (rare)
- * 5. 👑 Supremo (supreme)
- * 6. 🚀 Alavancagem (alavancagem)
+ * Hierarquia estrita e monotônica dos sinais (do mais forte ao mais fraco):
+ * 1. 🚀 Alavancagem (alavancagem): >= 4x Top 1 (+ 0 ou mais Top 2/3)
+ * 2. 👑 Supremo (supreme): 2x ou 3x Top 1 + 2 ou mais Top 2/3
+ * 3. 💎 Raro (rare): 2x ou 3x Top 1 + 0 ou 1 Top 2/3
+ * 4. ⚡ Top 1 & Top 3 (top1_top3): 1x Top 1 + 1 ou mais Top 2/3
+ *
+ * NOTA: Top 1 isolado (1x Top 1 + 0 Top 2/3) e Coincidências Top 3 (0x Top 1) NÃO geram sinais.
  */
 export enum SignalRank {
-  TOP3 = 1,
-  TOP1 = 2,
-  TOP1_TOP3 = 3,
-  RARE = 4,
-  SUPREME = 5,
-  ALAVANCAGEM = 6,
+  TOP1_TOP3 = 1,
+  RARE = 2,
+  SUPREME = 3,
+  ALAVANCAGEM = 4,
 }
 
-export type SignalCategory =
-  "top3_only" | "top1_isolated" | "top1_top3" | "rare" | "supreme" | "alavancagem";
+export type SignalCategory = "top1_top3" | "rare" | "supreme" | "alavancagem";
 
 export interface SignalLevelEvaluation {
   rank: SignalRank;
@@ -54,19 +51,17 @@ export function getCanonicalSignalKey(entryDate: Date | string | number): string
 }
 
 /**
- * Obtém o ranking numérico (1 a 6) de um sinal ou categoria.
+ * Obtém o ranking numérico (1 a 4) de um sinal ou categoria.
  */
 export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): SignalRank {
-  if (!sig) return SignalRank.TOP1;
+  if (!sig) return SignalRank.TOP1_TOP3;
 
   if (typeof sig === "string") {
     const cat = sig.toLowerCase();
     if (cat.includes("alavanc")) return SignalRank.ALAVANCAGEM;
     if (cat.includes("suprem") || cat.includes("winn")) return SignalRank.SUPREME;
     if (cat.includes("rare") || cat.includes("raro")) return SignalRank.RARE;
-    if (cat.includes("top1_top3") || cat.includes("top1_top5")) return SignalRank.TOP1_TOP3;
-    if (cat.includes("top3") || cat.includes("top5")) return SignalRank.TOP3;
-    return SignalRank.TOP1;
+    return SignalRank.TOP1_TOP3;
   }
 
   if (sig.isAlavancagem) return SignalRank.ALAVANCAGEM;
@@ -80,8 +75,9 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
   const top1Sources = (sig.sources || []).filter((s: any) => !s.top3 && !s.top5);
   const top3Sources = (sig.sources || []).filter((s: any) => s.top3 || s.top5);
   const distinctTop1 = new Set(top1Sources.map((s: any) => s.analysis));
+  const distinctTop3 = new Set(top3Sources.map((s: any) => s.analysis));
 
-  // 1. 🚀 Alavancagem (4+ Top 1 confluentes)
+  // 1. 🚀 Alavancagem (4+ Top 1)
   if (
     distinctTop1.size >= 4 ||
     cat.includes("alavanc") ||
@@ -91,9 +87,9 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
     return SignalRank.ALAVANCAGEM;
   }
 
-  // 2. 👑 Supremo (2+ Top 1 E 1+ Top 3)
+  // 2. 👑 Supremo (2x ou 3x Top 1 + 2+ Top 2/3)
   if (
-    (distinctTop1.size >= 2 && top3Sources.length >= 1) ||
+    ((distinctTop1.size === 2 || distinctTop1.size === 3) && distinctTop3.size >= 2) ||
     cat.includes("suprem") ||
     cat.includes("winn") ||
     label.includes("SUPREM") ||
@@ -103,7 +99,7 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
     return SignalRank.SUPREME;
   }
 
-  // 3. 💎 Raro (2+ Top 1)
+  // 3. 💎 Raro (2x ou 3x Top 1 + 0 ou 1 Top 2/3)
   if (
     distinctTop1.size >= 2 ||
     cat.includes("rare") ||
@@ -114,43 +110,15 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
     return SignalRank.RARE;
   }
 
-  // 4. ⚡ Top 1 & Top 3 (1 Top 1 E 1+ Top 3)
-  if (
-    (distinctTop1.size === 1 && top3Sources.length >= 1) ||
-    cat.includes("top1_top3") ||
-    cat.includes("top1_top5") ||
-    label.includes("TOP 1 & TOP 3") ||
-    label.includes("TOP 1 & 3")
-  ) {
-    return SignalRank.TOP1_TOP3;
-  }
-
-  // 5. 🥇 Top 1 (1 Top 1 isolado)
-  if (
-    distinctTop1.size >= 1 ||
-    cat.includes("top1_isolated") ||
-    sig.isTop1 === true ||
-    label.includes("TOP 1")
-  ) {
-    return SignalRank.TOP1;
-  }
-
-  // 6. 🥉 Top 3 (Apenas Top 3)
-  if (
-    cat.includes("top3") ||
-    cat.includes("top5") ||
-    sig.isTop1 === false ||
-    (distinctTop1.size === 0 && top3Sources.length > 0) ||
-    label.includes("TOP 3")
-  ) {
-    return SignalRank.TOP3;
-  }
-
-  return SignalRank.TOP1;
+  // 4. ⚡ Top 1 & Top 3 (1 Top 1 + 1+ Top 2/3)
+  return SignalRank.TOP1_TOP3;
 }
 
 /**
- * Avalia o nível mais forte possível de um sinal com base em suas fontes Top 1 e Top 3.
+ * Avalia o nível do sinal com base na hierarquia estrita:
+ * 🚀 Alavancagem > 👑 Supremo > 💎 Raro > ⚡ Top 1 & Top 3
+ *
+ * Retorna null para Top 1 isolado (1x Top 1 + 0 Top 2/3) ou Apenas Top 3 (0x Top 1).
  */
 export function evaluateSignalLevel(
   top1Sources: Array<{ analysis: number; value: number; pct?: number }>,
@@ -162,18 +130,20 @@ export function evaluateSignalLevel(
     forcedSupreme?: boolean;
     forcedRare?: boolean;
   },
-): SignalLevelEvaluation {
+): SignalLevelEvaluation | null {
   const distinctTop1 = new Set(top1Sources.map((s) => s.analysis));
   const distinctTop3 = new Set(top3Sources.map((s) => s.analysis));
+  const top1Count = distinctTop1.size;
+  const top3Count = distinctTop3.size;
 
-  // 🚀 ALAVANCAGEM: 4+ Top 1
-  if (distinctTop1.size >= 4 || options?.forcedAlavancagem) {
+  // 1. 🚀 ALAVANCAGEM: 4x ou mais Top 1 (+ 0 ou mais Top 2/3)
+  if (top1Count >= 4 || options?.forcedAlavancagem) {
     return {
       rank: SignalRank.ALAVANCAGEM,
       category: "alavancagem",
       groupName: "Alavancagem",
       label: "Alavancagem",
-      medal: `🚀 ALAVANCAGEM (${distinctTop1.size}x Top 1)`,
+      medal: `🚀 ALAVANCAGEM (${top1Count}x Top 1)`,
       isAlavancagem: true,
       isSupreme: true,
       isRare: true,
@@ -181,14 +151,14 @@ export function evaluateSignalLevel(
     };
   }
 
-  // 👑 SUPREMO: 2+ Top 1 E 1+ Top 3 (ou Super Confluência)
-  if ((distinctTop1.size >= 2 && top3Sources.length >= 1) || options?.forcedSupreme) {
+  // 2. 👑 SUPREMO: 2x ou 3x Top 1 + 2 ou mais Top 2/3
+  if (((top1Count === 2 || top1Count === 3) && top3Count >= 2) || options?.forcedSupreme) {
     return {
       rank: SignalRank.SUPREME,
       category: "supreme",
       groupName: "Supremo",
       label: "Supremo",
-      medal: "🏆 WINN Supremo",
+      medal: `👑 Supremo (${top1Count}x Top 1 + ${top3Count}x Top 2/3)`,
       isAlavancagem: false,
       isSupreme: true,
       isRare: true,
@@ -196,14 +166,18 @@ export function evaluateSignalLevel(
     };
   }
 
-  // 💎 RARO: 2+ Top 1
-  if (distinctTop1.size >= 2 || options?.forcedRare) {
+  // 3. 💎 RARO: 2x ou 3x Top 1 + 0 ou 1 Top 2/3
+  if (
+    ((top1Count === 2 || top1Count === 3) && top3Count <= 1) ||
+    (top1Count >= 2 && !options?.forcedSupreme && !options?.forcedAlavancagem) ||
+    options?.forcedRare
+  ) {
     return {
       rank: SignalRank.RARE,
       category: "rare",
       groupName: "Raro",
       label: "Raro",
-      medal: `💎 Raro (${distinctTop1.size}x Top 1)`,
+      medal: `💎 Raro (${top1Count}x Top 1)`,
       isAlavancagem: false,
       isSupreme: false,
       isRare: true,
@@ -211,8 +185,8 @@ export function evaluateSignalLevel(
     };
   }
 
-  // ⚡ TOP 1 & TOP 3: 1 Top 1 E 1+ Top 3
-  if (distinctTop1.size === 1 && top3Sources.length >= 1) {
+  // 4. ⚡ TOP 1 & TOP 3: 1x Top 1 + 1 ou mais Top 2/3
+  if (top1Count === 1 && top3Count >= 1) {
     return {
       rank: SignalRank.TOP1_TOP3,
       category: "top1_top3",
@@ -226,33 +200,8 @@ export function evaluateSignalLevel(
     };
   }
 
-  // 🥇 TOP 1: 1 Top 1 Isolado
-  if (distinctTop1.size >= 1) {
-    return {
-      rank: SignalRank.TOP1,
-      category: "top1_isolated",
-      groupName: "Top 1",
-      label: options?.isConsecutive ? "⚡ Consecutivo" : "🎯 Top 1",
-      medal: options?.isConsecutive ? "⚡ Consecutivo" : "🎯 Top 1",
-      isAlavancagem: false,
-      isSupreme: false,
-      isRare: false,
-      isTop1: true,
-    };
-  }
-
-  // 🥉 TOP 3: Apenas Top 3
-  return {
-    rank: SignalRank.TOP3,
-    category: "top3_only",
-    groupName: "Top 3",
-    label: "Top 3",
-    medal: `Coincidência Top 3 (${distinctTop3.size}x)`,
-    isAlavancagem: false,
-    isSupreme: false,
-    isRare: false,
-    isTop1: false,
-  };
+  // 🛑 Top 1 isolado (1x Top 1 + 0 Top 2/3) e Coincidências Top 3 (0x Top 1) NÃO ENVIAM SINAIS
+  return null;
 }
 
 export type ResultItemInput =
@@ -492,8 +441,8 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
     const allSources = [...top1Sources, ...top3Sources];
     const distinctAnalyses = Array.from(new Set(allSources.map((s) => s.analysis)));
 
-    // Se não há nenhum Top 1 E menos de 2 Top 3, não atinge critério de sinal
-    if (top1Sources.length === 0 && top3Sources.length < 2) {
+    // Se não há nenhum Top 1, não gera sinal (coincidências Top 3 não enviam mais sinais)
+    if (top1Sources.length === 0) {
       continue;
     }
 
@@ -504,6 +453,11 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
 
     // D. Avalia o nível final da confluência após o agrupamento
     const evaluation = evaluateSignalLevel(top1Sources, top3Sources, { isConsecutive });
+
+    // Se for Top 1 isolado ou não atingir critério de confluência, não envia sinal!
+    if (!evaluation) {
+      continue;
+    }
 
     const strategyKey =
       top1Sources.length > 0
@@ -600,6 +554,21 @@ export function mergeSignalsLifecycle(
       normalizedSig.outcome !== "pending" &&
       normalizedSig.completedAt &&
       now - normalizedSig.completedAt > 180_000
+    ) {
+      continue;
+    }
+
+    // Se for sinal pendente de categoria descontinuada (Top 1 isolado ou Apenas Top 3), remove
+    const cat = (normalizedSig.category || "").toLowerCase();
+    if (
+      normalizedSig.outcome === "pending" &&
+      (cat === "top1_isolated" ||
+        cat === "top3_only" ||
+        cat === "top5_only" ||
+        (!normalizedSig.isAlavancagem &&
+          !normalizedSig.isSupreme &&
+          !normalizedSig.isRare &&
+          cat !== "top1_top3"))
     ) {
       continue;
     }

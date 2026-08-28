@@ -138,7 +138,7 @@ const getMedalStyles = (
 
   if (category === "supreme" || category === "winn") {
     return {
-      label: "🏆 WINN Supremo",
+      label: "👑 Supremo",
       classes:
         "border-purple-400 bg-purple-950/50 text-purple-200 shadow-purple-500/25 ring-1 ring-purple-500/30 animate-pulse",
       badge: "bg-purple-400/20 text-purple-300 border-purple-400/30",
@@ -153,81 +153,11 @@ const getMedalStyles = (
     };
   }
 
-  if (category === "top1_top3" || category === "top1_top5") {
-    return {
-      label: "⚡ Top 1 & Top 3",
-      classes: "border-primary/60 bg-primary/20 text-blue-200 shadow-blue-500/15",
-      badge: "bg-primary/20 text-primary border-primary/30",
-    };
-  }
-
-  if (category === "top1_isolated") {
-    return {
-      label: isConsecutive ? "⚡ Consecutivo" : "🎯 Top 1",
-      classes: "border-white/10 bg-white/[0.03] text-white/90",
-      badge: "bg-white/10 text-white border-white/10",
-    };
-  }
-
-  if (category === "top3_only" || category === "top5_only" || !isTop1) {
-    if (count >= 3) {
-      return {
-        label: `Coincidência Top 3 (${count}x)`,
-        classes: "border-indigo-400/60 bg-indigo-950/40 text-indigo-200 shadow-indigo-500/10",
-        badge: "bg-indigo-400/20 text-indigo-200 border-indigo-400/30",
-      };
-    }
-    return {
-      label: "Coincidência Top 3",
-      classes: "border-indigo-500/30 bg-indigo-950/20 text-indigo-300",
-      badge: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
-    };
-  }
-
-  const totalLevel = count + levelOffset;
-
-  if (totalLevel >= 7)
-    return {
-      label: "👑 Supremo",
-      classes:
-        "border-purple-400 bg-purple-950/50 text-purple-300 shadow-purple-500/20 animate-pulse",
-      badge: "bg-purple-400/20 text-purple-300 border-purple-400/30",
-    };
-  if (totalLevel === 6)
-    return {
-      label: "💎 Diamante",
-      classes: "border-blue-400 bg-blue-950/40 text-blue-200 shadow-blue-500/10",
-      badge: "bg-blue-400/20 text-blue-200 border-blue-400/30",
-    };
-  if (totalLevel === 5)
-    return {
-      label: "🥇 Ouro",
-      classes: "border-yellow-400 bg-yellow-950/50 text-yellow-300 shadow-yellow-500/20",
-      badge: "bg-yellow-400/20 text-yellow-300 border-yellow-400/30",
-    };
-  if (totalLevel === 4)
-    return {
-      label: "🥈 Prata",
-      classes: "border-slate-300 bg-slate-800/40 text-slate-100",
-      badge: "bg-slate-300/20 text-slate-100 border-slate-300/30",
-    };
-  if (totalLevel === 3)
-    return {
-      label: "🥉 Bronze",
-      classes: "border-amber-700 bg-amber-950/30 text-amber-300",
-      badge: "bg-amber-700/20 text-amber-300 border-amber-700/30",
-    };
-  if (totalLevel === 2)
-    return {
-      label: "Top 1 + Confluência",
-      classes: "border-cyan-400 bg-cyan-950/30 text-cyan-300 shadow-cyan-500/10",
-      badge: "bg-cyan-400/20 text-cyan-300 border-cyan-400/30",
-    };
-
+  // ⚡ Top 1 & Top 3 (Padrão)
   return {
-    label: isConsecutive ? "⚡ Consecutivo" : "🎯 Top 1",
-    classes: "border-white/10 bg-white/[0.03] text-white/90",
-    badge: "bg-white/10 text-white border-white/10",
+    label: "⚡ Top 1 & Top 3",
+    classes: "border-yellow-400/60 bg-yellow-950/40 text-yellow-200 shadow-yellow-500/15",
+    badge: "bg-yellow-400/20 text-yellow-300 border-yellow-400/30",
   };
 };
 
@@ -803,36 +733,25 @@ export function PredictiveSignals() {
   // Lista unificada de todos os sinais com ciclo de vida estável
   const activeSignals = useMemo(() => {
     const storedList = Array.from(liveStoredMap.values());
-    if (storedList.length === 0) {
-      // Fallback para os candidatos recém-gerados caso o store esteja vazio
-      return [
-        ...mode1.map((s) => {
-          let category = "top1_isolated";
-          if (s.isAlavancagem) category = "alavancagem";
-          else if (s.isSupreme) category = "supreme";
-          else if (s.isRare) category = "rare";
-          return {
+    const sourceList =
+      storedList.length > 0
+        ? storedList
+        : mode1.map((s) => ({
             ...s,
-            category,
+            category: s.isAlavancagem
+              ? "alavancagem"
+              : s.isSupreme
+                ? "supreme"
+                : s.isRare
+                  ? "rare"
+                  : "top1_top3",
             isTop1: true,
             times: [s.at],
+            entryDate: s.at,
             outcome: "pending" as const,
-          };
-        }),
-        ...mode2.map((s) => ({
-          ...s,
-          category: "top3_only",
-          isTop1: false,
-          isAlavancagem: false,
-          isSupreme: false,
-          isRare: false,
-          at: s.times[0],
-          outcome: "pending" as const,
-        })),
-      ];
-    }
+          }));
 
-    return storedList
+    return sourceList
       .map((s) => {
         const dt =
           s.entryDate instanceof Date
@@ -850,27 +769,42 @@ export function PredictiveSignals() {
         });
 
         const rank = getSignalRank(s);
+        const category = evalLevel?.category || s.category || "top1_top3";
+        const groupName = evalLevel?.groupName || s.groupName || "Top 1 & Top 3";
 
         return {
           ...s,
           at: dt,
           times: [dt],
-          category: s.category || evalLevel.category,
-          groupName: s.groupName || evalLevel.groupName,
+          category,
+          groupName,
           isAlavancagem: rank === SignalRank.ALAVANCAGEM || s.isAlavancagem,
           isSupreme: rank === SignalRank.SUPREME || s.isSupreme,
           isRare: rank === SignalRank.RARE || s.isRare,
-          isTop1: rank >= SignalRank.TOP1,
+          isTop1: true,
         };
+      })
+      .filter((s) => {
+        // Apenas sinais das 4 categorias válidas
+        const cat = (s.category || "").toLowerCase();
+        return (
+          cat === "alavancagem" ||
+          cat === "supreme" ||
+          cat === "rare" ||
+          cat === "top1_top3" ||
+          s.isAlavancagem ||
+          s.isSupreme ||
+          s.isRare
+        );
       })
       .sort((a, b) => {
         const tA = a.at instanceof Date ? a.at.getTime() : 0;
         const tB = b.at instanceof Date ? b.at.getTime() : 0;
         return tA - tB;
       });
-  }, [liveStoredMap, mode1, mode2]);
+  }, [liveStoredMap, mode1]);
 
-  // 0. 🚀 ALAVANCAGEM (Rank 6: 4+ Top 1)
+  // 1. 🚀 ALAVANCAGEM (Rank 4: >= 4x Top 1 + 0 ou mais Top 2/3)
   const alavancagemSignals = useMemo(() => {
     return activeSignals.filter((s) => {
       const rank = getSignalRank(s);
@@ -878,8 +812,8 @@ export function PredictiveSignals() {
     });
   }, [activeSignals]);
 
-  // 1. 🏆 WINN / SUPREMO (Rank 5: >= 2 Top 1 E >= 1 Top 3)
-  const winnSignals = useMemo(() => {
+  // 2. 👑 SUPREMO (Rank 3: 2x ou 3x Top 1 + 2 ou mais Top 2/3)
+  const supremeSignals = useMemo(() => {
     return activeSignals.filter((s) => {
       if (alavancagemSignals.some((a) => a.key === s.key)) return false;
       const rank = getSignalRank(s);
@@ -887,77 +821,40 @@ export function PredictiveSignals() {
     });
   }, [activeSignals, alavancagemSignals]);
 
-  // 2. 💎 RARO (Rank 4: >= 2 Top 1)
+  // 3. 💎 RARO (Rank 2: 2x ou 3x Top 1 + 0 ou 1 Top 2/3)
   const rareSignals = useMemo(() => {
     return activeSignals.filter((s) => {
       if (
         alavancagemSignals.some((a) => a.key === s.key) ||
-        winnSignals.some((w) => w.key === s.key)
+        supremeSignals.some((w) => w.key === s.key)
       )
         return false;
       const rank = getSignalRank(s);
       return rank === SignalRank.RARE || s.category === "rare" || s.isRare;
     });
-  }, [activeSignals, alavancagemSignals, winnSignals]);
+  }, [activeSignals, alavancagemSignals, supremeSignals]);
 
-  // 3. ⚡ TOP 1 & TOP 3 (Rank 3: 1 Top 1 E >= 1 Top 3)
+  // 4. ⚡ TOP 1 & TOP 3 (Rank 1: 1x Top 1 + 1 ou mais Top 2/3)
   const top1Top3Signals = useMemo(() => {
     return activeSignals.filter((s) => {
       if (
         alavancagemSignals.some((a) => a.key === s.key) ||
-        winnSignals.some((w) => w.key === s.key) ||
+        supremeSignals.some((w) => w.key === s.key) ||
         rareSignals.some((r) => r.key === s.key)
       )
         return false;
       const rank = getSignalRank(s);
       return rank === SignalRank.TOP1_TOP3 || s.category === "top1_top3";
     });
-  }, [activeSignals, alavancagemSignals, winnSignals, rareSignals]);
-
-  // 4. 🎯 TOP 1 ISOLADO (Rank 2: 1 Top 1 apenas)
-  const top1IsolatedSignals = useMemo(() => {
-    return activeSignals.filter((s) => {
-      if (
-        alavancagemSignals.some((a) => a.key === s.key) ||
-        winnSignals.some((w) => w.key === s.key) ||
-        rareSignals.some((r) => r.key === s.key) ||
-        top1Top3Signals.some((t) => t.key === s.key)
-      )
-        return false;
-      const rank = getSignalRank(s);
-      return rank === SignalRank.TOP1 || s.category === "top1_isolated" || s.isTop1;
-    });
-  }, [activeSignals, alavancagemSignals, winnSignals, rareSignals, top1Top3Signals]);
-
-  // 5. 📊 COINCIDÊNCIA TOP 3 (Rank 1: apenas Top 3, 0 Top 1)
-  const top3OnlySignals = useMemo(() => {
-    return activeSignals.filter((s) => {
-      if (
-        alavancagemSignals.some((a) => a.key === s.key) ||
-        winnSignals.some((w) => w.key === s.key) ||
-        rareSignals.some((r) => r.key === s.key) ||
-        top1Top3Signals.some((t) => t.key === s.key) ||
-        top1IsolatedSignals.some((i) => i.key === s.key)
-      )
-        return false;
-      return s.category === "top3_only" || s.category === "top5_only" || !s.isTop1;
-    });
-  }, [
-    activeSignals,
-    alavancagemSignals,
-    winnSignals,
-    rareSignals,
-    top1Top3Signals,
-    top1IsolatedSignals,
-  ]);
+  }, [activeSignals, alavancagemSignals, supremeSignals, rareSignals]);
 
   // Sincroniza os sinais gerados no `signalsStore` garantindo ciclo de vida e não-desaparecimento
   useEffect(() => {
     if (!loading && rows.length > 0) {
       const existing = getPredictiveSignals();
 
-      const candidateSignals: PredictiveSignal[] = [
-        ...(mode1 || []).map((s) => {
+      const candidateSignals: PredictiveSignal[] = (mode1 || [])
+        .map((s) => {
           if (!s) return null;
           const canonicalKey = getCanonicalSignalKey(s.at);
           const atTime = s.at instanceof Date ? s.at.getTime() : new Date(s.at || 0).getTime();
@@ -971,6 +868,9 @@ export function PredictiveSignals() {
             forcedSupreme: s.isSupreme,
             forcedRare: s.isRare,
           });
+
+          // Se não atingir critério de confluência (ex: Top 1 isolado), não gera sinal
+          if (!evalLevel) return null;
 
           return {
             key: canonicalKey,
@@ -997,41 +897,8 @@ export function PredictiveSignals() {
               (a) => !Number.isNaN(atTime) && atTime >= a.start && atTime <= a.end,
             ),
           };
-        }),
-        ...(mode2 || []).map((s) => {
-          if (!s) return null;
-          const rawTime = Array.isArray(s.times) && s.times.length > 0 ? s.times[0] : undefined;
-          const canonicalKey = getCanonicalSignalKey(rawTime || Date.now());
-          const firstTime =
-            rawTime instanceof Date
-              ? rawTime.getTime()
-              : rawTime
-                ? new Date(rawTime).getTime()
-                : NaN;
-          return {
-            key: canonicalKey,
-            time: Array.isArray(s.times) ? s.times.map((t) => fmtClock(t)).join(" / ") : "--:--",
-            pct: Number.isFinite(s.pct) ? s.pct : 0,
-            label: "Confluência Top 3",
-            confluence: s.confluence || "",
-            medal: getMedalStyles(s.analysisCount || 0, false, 0, false, "top3_only")?.label,
-            entryDate: rawTime,
-            outcome: "pending" as const,
-            isHighTendency: !!s.isHighTendency,
-            category: "top3_only",
-            groupName: "Top 3",
-            isTop1: false,
-            isAlavancagem: false,
-            isSupreme: false,
-            isRare: false,
-            strategyKey: s.strategyKey,
-            sources: s.sources,
-            isRecAlert: activeRecAlerts.some(
-              (a) => !Number.isNaN(firstTime) && firstTime >= a.start && firstTime <= a.end,
-            ),
-          };
-        }),
-      ].filter(Boolean) as PredictiveSignal[];
+        })
+        .filter(Boolean) as PredictiveSignal[];
 
       // Mescla com ciclo de vida monotônico garantindo que NADA é perdido e promoções são respeitadas
       const mergedList = mergeSignalsLifecycle(existing, candidateSignals, rows, Date.now());
@@ -1067,7 +934,7 @@ export function PredictiveSignals() {
       });
       setSignals(storedSignalsList);
     }
-  }, [rows, loading, mode1, mode2, activeRecAlerts]);
+  }, [rows, loading, mode1, activeRecAlerts]);
 
   return (
     <Card className="glass-card !p-0 overflow-hidden">
@@ -1111,7 +978,7 @@ export function PredictiveSignals() {
 
         {!err && (
           <div className="space-y-8">
-            {/* 0. 🚀 ALAVANCAGEM (4+ Análises Top 1) */}
+            {/* 1. 🚀 ALAVANCAGEM (4+ Análises Top 1) */}
             {alavancagemSignals.length > 0 && (
               <section className="space-y-3">
                 <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-white">
@@ -1126,25 +993,25 @@ export function PredictiveSignals() {
               </section>
             )}
 
-            {/* 1. 🏆 WINN (Super Confluência Suprema) */}
-            {winnSignals.length > 0 && (
+            {/* 2. 👑 SUPREMO (2-3x Top 1 + 2+ Top 2/3) */}
+            {supremeSignals.length > 0 && (
               <section className="space-y-3">
                 <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-purple-400">
-                  <Sparkles className="h-3.5 w-3.5" /> 🏆 WINN (Super Confluência Suprema)
+                  <Sparkles className="h-3.5 w-3.5" /> 👑 SUPREMO (2x-3x Top 1 + 2+ Top 2/3)
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {winnSignals.map((s) => (
+                  {supremeSignals.map((s) => (
                     <SignalCard key={s.key} signal={s} />
                   ))}
                 </div>
               </section>
             )}
 
-            {/* 2. 💎 RARO (Múltiplas análises Top 1) */}
+            {/* 3. 💎 RARO (2-3x Top 1 + 0-1 Top 2/3) */}
             {rareSignals.length > 0 && (
               <section className="space-y-3">
                 <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-400">
-                  <Sparkles className="h-3.5 w-3.5" /> 💎 RARO (Múltiplas análises Top 1)
+                  <Sparkles className="h-3.5 w-3.5" /> 💎 RARO (2x-3x Top 1)
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {rareSignals.map((s) => (
@@ -1154,12 +1021,11 @@ export function PredictiveSignals() {
               </section>
             )}
 
-            {/* 3. ⚡ TOP 1 & TOP 3 (Confluência Principal + Secundária) */}
+            {/* 4. ⚡ TOP 1 & TOP 3 (1x Top 1 + 1+ Top 2/3) */}
             {top1Top3Signals.length > 0 && (
               <section className="space-y-3">
                 <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
-                  <Layers className="h-3.5 w-3.5" /> ⚡ TOP 1 & TOP 3 (Confluência Principal +
-                  Secundária)
+                  <Layers className="h-3.5 w-3.5" /> ⚡ TOP 1 & TOP 3 (1x Top 1 + 1+ Top 2/3)
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {top1Top3Signals.map((s) => (
@@ -1169,42 +1035,11 @@ export function PredictiveSignals() {
               </section>
             )}
 
-            {/* 4. 🎯 TOP 1 ISOLADO (Análise Principal Única) */}
-            {top1IsolatedSignals.length > 0 && (
-              <section className="space-y-3">
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                  <Target className="h-3.5 w-3.5" /> 🎯 TOP 1 ISOLADO (Análise Principal Única)
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {top1IsolatedSignals.map((s) => (
-                    <SignalCard key={s.key} signal={s} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* 5. 📊 COINCIDÊNCIA TOP 3 (Análises Secundárias Top 2 ao Top 3) */}
-            {top3OnlySignals.length > 0 && (
-              <section className="space-y-3">
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/70">
-                  <Layers className="h-3.5 w-3.5" /> 📊 COINCIDÊNCIA TOP 3 (Análises Secundárias Top
-                  2 ao Top 3)
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {top3OnlySignals
-                    .filter((s) => s.category === "top3_only" || s.category === "top5_only")
-                    .map((signal) => (
-                      <SignalCard key={signal.key} signal={signal} />
-                    ))}
-                </div>
-              </section>
-            )}
-
             {activeSignals.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-10">
                 {loading
                   ? "Carregando resultados e calculando sinais..."
-                  : "Sem horários futuros projetados no momento."}
+                  : "Sem confluências ativas no momento (aguardando confluências Top 1 & Top 3, Raro, Supremo ou Alavancagem)."}
               </p>
             )}
           </div>

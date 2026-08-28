@@ -68,7 +68,7 @@ type SignalAuditItem = {
   sourceValue: number;
   predictedMinute: number;
   projectedPct: number; // Porcentagem teórica estatística calculada pelo motor
-  category: "alavancagem" | "supreme" | "rare" | "top1_top3" | "top1_isolated" | "top3_only";
+  category: "alavancagem" | "supreme" | "rare" | "top1_top3";
   sourcesCount: number;
   top1Count: number;
   // Auditoria real
@@ -342,17 +342,18 @@ export default function SignalPercentageValidator() {
 
       if (totalSources === 0) continue;
 
-      let category: SignalAuditItem["category"] = "top3_only";
+      let category: SignalAuditItem["category"] = "top1_top3";
       if (distinctTop1.size >= 4) {
         category = "alavancagem";
-      } else if (distinctTop1.size >= 2 && distinctTop3.size >= 1) {
+      } else if ((distinctTop1.size === 2 || distinctTop1.size === 3) && distinctTop3.size >= 2) {
         category = "supreme";
       } else if (distinctTop1.size >= 2) {
         category = "rare";
       } else if (distinctTop1.size === 1 && distinctTop3.size >= 1) {
         category = "top1_top3";
-      } else if (distinctTop1.size === 1) {
-        category = "top1_isolated";
+      } else {
+        // Top 1 isolado e Top 3 apenas não geram sinais
+        continue;
       }
 
       // Maior porcentagem individual entre as fontes do sinal
@@ -419,14 +420,7 @@ export default function SignalPercentageValidator() {
       total > 0 ? finished.reduce((acc, s) => acc + s.projectedPct, 0) / total : 0;
 
     // Estatísticas por Categoria de Confluência
-    const catKeys: SignalAuditItem["category"][] = [
-      "alavancagem",
-      "supreme",
-      "rare",
-      "top1_top3",
-      "top1_isolated",
-      "top3_only",
-    ];
+    const catKeys: SignalAuditItem["category"][] = ["alavancagem", "supreme", "rare", "top1_top3"];
 
     const byCategory = catKeys.map((cat) => {
       const items = finished.filter((s) => s.category === cat);
@@ -688,22 +682,17 @@ export default function SignalPercentageValidator() {
                 badge: "bg-white text-black font-black",
               },
               supreme: {
-                name: "🏆 WINN Supremo",
+                name: "👑 Supremo (2-3x Top 1 + 2+ Top 2/3)",
                 badge: "bg-purple-500/20 text-purple-300 border border-purple-500/30",
               },
               rare: {
-                name: "💎 Raro (2+ Top 1)",
+                name: "💎 Raro (2-3x Top 1)",
                 badge: "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30",
               },
               top1_top3: {
-                name: "⚡ Top 1 + Top 3",
+                name: "⚡ Top 1 & Top 3",
                 badge: "bg-amber-500/20 text-amber-300 border border-amber-500/30",
               },
-              top1_isolated: {
-                name: "🎯 Top 1 Isolado",
-                badge: "bg-blue-500/20 text-blue-300 border border-blue-500/30",
-              },
-              top3_only: { name: "📊 Apenas Top 3", badge: "bg-white/10 text-white/70" },
             };
 
             const info = labelMap[cat.category] || {
@@ -786,12 +775,10 @@ export default function SignalPercentageValidator() {
                 className="rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-white focus:outline-none focus:border-primary"
               >
                 <option value="all">Todas Categorias</option>
-                <option value="alavancagem">Alavancagem (4+ Top 1)</option>
-                <option value="supreme">WINN Supremo</option>
-                <option value="rare">Raro (2+ Top 1)</option>
-                <option value="top1_top3">Top 1 + Top 3</option>
-                <option value="top1_isolated">Top 1 Isolado</option>
-                <option value="top3_only">Apenas Top 3</option>
+                <option value="alavancagem">🚀 Alavancagem (4+ Top 1)</option>
+                <option value="supreme">👑 Supremo (2-3x Top 1 + 2+ Top 2/3)</option>
+                <option value="rare">💎 Raro (2-3x Top 1)</option>
+                <option value="top1_top3">⚡ Top 1 & Top 3</option>
               </select>
 
               <select

@@ -120,6 +120,7 @@ function getSignalTypeBadge(sig: {
   const top1Sources = (sig.sources || []).filter((s: any) => !s.top3 && !s.top5);
   const top3Sources = (sig.sources || []).filter((s: any) => s.top3 || s.top5);
   const distinctTop1 = new Set(top1Sources.map((s: any) => s.analysis));
+  const distinctTop3 = new Set(top3Sources.map((s: any) => s.analysis));
 
   // 1. 🚀 Alavancagem (4+ Top 1)
   if (
@@ -137,12 +138,12 @@ function getSignalTypeBadge(sig: {
     };
   }
 
-  // 2. 👑 Supremo (2+ Top 1 E 1+ Top 3)
+  // 2. 👑 Supremo (2x ou 3x Top 1 + 2+ Top 2/3)
   if (
     sig.isSupreme ||
     cat.includes("suprem") ||
     cat.includes("winn") ||
-    (distinctTop1.size >= 2 && top3Sources.length >= 1) ||
+    ((distinctTop1.size === 2 || distinctTop1.size === 3) && distinctTop3.size >= 2) ||
     label.includes("SUPREM") ||
     conf.includes("SUPREM") ||
     label.includes("WINN")
@@ -155,7 +156,7 @@ function getSignalTypeBadge(sig: {
     };
   }
 
-  // 3. 💎 Raro (2+ Top 1)
+  // 3. 💎 Raro (2x ou 3x Top 1 + 0 ou 1 Top 2/3)
   if (
     sig.isRare ||
     cat.includes("rare") ||
@@ -172,44 +173,12 @@ function getSignalTypeBadge(sig: {
     };
   }
 
-  // 4. ⚡ Top 1 & Top 3 (1 Top 1 E 1+ Top 3)
-  if (
-    cat.includes("top1_top3") ||
-    (distinctTop1.size === 1 && top3Sources.length >= 1) ||
-    label.includes("TOP 1 & TOP 3") ||
-    label.includes("TOP 1 & 3")
-  ) {
-    return {
-      name: "Top 1 & Top 3",
-      short: "Top 1 & 3",
-      icon: "⚡",
-      badgeClass: "bg-yellow-500/20 border-yellow-500/40 text-yellow-300",
-    };
-  }
-
-  // 5. 🥉 Top 3 (Apenas Top 3, 0 Top 1 ou chave m2)
-  if (
-    cat.includes("top3") ||
-    (sig.key && sig.key.startsWith("m2")) ||
-    sig.isTop1 === false ||
-    (distinctTop1.size === 0 && top3Sources.length > 0) ||
-    label.includes("TOP 3") ||
-    conf.includes("TOP 3")
-  ) {
-    return {
-      name: "Top 3",
-      short: "Top 3",
-      icon: "🥉",
-      badgeClass: "bg-blue-500/20 border-blue-500/40 text-blue-300",
-    };
-  }
-
-  // 6. 🥇 Top 1 (Padrão: Top 1 isolado)
+  // 4. ⚡ Top 1 & Top 3 (1x Top 1 + 1+ Top 2/3)
   return {
-    name: "Top 1",
-    short: "Top 1",
-    icon: "🥇",
-    badgeClass: "bg-emerald-500/20 border-emerald-500/40 text-emerald-300",
+    name: "Top 1 & Top 3",
+    short: "Top 1 & 3",
+    icon: "⚡",
+    badgeClass: "bg-yellow-500/20 border-yellow-500/40 text-yellow-300",
   };
 }
 
