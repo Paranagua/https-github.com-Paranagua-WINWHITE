@@ -1056,6 +1056,8 @@ export function PredictiveSignals() {
             outcome: prev?.outcome || "pending",
             resultTime: prev?.resultTime,
             completedAt: prev?.completedAt,
+            winningResultId: prev?.winningResultId,
+            audit: prev?.audit,
             isHighTendency: !!s.isHighTendency,
             isVerified: !!s.isVerified,
             category,
@@ -1092,6 +1094,8 @@ export function PredictiveSignals() {
             outcome: prev?.outcome || "pending",
             resultTime: prev?.resultTime,
             completedAt: prev?.completedAt,
+            winningResultId: prev?.winningResultId,
+            audit: prev?.audit,
             isHighTendency: !!s.isHighTendency,
             category: "top3_only",
             groupName: "Top 3",
@@ -1142,6 +1146,8 @@ export function PredictiveSignals() {
           isTop1: s.isTop1,
           label: s.label,
           confluence: s.confluence,
+          winningResultId: s.winningResultId,
+          audit: s.audit,
           sources: s.sources,
         };
       });

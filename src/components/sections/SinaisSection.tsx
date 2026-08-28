@@ -9,6 +9,7 @@ import {
   type PredictiveSignal,
 } from "@/lib/signalsStore";
 import { useSignalStatsStore } from "@/lib/signalStatsStore";
+import { auditSignalWithRounds, deduplicateResults } from "@/lib/signalAuditEngine";
 import {
   Radio,
   Power,
@@ -389,7 +390,7 @@ function SinaisSectionContent() {
     });
   }, [stats]);
 
-  // Auditoria dos sinais preditivos contra os resultados reais
+  // Auditoria dos sinais preditivos contra os resultados reais (Regra rigorosa de 6 rodadas: M-1, M, M+1)
   useEffect(() => {
     try {
       const raw = getPredictiveSignals();
@@ -401,15 +402,6 @@ function SinaisSectionContent() {
         .map((s) => {
           try {
             if (!s || !s.entryDate) return s;
-            const entryDateObj =
-              s.entryDate instanceof Date
-                ? s.entryDate
-                : typeof s.entryDate === "string"
-                  ? parseUtcDate(s.entryDate)
-                  : new Date(s.entryDate);
-            const entryTime = entryDateObj.getTime();
-
-            if (Number.isNaN(entryTime)) return s;
 
             // Se já está concluído, mantém o status e só remove da visualização após 3 minutos
             if (s.outcome && s.outcome !== "pending") {
@@ -417,52 +409,37 @@ function SinaisSectionContent() {
               return s;
             }
 
-            // Obtenção precisa do início do minuto alvo (ex: 14:05 -> 14:05:00.000)
-            const targetMinuteStart = Math.floor(entryTime / 60_000) * 60_000;
+            // Executa a conferência matemática estrita das 6 rodadas
+            const auditResult = auditSignalWithRounds(s, resultsForValidation || []);
+            const cat =
+              (s as any).category ||
+              (s.isAlavancagem
+                ? "alavancagem"
+                : s.isSupreme
+                  ? "supreme"
+                  : s.isRare
+                    ? "rare"
+                    : s.isTop1
+                      ? "top1_isolated"
+                      : undefined);
 
-            // Janela de auditoria exata de 3 minutos completos (6 casas / 2 casas por minuto):
-            // Minuto M - 1 (1 min antes):     [targetMinuteStart - 60_000, targetMinuteStart - 1]
-            // Minuto M     (horário do sinal): [targetMinuteStart, targetMinuteStart + 59_999]
-            // Minuto M + 1 (1 min depois):    [targetMinuteStart + 60_000, targetMinuteStart + 119_999]
-            const rangeStart = targetMinuteStart - 60_000;
-            const rangeEnd = targetMinuteStart + 120_000 - 1; // 23:59:59.999 do minuto posterior
-
-            // 1. Se o horário da entrada (-1 min) ainda NÃO chegou, fica pendente
-            if (now < rangeStart) {
-              return s.outcome === "pending" ? s : { ...s, outcome: "pending" as const };
-            }
-
-            // 2. Busca qualquer saída de branco (roll === 0 ou color === "white") nas 6 casas
-            const matchedResult = (resultsForValidation || []).find((r) => {
-              if (!r) return false;
-              const isWhite = Number(r.roll) === 0 || r.color === "white";
-              if (!isWhite) return false;
-              const rt = parseUtcDate(r.createdAt).getTime();
-              return rt >= rangeStart - 3_000 && rt <= rangeEnd + 3_000;
-            });
-
-            if (matchedResult) {
+            if (auditResult.outcome === "green") {
               if (s.outcome !== "green") {
                 hasChanged = true;
-                const cat =
-                  (s as any).category ||
-                  (s.isAlavancagem
-                    ? "alavancagem"
-                    : s.isSupreme
-                      ? "supreme"
-                      : s.isRare
-                        ? "rare"
-                        : s.isTop1
-                          ? "top1_isolated"
-                          : undefined);
                 recordCompletedSignal({
                   key: s.key,
                   time: s.time,
                   outcome: "green",
                   label: s.label,
                   confluence: s.confluence,
-                  resultTime: fmtTime(matchedResult.createdAt),
+                  resultTime: auditResult.resultTime,
                   strategyKey: s.strategyKey,
+                  targetTime: s.time,
+                  windowLabel: auditResult.audit.windowLabel,
+                  checkedResults: auditResult.audit.checkedResults,
+                  winningResultId: auditResult.winningResultId,
+                  winningResultCreatedAt: auditResult.audit.winningResultCreatedAt,
+                  audit: auditResult.audit,
                   sources: s.sources,
                   category: cat,
                   isSupreme: s.isSupreme,
@@ -474,51 +451,52 @@ function SinaisSectionContent() {
               return {
                 ...s,
                 outcome: "green" as const,
-                resultTime: fmtTime(matchedResult.createdAt),
+                resultTime: auditResult.resultTime,
                 label: "WIN",
-                completedAt: s.completedAt || now,
+                completedAt: s.completedAt || auditResult.completedAt || now,
+                winningResultId: auditResult.winningResultId,
+                audit: auditResult.audit,
               };
             }
 
-            // 3. Se ainda estamos dentro da janela dos 3 minutos (+35s para aguardar a resolução do 2º giro do minuto M+1)
-            if (now <= rangeEnd + 35_000) {
-              return s.outcome === "pending" ? s : { ...s, outcome: "pending" as const };
+            if (auditResult.outcome === "red") {
+              if (s.outcome !== "red") {
+                hasChanged = true;
+                recordCompletedSignal({
+                  key: s.key,
+                  time: s.time,
+                  outcome: "red",
+                  label: s.label,
+                  confluence: s.confluence,
+                  strategyKey: s.strategyKey,
+                  targetTime: s.time,
+                  windowLabel: auditResult.audit.windowLabel,
+                  checkedResults: auditResult.audit.checkedResults,
+                  winningResultId: null,
+                  winningResultCreatedAt: null,
+                  audit: auditResult.audit,
+                  sources: s.sources,
+                  category: cat,
+                  isSupreme: s.isSupreme,
+                  isRare: s.isRare,
+                  isAlavancagem: s.isAlavancagem,
+                  isTop1: s.isTop1,
+                });
+              }
+              return {
+                ...s,
+                outcome: "red" as const,
+                label: "LOSS",
+                completedAt: s.completedAt || auditResult.completedAt || now,
+                audit: auditResult.audit,
+              };
             }
 
-            // 4. Se a janela encerrou completamente e nenhum branco saiu, computa LOSS
-            if (s.outcome !== "red") {
-              hasChanged = true;
-              const cat =
-                (s as any).category ||
-                (s.isAlavancagem
-                  ? "alavancagem"
-                  : s.isSupreme
-                    ? "supreme"
-                    : s.isRare
-                      ? "rare"
-                      : s.isTop1
-                        ? "top1_isolated"
-                        : undefined);
-              recordCompletedSignal({
-                key: s.key,
-                time: s.time,
-                outcome: "red",
-                label: s.label,
-                confluence: s.confluence,
-                strategyKey: s.strategyKey,
-                sources: s.sources,
-                category: cat,
-                isSupreme: s.isSupreme,
-                isRare: s.isRare,
-                isAlavancagem: s.isAlavancagem,
-                isTop1: s.isTop1,
-              });
-            }
+            // Continua PENDING enquanto as 6 rodadas não estiverem completas
             return {
               ...s,
-              outcome: "red" as const,
-              label: "LOSS",
-              completedAt: s.completedAt || now,
+              outcome: "pending" as const,
+              audit: auditResult.audit,
             };
           } catch {
             return s;
@@ -786,6 +764,7 @@ function SinaisSectionContent() {
                       return (
                         <div
                           key={sig.key || idx}
+                          title={`Sinal: ${sig.time} | Janela (6 rodadas): ${sig.windowLabel || sig.audit?.windowLabel || "--"} | ${isGreen ? `WIN em ${sig.resultTime || "--"}${sig.winningResultId || sig.audit?.winningResultId ? ` (ID: ${sig.winningResultId || sig.audit?.winningResultId})` : ""}` : `LOSS (${sig.checkedResults || sig.audit?.checkedResults || 6} rodadas confirmadas sem branco)`}`}
                           className={`flex flex-col justify-between p-2 rounded-xl border text-left transition-all relative overflow-hidden min-h-[72px] ${
                             isGreen
                               ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300 shadow-sm shadow-emerald-500/5"

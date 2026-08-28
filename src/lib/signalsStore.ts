@@ -1,3 +1,5 @@
+import type { SignalAuditInfo } from "./signalAuditEngine";
+
 // Store leve para compartilhar sinais entre /sinais e /historico via localStorage.
 export type StoredSignal = {
   id: string;
@@ -6,6 +8,8 @@ export type StoredSignal = {
   targetIso: string; // ISO UTC do horário do sinal
   outcome: "pending" | "green" | "red";
   matchedIso?: string; // ISO UTC do resultado que bateu (se green)
+  winningResultId?: string | null;
+  audit?: SignalAuditInfo;
   category?: string;
   groupName?: string;
   isSupreme?: boolean;
@@ -138,6 +142,8 @@ export type PredictiveSignal = {
   groupName?: string;
   completedAt?: number;
   strategyKey?: string;
+  winningResultId?: string | null;
+  audit?: SignalAuditInfo;
   sources?: Array<{
     analysis: number;
     value: number;

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { SignalAuditInfo } from "./signalAuditEngine";
 
 export interface SignalHistoryEntry {
   key: string;
@@ -9,6 +10,12 @@ export interface SignalHistoryEntry {
   confluence?: string;
   resultTime?: string;
   timestamp: number;
+  targetTime?: string;
+  windowLabel?: string;
+  checkedResults?: number;
+  winningResultId?: string | null;
+  winningResultCreatedAt?: string | null;
+  audit?: SignalAuditInfo;
   sources?: Array<{ analysis: number; value: number }>;
   category?: string;
   isSupreme?: boolean;
@@ -35,6 +42,12 @@ interface SignalStatsStore {
     confluence?: string;
     resultTime?: string;
     strategyKey?: string;
+    targetTime?: string;
+    windowLabel?: string;
+    checkedResults?: number;
+    winningResultId?: string | null;
+    winningResultCreatedAt?: string | null;
+    audit?: SignalAuditInfo;
     sources?: Array<{ analysis: number; value: number }>;
     category?: string;
     isSupreme?: boolean;
@@ -73,47 +86,58 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
           const existingIndex = state.recentSignals.findIndex((s) => s.key === signal.key);
           const alreadyExists = existingIndex >= 0;
           const prevEntry = alreadyExists ? state.recentSignals[existingIndex] : null;
-          const prevOutcome = prevEntry?.outcome;
 
-          let updatedRecent: SignalHistoryEntry[];
-          if (alreadyExists) {
-            updatedRecent = state.recentSignals.map((s, idx) =>
+          // Se o sinal já foi registrado no histórico, seu resultado é definitivo (imutabilidade WIN/LOSS)
+          if (
+            alreadyExists &&
+            prevEntry &&
+            (prevEntry.outcome === "green" || prevEntry.outcome === "red")
+          ) {
+            const updatedRecent = state.recentSignals.map((s, idx) =>
               idx === existingIndex
                 ? {
                     ...s,
-                    outcome: signal.outcome,
+                    audit: signal.audit || s.audit,
                     resultTime: signal.resultTime || s.resultTime,
-                    sources: signal.sources || s.sources,
-                    category: signal.category || s.category,
-                    isSupreme: signal.isSupreme ?? s.isSupreme,
-                    isRare: signal.isRare ?? s.isRare,
-                    isAlavancagem: signal.isAlavancagem ?? s.isAlavancagem,
-                    isTop1: signal.isTop1 ?? s.isTop1,
+                    winningResultId: signal.winningResultId ?? s.winningResultId,
+                    winningResultCreatedAt:
+                      signal.winningResultCreatedAt ?? s.winningResultCreatedAt,
+                    checkedResults: signal.checkedResults ?? s.checkedResults,
+                    windowLabel: signal.windowLabel ?? s.windowLabel,
                   }
                 : s,
             );
-          } else {
-            updatedRecent = [
-              {
-                key: signal.key,
-                time: signal.time,
-                outcome: signal.outcome,
-                label: signal.label,
-                confluence: signal.confluence,
-                resultTime: signal.resultTime,
-                timestamp: Date.now(),
-                sources: signal.sources,
-                category: signal.category,
-                isSupreme: signal.isSupreme,
-                isRare: signal.isRare,
-                isAlavancagem: signal.isAlavancagem,
-                isTop1: signal.isTop1,
-              },
-              ...state.recentSignals,
-            ].slice(0, 50); // Mantém até os 50 mais recentes
+            return {
+              recentSignals: updatedRecent,
+              stats: state.stats,
+            };
           }
 
-          // Atualiza estatísticas por análise individual
+          const newEntry: SignalHistoryEntry = {
+            key: signal.key,
+            time: signal.time,
+            outcome: signal.outcome,
+            label: signal.label,
+            confluence: signal.confluence,
+            resultTime: signal.resultTime,
+            timestamp: Date.now(),
+            targetTime: signal.targetTime || signal.time,
+            windowLabel: signal.windowLabel,
+            checkedResults: signal.checkedResults,
+            winningResultId: signal.winningResultId,
+            winningResultCreatedAt: signal.winningResultCreatedAt,
+            audit: signal.audit,
+            sources: signal.sources,
+            category: signal.category,
+            isSupreme: signal.isSupreme,
+            isRare: signal.isRare,
+            isAlavancagem: signal.isAlavancagem,
+            isTop1: signal.isTop1,
+          };
+
+          const updatedRecent = [newEntry, ...state.recentSignals].slice(0, 50);
+
+          // Atualiza estatísticas por análise individual apenas 1 única vez
           const newStats = { ...state.stats };
           const keysToUpdate = new Set<string>();
 
@@ -128,41 +152,15 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             });
           }
 
-          if (!alreadyExists) {
-            // Novo sinal sendo registrado
-            keysToUpdate.forEach((k) => {
-              const cur = newStats[k] || { green: 0, red: 0, lastUpdated: Date.now() };
-              newStats[k] = {
-                ...cur,
-                green: signal.outcome === "green" ? cur.green + 1 : cur.green,
-                red: signal.outcome === "red" ? cur.red + 1 : cur.red,
-                lastUpdated: Date.now(),
-              };
-            });
-          } else if (prevOutcome && prevOutcome !== signal.outcome) {
-            // Sinal existente mudou de status (ex: de RED para GREEN por chegada de resultado)
-            keysToUpdate.forEach((k) => {
-              const cur = newStats[k] || { green: 0, red: 0, lastUpdated: Date.now() };
-              const newGreen =
-                signal.outcome === "green"
-                  ? cur.green + 1
-                  : prevOutcome === "green"
-                    ? Math.max(0, cur.green - 1)
-                    : cur.green;
-              const newRed =
-                signal.outcome === "red"
-                  ? cur.red + 1
-                  : prevOutcome === "red"
-                    ? Math.max(0, cur.red - 1)
-                    : cur.red;
-              newStats[k] = {
-                ...cur,
-                green: newGreen,
-                red: newRed,
-                lastUpdated: Date.now(),
-              };
-            });
-          }
+          keysToUpdate.forEach((k) => {
+            const cur = newStats[k] || { green: 0, red: 0, lastUpdated: Date.now() };
+            newStats[k] = {
+              ...cur,
+              green: signal.outcome === "green" ? cur.green + 1 : cur.green,
+              red: signal.outcome === "red" ? cur.red + 1 : cur.red,
+              lastUpdated: Date.now(),
+            };
+          });
 
           return {
             recentSignals: updatedRecent,
