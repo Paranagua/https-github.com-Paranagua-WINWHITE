@@ -64,12 +64,9 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
     return SignalRank.TOP1_TOP3;
   }
 
-  if (sig.isAlavancagem) return SignalRank.ALAVANCAGEM;
-  if (sig.isSupreme) return SignalRank.SUPREME;
-  if (sig.isRare) return SignalRank.RARE;
-
   const cat = (sig.category || "").toLowerCase();
   const label = (sig.label || "").toUpperCase();
+  const medal = (sig.medal || "").toUpperCase();
   const conf = (sig.confluence || "").toUpperCase();
 
   const top1Sources = (sig.sources || []).filter((s: any) => !s.top3 && !s.top5);
@@ -77,11 +74,13 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
   const distinctTop1 = new Set(top1Sources.map((s: any) => s.analysis));
   const distinctTop3 = new Set(top3Sources.map((s: any) => s.analysis));
 
-  // 1. 🚀 Alavancagem (4+ Top 1)
+  // 1. 🚀 Alavancagem (4+ Top 1) - SEMPRE PRIORITÁRIO
   if (
     distinctTop1.size >= 4 ||
+    sig.isAlavancagem ||
     cat.includes("alavanc") ||
     label.includes("ALAVANC") ||
+    medal.includes("ALAVANC") ||
     conf.includes("ALAVANC")
   ) {
     return SignalRank.ALAVANCAGEM;
@@ -90,11 +89,14 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
   // 2. 👑 Supremo (2x ou 3x Top 1 + 2+ Top 2/3)
   if (
     ((distinctTop1.size === 2 || distinctTop1.size === 3) && distinctTop3.size >= 2) ||
+    sig.isSupreme ||
     cat.includes("suprem") ||
     cat.includes("winn") ||
     label.includes("SUPREM") ||
+    medal.includes("SUPREM") ||
     conf.includes("SUPREM") ||
-    label.includes("WINN")
+    label.includes("WINN") ||
+    medal.includes("WINN")
   ) {
     return SignalRank.SUPREME;
   }
@@ -102,9 +104,11 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
   // 3. 💎 Raro (2x ou 3x Top 1 + 0 ou 1 Top 2/3)
   if (
     distinctTop1.size >= 2 ||
+    sig.isRare ||
     cat.includes("rare") ||
     cat.includes("raro") ||
     label.includes("RARO") ||
+    medal.includes("RARO") ||
     conf.includes("RARO")
   ) {
     return SignalRank.RARE;
@@ -145,8 +149,8 @@ export function evaluateSignalLevel(
       label: "Alavancagem",
       medal: `🚀 ALAVANCAGEM (${top1Count}x Top 1)`,
       isAlavancagem: true,
-      isSupreme: true,
-      isRare: true,
+      isSupreme: false,
+      isRare: false,
       isTop1: true,
     };
   }
@@ -161,7 +165,7 @@ export function evaluateSignalLevel(
       medal: `👑 Supremo (${top1Count}x Top 1 + ${top3Count}x Top 2/3)`,
       isAlavancagem: false,
       isSupreme: true,
-      isRare: true,
+      isRare: false,
       isTop1: true,
     };
   }

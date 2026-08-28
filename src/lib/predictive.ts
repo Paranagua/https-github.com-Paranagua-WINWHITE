@@ -17,7 +17,7 @@ export type Cycle = {
 };
 
 export const MAX_ZEROS = 14;
-export const MAX_CYCLES = 6;
+export const MAX_CYCLES = 5;
 export const TIMEOUT_MINUTES = 120;
 
 function diffMinutes(a: Date, b: Date) {

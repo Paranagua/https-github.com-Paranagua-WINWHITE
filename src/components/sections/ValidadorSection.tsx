@@ -276,11 +276,11 @@ export default function SignalPercentageValidator() {
       }
 
       for (const [val, cList] of byVal.entries()) {
-        // Regra: Mínimo de 6 ocorrências/gatilhos para uma análise ser elegível
-        if (cList.length < 6) continue;
+        // Regra: Mínimo de 5 ocorrências/gatilhos para uma análise ser elegível
+        if (cList.length < 5) continue;
 
-        // Itera ciclos para projetar a partir de 6 ocorrências
-        for (let idx = 6; idx < cList.length; idx++) {
+        // Itera ciclos para projetar a partir de 5 ocorrências
+        for (let idx = 5; idx < cList.length; idx++) {
           const pastCycles = cList.slice(0, idx);
           const currentTrigger = cList[idx];
           if (!currentTrigger?.triggerAt) continue;

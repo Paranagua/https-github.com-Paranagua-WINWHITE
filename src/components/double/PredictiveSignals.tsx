@@ -60,6 +60,7 @@ import {
   fmtClock,
   latestByValue,
   MAX_ZEROS,
+  MAX_CYCLES,
   TIMEOUT_MINUTES,
   type Cycle,
   type Row,
@@ -107,7 +108,7 @@ type Mode2Signal = {
 
 const MIN_ASSERTIVIDADE_TOP1 = 65;
 const MIN_ASSERTIVIDADE_TOP3 = 55;
-const MIN_GATILHOS = 6;
+const MIN_GATILHOS = 5;
 
 function addMinutes(d: Date, m: number) {
   const out = new Date(d.getTime() + m * 60_000);
@@ -165,7 +166,8 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
   const isTop1Signal = s.isTop1 ?? s.category !== "top5_only";
   const top1Sources = (s.sources || []).filter((src: any) => !src.top5);
   const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
-  const isAlavancagem = s.category === "alavancagem" || s.isAlavancagem || distinctTop1.size >= 4;
+  const rank = getSignalRank(s);
+  const isAlavancagem = rank === SignalRank.ALAVANCAGEM;
 
   const medal = getMedalStyles(
     distinctTop1.size || s.analysisCount || 0,
@@ -538,12 +540,14 @@ export function PredictiveSignals() {
         window.dispatchEvent(new CustomEvent("switch-audit-filter", { detail: "hoje" }));
       }
 
-      // 1. Extração de todos os candidatos brutos das análises elegíveis (>= 6 gatilhos)
+      // 1. Extração de todos os candidatos brutos das análises elegíveis (>= 5 gatilhos)
       const rawCandidates: RawCandidate[] = [];
 
       for (const item of active) {
-        const hist = (engine[item.analysis] || []).filter((c) => c.value === item.value).slice(-6);
-        // Regra: Mínimo de 6 ocorrências/gatilhos para uma análise ser elegível
+        const hist = (engine[item.analysis] || [])
+          .filter((c) => c.value === item.value)
+          .slice(-MAX_CYCLES);
+        // Regra: Mínimo de 5 ocorrências/gatilhos para uma análise ser elegível
         if (hist.length < MIN_GATILHOS) continue;
 
         const candidates = computeTop(hist, CANDIDATE_DEPTH);
@@ -769,8 +773,22 @@ export function PredictiveSignals() {
         });
 
         const rank = getSignalRank(s);
-        const category = evalLevel?.category || s.category || "top1_top3";
-        const groupName = evalLevel?.groupName || s.groupName || "Top 1 & Top 3";
+        const category =
+          rank === SignalRank.ALAVANCAGEM
+            ? "alavancagem"
+            : rank === SignalRank.SUPREME
+              ? "supreme"
+              : rank === SignalRank.RARE
+                ? "rare"
+                : "top1_top3";
+        const groupName =
+          rank === SignalRank.ALAVANCAGEM
+            ? "Alavancagem"
+            : rank === SignalRank.SUPREME
+              ? "Supremo"
+              : rank === SignalRank.RARE
+                ? "Raro"
+                : "Top 1 & Top 3";
 
         return {
           ...s,
@@ -778,23 +796,20 @@ export function PredictiveSignals() {
           times: [dt],
           category,
           groupName,
-          isAlavancagem: rank === SignalRank.ALAVANCAGEM || s.isAlavancagem,
-          isSupreme: rank === SignalRank.SUPREME || s.isSupreme,
-          isRare: rank === SignalRank.RARE || s.isRare,
+          isAlavancagem: rank === SignalRank.ALAVANCAGEM,
+          isSupreme: rank === SignalRank.SUPREME,
+          isRare: rank === SignalRank.RARE,
           isTop1: true,
         };
       })
       .filter((s) => {
         // Apenas sinais das 4 categorias válidas
-        const cat = (s.category || "").toLowerCase();
+        const rank = getSignalRank(s);
         return (
-          cat === "alavancagem" ||
-          cat === "supreme" ||
-          cat === "rare" ||
-          cat === "top1_top3" ||
-          s.isAlavancagem ||
-          s.isSupreme ||
-          s.isRare
+          rank === SignalRank.ALAVANCAGEM ||
+          rank === SignalRank.SUPREME ||
+          rank === SignalRank.RARE ||
+          rank === SignalRank.TOP1_TOP3
         );
       })
       .sort((a, b) => {
@@ -808,45 +823,33 @@ export function PredictiveSignals() {
   const alavancagemSignals = useMemo(() => {
     return activeSignals.filter((s) => {
       const rank = getSignalRank(s);
-      return rank === SignalRank.ALAVANCAGEM || s.category === "alavancagem" || s.isAlavancagem;
+      return rank === SignalRank.ALAVANCAGEM;
     });
   }, [activeSignals]);
 
   // 2. 👑 SUPREMO (Rank 3: 2x ou 3x Top 1 + 2 ou mais Top 2/3)
   const supremeSignals = useMemo(() => {
     return activeSignals.filter((s) => {
-      if (alavancagemSignals.some((a) => a.key === s.key)) return false;
       const rank = getSignalRank(s);
-      return rank === SignalRank.SUPREME || s.category === "supreme" || s.isSupreme;
+      return rank === SignalRank.SUPREME;
     });
-  }, [activeSignals, alavancagemSignals]);
+  }, [activeSignals]);
 
   // 3. 💎 RARO (Rank 2: 2x ou 3x Top 1 + 0 ou 1 Top 2/3)
   const rareSignals = useMemo(() => {
     return activeSignals.filter((s) => {
-      if (
-        alavancagemSignals.some((a) => a.key === s.key) ||
-        supremeSignals.some((w) => w.key === s.key)
-      )
-        return false;
       const rank = getSignalRank(s);
-      return rank === SignalRank.RARE || s.category === "rare" || s.isRare;
+      return rank === SignalRank.RARE;
     });
-  }, [activeSignals, alavancagemSignals, supremeSignals]);
+  }, [activeSignals]);
 
   // 4. ⚡ TOP 1 & TOP 3 (Rank 1: 1x Top 1 + 1 ou mais Top 2/3)
   const top1Top3Signals = useMemo(() => {
     return activeSignals.filter((s) => {
-      if (
-        alavancagemSignals.some((a) => a.key === s.key) ||
-        supremeSignals.some((w) => w.key === s.key) ||
-        rareSignals.some((r) => r.key === s.key)
-      )
-        return false;
       const rank = getSignalRank(s);
-      return rank === SignalRank.TOP1_TOP3 || s.category === "top1_top3";
+      return rank === SignalRank.TOP1_TOP3;
     });
-  }, [activeSignals, alavancagemSignals, supremeSignals, rareSignals]);
+  }, [activeSignals]);
 
   // Sincroniza os sinais gerados no `signalsStore` garantindo ciclo de vida e não-desaparecimento
   useEffect(() => {
