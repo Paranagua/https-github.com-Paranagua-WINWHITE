@@ -20,7 +20,6 @@ import {
   SignalRank,
 } from "@/lib/signalHierarchy";
 import {
-  buildA1,
   buildA2,
   buildA3,
   buildA4,
@@ -34,6 +33,21 @@ import {
   buildASoma21,
   buildA1Minuto5,
   buildA2Minuto5,
+  buildA1Minuto1,
+  buildA2Minuto1,
+  buildA1Minuto2,
+  buildA2Minuto2,
+  buildA1Minuto3,
+  buildA2Minuto3,
+  buildA1Minuto4,
+  buildA2Minuto4,
+  buildA1Minuto6,
+  buildA2Minuto6,
+  buildA1Minuto7,
+  buildA2Minuto7,
+  buildA1Minuto8,
+  buildA2Minuto8,
+  buildA1Minuto9,
   buildASandwichPontas,
   buildASandwichMeio,
   buildA7_11,
@@ -484,7 +498,6 @@ export function PredictiveSignals() {
   const engine = useMemo(() => {
     try {
       const main: Record<number, Cycle[]> = {
-        1: buildA1(rows),
         2: buildA2(rows),
         3: buildA3(rows),
         4: buildA4(rows),
@@ -501,6 +514,21 @@ export function PredictiveSignals() {
         19: buildASandwichPontas(rows),
         20: buildASandwichMeio(rows),
         21: buildA7_11(rows),
+        22: buildA1Minuto1(rows),
+        23: buildA2Minuto1(rows),
+        24: buildA1Minuto2(rows),
+        25: buildA2Minuto2(rows),
+        26: buildA1Minuto3(rows),
+        27: buildA2Minuto3(rows),
+        28: buildA1Minuto4(rows),
+        29: buildA2Minuto4(rows),
+        30: buildA1Minuto6(rows),
+        31: buildA2Minuto6(rows),
+        32: buildA1Minuto7(rows),
+        33: buildA2Minuto7(rows),
+        34: buildA1Minuto8(rows),
+        35: buildA2Minuto8(rows),
+        36: buildA1Minuto9(rows),
       };
       const secondary: Record<number, Cycle[]> = {};
       for (let i = 1; i <= 9; i++) {
@@ -517,7 +545,10 @@ export function PredictiveSignals() {
   const active = useMemo(() => {
     try {
       const out: Array<{ analysis: number; value: number; open: Cycle }> = [];
-      const mainIds = [1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
+      const mainIds = [
+        2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+        30, 31, 32, 33, 34, 35, 36,
+      ];
       mainIds.forEach((a) => {
         const cycles = engine[a] || [];
         const latest = latestByValue(cycles);

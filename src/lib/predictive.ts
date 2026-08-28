@@ -46,16 +46,55 @@ function collectGaps(rows: Row[], i: number, dt: Date): number[] {
   return gaps;
 }
 
-/** Análise 1 — pedra (0..9) sai em minuto cuja unidade == pedra. */
-export function buildA1(rows: Row[]): Cycle[] {
+/** Helper: 1ª Pedra do Minuto de final X (0..9) */
+export function buildMinuteFirstStone(rows: Row[], minUnit: number, analysisId: number): Cycle[] {
   const out: Cycle[] = [];
+  const processedKeys = new Set<string>();
+
   rows.forEach((r, i) => {
-    const n = Number(r.roll);
-    if (!Number.isFinite(n) || n < 0 || n > 9) return;
     const dt = parseUtcDate(r.created_at);
     if (Number.isNaN(dt.getTime())) return;
-    if (dt.getMinutes() % 10 !== n) return;
-    out.push({ value: n, analysis: 1, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
+
+    const minutes = dt.getMinutes();
+    if (minutes % 10 !== minUnit) return;
+
+    const key = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}-${dt.getHours()}-${minutes}`;
+    if (processedKeys.has(key)) return;
+    processedKeys.add(key);
+
+    const n = Number(r.roll);
+    if (!Number.isFinite(n) || n < 0 || n > 14) return;
+
+    out.push({ value: n, analysis: analysisId, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
+  });
+  return out;
+}
+
+/** Helper: 2ª Pedra do Minuto de final X (0..9) */
+export function buildMinuteSecondStone(rows: Row[], minUnit: number, analysisId: number): Cycle[] {
+  const out: Cycle[] = [];
+  const processedKeys = new Set<string>();
+  const minuteCounts = new Map<string, number>();
+
+  rows.forEach((r, i) => {
+    const dt = parseUtcDate(r.created_at);
+    if (Number.isNaN(dt.getTime())) return;
+
+    const minutes = dt.getMinutes();
+    if (minutes % 10 !== minUnit) return;
+
+    const key = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}-${dt.getHours()}-${minutes}`;
+    const count = (minuteCounts.get(key) || 0) + 1;
+    minuteCounts.set(key, count);
+
+    if (count !== 2) return;
+    if (processedKeys.has(key)) return;
+    processedKeys.add(key);
+
+    const n = Number(r.roll);
+    if (!Number.isFinite(n) || n < 0 || n > 14) return;
+
+    out.push({ value: n, analysis: analysisId, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
   });
   return out;
 }
@@ -77,84 +116,17 @@ export function buildA2(rows: Row[]): Cycle[] {
 
 /** Análise 3 — 2ª Pedra do Minuto 9 (09, 19, 29, 39, 49, 59). */
 export function buildA3(rows: Row[]): Cycle[] {
-  const out: Cycle[] = [];
-  const processedKeys = new Set<string>();
-  const minuteCounts = new Map<string, number>();
-
-  rows.forEach((r, i) => {
-    const dt = parseUtcDate(r.created_at);
-    if (Number.isNaN(dt.getTime())) return;
-
-    const minutes = dt.getMinutes();
-    if (minutes % 10 !== 9) return;
-
-    const key = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}-${dt.getHours()}-${minutes}`;
-    const count = (minuteCounts.get(key) || 0) + 1;
-    minuteCounts.set(key, count);
-
-    if (count !== 2) return;
-    if (processedKeys.has(key)) return;
-    processedKeys.add(key);
-
-    const n = Number(r.roll);
-    if (!Number.isFinite(n) || n < 0 || n > 14) return;
-
-    out.push({ value: n, analysis: 3, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
-  });
-  return out;
+  return buildMinuteSecondStone(rows, 9, 3);
 }
 
 /** Análise 4 — 1ª Pedra do Minuto 0 (00, 10, 20, 30, 40, 50). */
 export function buildA4(rows: Row[]): Cycle[] {
-  const out: Cycle[] = [];
-  const processedKeys = new Set<string>();
-
-  rows.forEach((r, i) => {
-    const dt = parseUtcDate(r.created_at);
-    if (Number.isNaN(dt.getTime())) return;
-
-    const minutes = dt.getMinutes();
-    if (minutes % 10 !== 0) return;
-
-    const key = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}-${dt.getHours()}-${minutes}`;
-    if (processedKeys.has(key)) return;
-    processedKeys.add(key);
-
-    const n = Number(r.roll);
-    if (!Number.isFinite(n) || n < 0 || n > 14) return;
-
-    out.push({ value: n, analysis: 4, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
-  });
-  return out;
+  return buildMinuteFirstStone(rows, 0, 4);
 }
 
 /** Análise 5 — 2ª Pedra do Minuto 0 (00, 10, 20, 30, 40, 50). */
 export function buildA5(rows: Row[]): Cycle[] {
-  const out: Cycle[] = [];
-  const processedKeys = new Set<string>();
-  const minuteCounts = new Map<string, number>();
-
-  rows.forEach((r, i) => {
-    const dt = parseUtcDate(r.created_at);
-    if (Number.isNaN(dt.getTime())) return;
-
-    const minutes = dt.getMinutes();
-    if (minutes % 10 !== 0) return;
-
-    const key = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}-${dt.getHours()}-${minutes}`;
-    const count = (minuteCounts.get(key) || 0) + 1;
-    minuteCounts.set(key, count);
-
-    if (count !== 2) return;
-    if (processedKeys.has(key)) return;
-    processedKeys.add(key);
-
-    const n = Number(r.roll);
-    if (!Number.isFinite(n) || n < 0 || n > 14) return;
-
-    out.push({ value: n, analysis: 5, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
-  });
-  return out;
+  return buildMinuteSecondStone(rows, 0, 5);
 }
 
 /** Análise 10 — Gatilho 8-11: [8 -> 11]. Coleta os próximos 14 brancos. */
@@ -275,55 +247,87 @@ export function buildASoma21(rows: Row[]): Cycle[] {
 
 /** Análise 17 — 1ª Pedra do Minuto 5 (05, 15, 25, 35, 45, 55). Coleta os próximos 14 brancos. */
 export function buildA1Minuto5(rows: Row[]): Cycle[] {
-  const out: Cycle[] = [];
-  const processedKeys = new Set<string>();
-
-  rows.forEach((r, i) => {
-    const dt = parseUtcDate(r.created_at);
-    if (Number.isNaN(dt.getTime())) return;
-
-    const minutes = dt.getMinutes();
-    if (minutes % 10 !== 5) return;
-
-    const key = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}-${dt.getHours()}-${minutes}`;
-    if (processedKeys.has(key)) return;
-    processedKeys.add(key);
-
-    const n = Number(r.roll);
-    if (!Number.isFinite(n) || n < 0 || n > 14) return;
-
-    out.push({ value: n, analysis: 17, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
-  });
-  return out;
+  return buildMinuteFirstStone(rows, 5, 17);
 }
 
 /** Análise 18 — 2ª Pedra do Minuto 5 (05, 15, 25, 35, 45, 55). Coleta os próximos 14 brancos. */
 export function buildA2Minuto5(rows: Row[]): Cycle[] {
-  const out: Cycle[] = [];
-  const processedKeys = new Set<string>();
-  const minuteCounts = new Map<string, number>();
+  return buildMinuteSecondStone(rows, 5, 18);
+}
 
-  rows.forEach((r, i) => {
-    const dt = parseUtcDate(r.created_at);
-    if (Number.isNaN(dt.getTime())) return;
+/** Análise 22 — 1ª Pedra do Minuto 1 (01, 11, 21, 31, 41, 51). */
+export function buildA1Minuto1(rows: Row[]): Cycle[] {
+  return buildMinuteFirstStone(rows, 1, 22);
+}
 
-    const minutes = dt.getMinutes();
-    if (minutes % 10 !== 5) return;
+/** Análise 23 — 2ª Pedra do Minuto 1 (01, 11, 21, 31, 41, 51). */
+export function buildA2Minuto1(rows: Row[]): Cycle[] {
+  return buildMinuteSecondStone(rows, 1, 23);
+}
 
-    const key = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}-${dt.getHours()}-${minutes}`;
-    const count = (minuteCounts.get(key) || 0) + 1;
-    minuteCounts.set(key, count);
+/** Análise 24 — 1ª Pedra do Minuto 2 (02, 12, 22, 32, 42, 52). */
+export function buildA1Minuto2(rows: Row[]): Cycle[] {
+  return buildMinuteFirstStone(rows, 2, 24);
+}
 
-    if (count !== 2) return;
-    if (processedKeys.has(key)) return;
-    processedKeys.add(key);
+/** Análise 25 — 2ª Pedra do Minuto 2 (02, 12, 22, 32, 42, 52). */
+export function buildA2Minuto2(rows: Row[]): Cycle[] {
+  return buildMinuteSecondStone(rows, 2, 25);
+}
 
-    const n = Number(r.roll);
-    if (!Number.isFinite(n) || n < 0 || n > 14) return;
+/** Análise 26 — 1ª Pedra do Minuto 3 (03, 13, 23, 33, 43, 53). */
+export function buildA1Minuto3(rows: Row[]): Cycle[] {
+  return buildMinuteFirstStone(rows, 3, 26);
+}
 
-    out.push({ value: n, analysis: 18, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
-  });
-  return out;
+/** Análise 27 — 2ª Pedra do Minuto 3 (03, 13, 23, 33, 43, 53). */
+export function buildA2Minuto3(rows: Row[]): Cycle[] {
+  return buildMinuteSecondStone(rows, 3, 27);
+}
+
+/** Análise 28 — 1ª Pedra do Minuto 4 (04, 14, 24, 34, 44, 54). */
+export function buildA1Minuto4(rows: Row[]): Cycle[] {
+  return buildMinuteFirstStone(rows, 4, 28);
+}
+
+/** Análise 29 — 2ª Pedra do Minuto 4 (04, 14, 24, 34, 44, 54). */
+export function buildA2Minuto4(rows: Row[]): Cycle[] {
+  return buildMinuteSecondStone(rows, 4, 29);
+}
+
+/** Análise 30 — 1ª Pedra do Minuto 6 (06, 16, 26, 36, 46, 56). */
+export function buildA1Minuto6(rows: Row[]): Cycle[] {
+  return buildMinuteFirstStone(rows, 6, 30);
+}
+
+/** Análise 31 — 2ª Pedra do Minuto 6 (06, 16, 26, 36, 46, 56). */
+export function buildA2Minuto6(rows: Row[]): Cycle[] {
+  return buildMinuteSecondStone(rows, 6, 31);
+}
+
+/** Análise 32 — 1ª Pedra do Minuto 7 (07, 17, 27, 37, 47, 57). */
+export function buildA1Minuto7(rows: Row[]): Cycle[] {
+  return buildMinuteFirstStone(rows, 7, 32);
+}
+
+/** Análise 33 — 2ª Pedra do Minuto 7 (07, 17, 27, 37, 47, 57). */
+export function buildA2Minuto7(rows: Row[]): Cycle[] {
+  return buildMinuteSecondStone(rows, 7, 33);
+}
+
+/** Análise 34 — 1ª Pedra do Minuto 8 (08, 18, 28, 38, 48, 58). */
+export function buildA1Minuto8(rows: Row[]): Cycle[] {
+  return buildMinuteFirstStone(rows, 8, 34);
+}
+
+/** Análise 35 — 2ª Pedra do Minuto 8 (08, 18, 28, 38, 48, 58). */
+export function buildA2Minuto8(rows: Row[]): Cycle[] {
+  return buildMinuteSecondStone(rows, 8, 35);
+}
+
+/** Análise 36 — 1ª Pedra do Minuto 9 (09, 19, 29, 39, 49, 59). */
+export function buildA1Minuto9(rows: Row[]): Cycle[] {
+  return buildMinuteFirstStone(rows, 9, 36);
 }
 
 /**

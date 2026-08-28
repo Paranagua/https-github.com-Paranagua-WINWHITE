@@ -29,7 +29,6 @@ import { Switch } from "@/components/ui/switch";
 import { PredictiveSignals } from "@/components/double/PredictiveSignals";
 
 const ALL_ANALYSES_METADATA = [
-  { key: "A1", label: "A1 · P=M" },
   { key: "A2", label: "A2 · Rep. Simples" },
   { key: "A3", label: "A3 · 2ª Pedra (Min 9)" },
   { key: "A4", label: "A4 · 1ª Dezena (Min 0)" },
@@ -46,6 +45,21 @@ const ALL_ANALYSES_METADATA = [
   { key: "A19", label: "A19 · Sanduíche (Pontas)" },
   { key: "A20", label: "A20 · Sanduíche (Meio)" },
   { key: "A21", label: "A21 · Gatilho 7↔11" },
+  { key: "A22", label: "A22 · 1ª Pedra (Min 1)" },
+  { key: "A23", label: "A23 · 2ª Pedra (Min 1)" },
+  { key: "A24", label: "A24 · 1ª Pedra (Min 2)" },
+  { key: "A25", label: "A25 · 2ª Pedra (Min 2)" },
+  { key: "A26", label: "A26 · 1ª Pedra (Min 3)" },
+  { key: "A27", label: "A27 · 2ª Pedra (Min 3)" },
+  { key: "A28", label: "A28 · 1ª Pedra (Min 4)" },
+  { key: "A29", label: "A29 · 2ª Pedra (Min 4)" },
+  { key: "A30", label: "A30 · 1ª Pedra (Min 6)" },
+  { key: "A31", label: "A31 · 2ª Pedra (Min 6)" },
+  { key: "A32", label: "A32 · 1ª Pedra (Min 7)" },
+  { key: "A33", label: "A33 · 2ª Pedra (Min 7)" },
+  { key: "A34", label: "A34 · 1ª Pedra (Min 8)" },
+  { key: "A35", label: "A35 · 2ª Pedra (Min 8)" },
+  { key: "A36", label: "A36 · 1ª Pedra (Min 9)" },
 ];
 
 type Result = {
