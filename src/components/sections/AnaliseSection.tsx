@@ -1,7 +1,6 @@
 import { parseUtcDate } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Loader2, Sparkles, Clock, Layers, Shuffle, Plus } from "lucide-react";
 import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
 import { Card } from "@/components/double/Card";
 import {
@@ -181,14 +180,6 @@ function AnalysisPanel({
 
   const { rows: topRows, totalRows } = useMemo(() => computeTop3(uiCycles), [uiCycles]);
 
-  const chartData = useMemo(() => {
-    return topRows.map((r, i) => ({
-      name: `Top ${i + 1} (${r.label}m)`,
-      pct: Number(r.pct.toFixed(1)),
-      count: r.count,
-    }));
-  }, [topRows]);
-
   return (
     <Card className="glass-card p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -272,45 +263,72 @@ function AnalysisPanel({
             </table>
           </div>
 
-          {/* Gráfico Top 3 */}
-          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 lg:col-span-5">
-            <div className="mb-3 text-[10px] font-black uppercase tracking-wider text-primary">
-              Top 3 Tempos mais Recorrentes ({totalRows} ciclos)
+          {/* Top Tempos Mais Recorrentes - Apenas Porcentagens */}
+          <div className="flex flex-col justify-between rounded-xl border border-white/10 bg-white/[0.02] p-4 lg:col-span-5">
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[10px] font-black uppercase tracking-wider text-primary">
+                  Top Tempos Recorrentes
+                </span>
+                <span className="text-[10px] font-bold text-muted-foreground font-mono">
+                  {totalRows} {totalRows === 1 ? "ciclo" : "ciclos"}
+                </span>
+              </div>
+
+              {topRows.length > 0 ? (
+                <div className="flex flex-col gap-2.5">
+                  {topRows.map((r, i) => {
+                    const rankBadgeColors = [
+                      "text-amber-300 border-amber-500/30 bg-amber-500/15",
+                      "text-slate-200 border-slate-400/30 bg-slate-400/15",
+                      "text-amber-600 border-amber-700/30 bg-amber-700/15",
+                    ];
+                    const barFillColors = ["bg-amber-400", "bg-slate-300", "bg-amber-600"];
+                    return (
+                      <div
+                        key={r.m}
+                        className="rounded-lg border border-white/[0.07] bg-white/[0.02] p-2.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-black border ${
+                                rankBadgeColors[i] || "text-primary border-primary/30 bg-primary/10"
+                              }`}
+                            >
+                              #{i + 1}
+                            </span>
+                            <span className="font-mono text-xs font-bold text-white">
+                              {r.label} min
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 font-mono">
+                            <span className="text-sm font-black text-white">
+                              {r.pct.toFixed(1)}%
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">({r.count}x)</span>
+                          </div>
+                        </div>
+
+                        {/* Barra de porcentagem visual e limpa */}
+                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              barFillColors[i] || "bg-primary"
+                            }`}
+                            style={{ width: `${Math.min(100, Math.max(4, r.pct))}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex h-36 items-center justify-center text-xs text-muted-foreground">
+                  Dados insuficientes para calcular porcentagens
+                </div>
+              )}
             </div>
-            {chartData.length > 0 ? (
-              <div className="h-44 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
-                    <XAxis dataKey="name" stroke="#ffffff40" fontSize={9} tickLine={false} />
-                    <YAxis
-                      stroke="#ffffff40"
-                      fontSize={9}
-                      tickLine={false}
-                      domain={[0, 100]}
-                      tickFormatter={(v) => `${v}%`}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#0f172a",
-                        borderColor: "#ffffff20",
-                        borderRadius: "8px",
-                        fontSize: "11px",
-                      }}
-                      formatter={(value: any, _: any, item: any) => [
-                        `${value}% (${item.payload.count}x)`,
-                        "Frequência",
-                      ]}
-                    />
-                    <Bar dataKey="pct" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="flex h-44 items-center justify-center text-xs text-muted-foreground">
-                Dados insuficientes para gerar Top 3
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -323,6 +341,7 @@ export default function AnaliseSection() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [selected, setSelected] = useState<number>(1);
+  const [activeCategory, setActiveCategory] = useState<string>("all");
   const [now, setNow] = useState<Date>(new Date());
 
   useEffect(() => {
@@ -349,7 +368,7 @@ export default function AnaliseSection() {
         setRows(sorted);
       } catch (e: any) {
         if (!alive) return;
-        setErr(e?.message || "Erro ao carregar dados do banco");
+        setErr(e?.message || "Erro ao carregar dados");
       } finally {
         if (alive) setLoading(false);
       }
@@ -357,31 +376,34 @@ export default function AnaliseSection() {
 
     loadData();
 
-    const channel = supabase
-      .channel("analise_section_realtime")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "blaze_results" },
-        (payload) => {
-          if (!alive || !payload.new) return;
+    const poll = setInterval(async () => {
+      try {
+        const { data } = await supabase
+          .from("blaze_results")
+          .select("id, roll, color, created_at")
+          .order("id", { ascending: false })
+          .limit(10);
+        if (data && data.length > 0 && alive) {
           setRows((prev) => {
-            const newItem = payload.new as Row;
-            if (prev.some((r) => String(r.id) === String(newItem.id))) return prev;
-            return [...prev, newItem];
+            const ids = new Set(prev.map((r) => r.id));
+            const fresh = data.filter((r) => !ids.has(r.id)).reverse();
+            if (fresh.length === 0) return prev;
+            return [...prev, ...fresh];
           });
-        },
-      )
-      .subscribe();
+        }
+      } catch {
+        // silencioso
+      }
+    }, 4000);
 
     return () => {
       alive = false;
-      supabase.removeChannel(channel);
+      clearInterval(poll);
     };
   }, []);
 
   // Análises calculadas em memória com base em blaze_results
-  const a2Cycles = useMemo(() => buildA2(rows), [rows]);
-  const a3Cycles = useMemo(() => buildA3(rows), [rows]);
+  // 1. Minutos (0 a 9 em ordem cronológica)
   const a4Cycles = useMemo(() => buildA4(rows), [rows]);
   const a5Cycles = useMemo(() => buildA5(rows), [rows]);
   const a1Min1Cycles = useMemo(() => buildA1Minuto1(rows), [rows]);
@@ -401,16 +423,24 @@ export default function AnaliseSection() {
   const a1Min8Cycles = useMemo(() => buildA1Minuto8(rows), [rows]);
   const a2Min8Cycles = useMemo(() => buildA2Minuto8(rows), [rows]);
   const a1Min9Cycles = useMemo(() => buildA1Minuto9(rows), [rows]);
-  const aSoma17Cycles = useMemo(() => buildASoma17(rows), [rows]);
-  const aSoma19Cycles = useMemo(() => buildASoma19(rows), [rows]);
-  const aSoma21Cycles = useMemo(() => buildASoma21(rows), [rows]);
+  const a3Cycles = useMemo(() => buildA3(rows), [rows]);
+
+  // 2. Padrões de Pedra
+  const a2Cycles = useMemo(() => buildA2(rows), [rows]);
   const aSandwichPontasCycles = useMemo(() => buildASandwichPontas(rows), [rows]);
   const aSandwichMeioCycles = useMemo(() => buildASandwichMeio(rows), [rows]);
+
+  // 3. Gatilhos & Sequências
   const a8_11Cycles = useMemo(() => buildA8_11(rows), [rows]);
   const a11_11Cycles = useMemo(() => buildA11_11(rows), [rows]);
   const a4_11Cycles = useMemo(() => buildA4_11(rows), [rows]);
   const a4_14Cycles = useMemo(() => buildA4_14(rows), [rows]);
   const a7_11Cycles = useMemo(() => buildA7_11(rows), [rows]);
+
+  // 4. Somas Consecutivas
+  const aSoma17Cycles = useMemo(() => buildASoma17(rows), [rows]);
+  const aSoma19Cycles = useMemo(() => buildASoma19(rows), [rows]);
+  const aSoma21Cycles = useMemo(() => buildASoma21(rows), [rows]);
 
   // Estatísticas agregadas para o seletor superior de pedras 0..14
   const stats = useMemo(() => {
@@ -421,7 +451,6 @@ export default function AnaliseSection() {
     ALL_NUMBERS.forEach((n) => (s[n] = { total: 0, fullyCompleted: 0, totalGaps: 0, sumGaps: 0 }));
 
     const allStoneLists = [
-      a2Cycles,
       a4Cycles,
       a5Cycles,
       a1Min1Cycles,
@@ -442,6 +471,7 @@ export default function AnaliseSection() {
       a2Min8Cycles,
       a1Min9Cycles,
       a3Cycles,
+      a2Cycles,
       aSandwichPontasCycles,
       aSandwichMeioCycles,
     ];
@@ -471,7 +501,6 @@ export default function AnaliseSection() {
     });
     return finalStats;
   }, [
-    a2Cycles,
     a4Cycles,
     a5Cycles,
     a1Min1Cycles,
@@ -492,9 +521,23 @@ export default function AnaliseSection() {
     a2Min8Cycles,
     a1Min9Cycles,
     a3Cycles,
+    a2Cycles,
     aSandwichPontasCycles,
     aSandwichMeioCycles,
   ]);
+
+  const categories = [
+    { id: "all", label: "Todas as Análises", icon: Sparkles },
+    { id: "minutes", label: "Minutos (0 a 9)", icon: Clock },
+    { id: "patterns", label: "Padrões de Pedra", icon: Layers },
+    { id: "sequences", label: "Gatilhos de Sequência", icon: Shuffle },
+    { id: "sums", label: "Somas Consecutivas", icon: Plus },
+  ];
+
+  const showMinutes = activeCategory === "all" || activeCategory === "minutes";
+  const showPatterns = activeCategory === "all" || activeCategory === "patterns";
+  const showSequences = activeCategory === "all" || activeCategory === "sequences";
+  const showSums = activeCategory === "all" || activeCategory === "sums";
 
   return (
     <main className="mx-auto flex w-full max-w-[1440px] flex-col gap-5 px-4 py-8 sm:gap-6 sm:px-6 sm:py-10">
@@ -506,10 +549,11 @@ export default function AnaliseSection() {
           Ciclos de espera até o branco (0)
         </h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Selecione a pedra (0 a 14) para inspecionar os ciclos e tempos de latência até o branco em
-          cada análise.
+          Selecione a pedra (0 a 14) para inspecionar os ciclos e porcentagens de latência até o
+          branco em cada análise.
         </p>
 
+        {/* Seletor de Pedra 0 a 14 */}
         <div className="mt-5 grid grid-cols-5 gap-2 sm:grid-cols-8 md:grid-cols-[repeat(15,minmax(0,1fr))]">
           {ALL_NUMBERS.map((n) => {
             const st = stats[n] ?? { total: 0, fullyCompleted: 0, avg: null };
@@ -535,411 +579,518 @@ export default function AnaliseSection() {
             );
           })}
         </div>
+
+        {/* Filtro de Categorias de Análise */}
+        <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-white/10 pt-4">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mr-1">
+            Filtrar:
+          </span>
+          {categories.map((cat) => {
+            const Icon = cat.icon;
+            const isActive = activeCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setActiveCategory(cat.id)}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-all ${
+                  isActive
+                    ? "border-primary/60 bg-primary/20 text-white shadow-[0_0_15px_rgba(59,130,246,0.25)]"
+                    : "border-white/10 bg-white/[0.03] text-muted-foreground hover:bg-white/[0.06] hover:text-white"
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{cat.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </Card>
 
-      <AnalysisPanel
-        key={`${selected}-a2`}
-        eyebrow="Análise 2 · Repetição Simples"
-        title={`PEDRA ${selected}`}
-        subtitle="Gatilho: a pedra sai duas vezes seguidas na roleta. Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de repetição dupla registrado recentemente."
-        cycles={a2Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `Repetição ${c.value}→${c.value}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a4`}
-        eyebrow="Análise 4 · Primeira Pedra do Minuto #0"
-        title={`PEDRA ${selected}`}
-        subtitle="Primeira pedra registrada no minuto #0 (00, 10, 20, 30, 40, 50). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de minuto #0 registrado recentemente."
-        cycles={a4Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a5`}
-        eyebrow="Análise 5 · Segunda Pedra do Minuto #0"
-        title={`PEDRA ${selected}`}
-        subtitle="Segunda pedra registrada no minuto #0 (00, 10, 20, 30, 40, 50). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de segunda pedra do minuto #0 registrado recentemente."
-        cycles={a5Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a22`}
-        eyebrow="Análise 22 · Primeira Pedra do Minuto #1"
-        title={`PEDRA ${selected}`}
-        subtitle="Primeira pedra registrada no minuto #1 (01, 11, 21, 31, 41, 51). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de primeira pedra do minuto #1 registrado recentemente."
-        cycles={a1Min1Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a23`}
-        eyebrow="Análise 23 · Segunda Pedra do Minuto #1"
-        title={`PEDRA ${selected}`}
-        subtitle="Segunda pedra registrada no minuto #1 (01, 11, 21, 31, 41, 51). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de segunda pedra do minuto #1 registrado recentemente."
-        cycles={a2Min1Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a24`}
-        eyebrow="Análise 24 · Primeira Pedra do Minuto #2"
-        title={`PEDRA ${selected}`}
-        subtitle="Primeira pedra registrada no minuto #2 (02, 12, 22, 32, 42, 52). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de primeira pedra do minuto #2 registrado recentemente."
-        cycles={a1Min2Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a25`}
-        eyebrow="Análise 25 · Segunda Pedra do Minuto #2"
-        title={`PEDRA ${selected}`}
-        subtitle="Segunda pedra registrada no minuto #2 (02, 12, 22, 32, 42, 52). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de segunda pedra do minuto #2 registrado recentemente."
-        cycles={a2Min2Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a26`}
-        eyebrow="Análise 26 · Primeira Pedra do Minuto #3"
-        title={`PEDRA ${selected}`}
-        subtitle="Primeira pedra registrada no minuto #3 (03, 13, 23, 33, 43, 53). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de primeira pedra do minuto #3 registrado recentemente."
-        cycles={a1Min3Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a27`}
-        eyebrow="Análise 27 · Segunda Pedra do Minuto #3"
-        title={`PEDRA ${selected}`}
-        subtitle="Segunda pedra registrada no minuto #3 (03, 13, 23, 33, 43, 53). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de segunda pedra do minuto #3 registrado recentemente."
-        cycles={a2Min3Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a28`}
-        eyebrow="Análise 28 · Primeira Pedra do Minuto #4"
-        title={`PEDRA ${selected}`}
-        subtitle="Primeira pedra registrada no minuto #4 (04, 14, 24, 34, 44, 54). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de primeira pedra do minuto #4 registrado recentemente."
-        cycles={a1Min4Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a29`}
-        eyebrow="Análise 29 · Segunda Pedra do Minuto #4"
-        title={`PEDRA ${selected}`}
-        subtitle="Segunda pedra registrada no minuto #4 (04, 14, 24, 34, 44, 54). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de segunda pedra do minuto #4 registrado recentemente."
-        cycles={a2Min4Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a17`}
-        eyebrow="Análise 17 · Primeira Pedra do Minuto #5"
-        title={`PEDRA ${selected}`}
-        subtitle="Primeira pedra registrada nos minutos de final 5 (05, 15, 25, 35, 45, 55). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de primeira pedra do minuto 5 registrado recentemente."
-        cycles={a1Min5Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `1ª min 5 (${String(c.triggerAt.getMinutes()).padStart(2, "0")})`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a18`}
-        eyebrow="Análise 18 · Segunda Pedra do Minuto #5"
-        title={`PEDRA ${selected}`}
-        subtitle="Segunda pedra registrada nos minutos de final 5 (05, 15, 25, 35, 45, 55). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de segunda pedra do minuto 5 registrado recentemente."
-        cycles={a2Min5Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `2ª min 5 (${String(c.triggerAt.getMinutes()).padStart(2, "0")})`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a30`}
-        eyebrow="Análise 30 · Primeira Pedra do Minuto #6"
-        title={`PEDRA ${selected}`}
-        subtitle="Primeira pedra registrada no minuto #6 (06, 16, 26, 36, 46, 56). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de primeira pedra do minuto #6 registrado recentemente."
-        cycles={a1Min6Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a31`}
-        eyebrow="Análise 31 · Segunda Pedra do Minuto #6"
-        title={`PEDRA ${selected}`}
-        subtitle="Segunda pedra registrada no minuto #6 (06, 16, 26, 36, 46, 56). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de segunda pedra do minuto #6 registrado recentemente."
-        cycles={a2Min6Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a32`}
-        eyebrow="Análise 32 · Primeira Pedra do Minuto #7"
-        title={`PEDRA ${selected}`}
-        subtitle="Primeira pedra registrada no minuto #7 (07, 17, 27, 37, 47, 57). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de primeira pedra do minuto #7 registrado recentemente."
-        cycles={a1Min7Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a33`}
-        eyebrow="Análise 33 · Segunda Pedra do Minuto #7"
-        title={`PEDRA ${selected}`}
-        subtitle="Segunda pedra registrada no minuto #7 (07, 17, 27, 37, 47, 57). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de segunda pedra do minuto #7 registrado recentemente."
-        cycles={a2Min7Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a34`}
-        eyebrow="Análise 34 · Primeira Pedra do Minuto #8"
-        title={`PEDRA ${selected}`}
-        subtitle="Primeira pedra registrada no minuto #8 (08, 18, 28, 38, 48, 58). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de primeira pedra do minuto #8 registrado recentemente."
-        cycles={a1Min8Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a35`}
-        eyebrow="Análise 35 · Segunda Pedra do Minuto #8"
-        title={`PEDRA ${selected}`}
-        subtitle="Segunda pedra registrada no minuto #8 (08, 18, 28, 38, 48, 58). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de segunda pedra do minuto #8 registrado recentemente."
-        cycles={a2Min8Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a36`}
-        eyebrow="Análise 36 · Primeira Pedra do Minuto #9"
-        title={`PEDRA ${selected}`}
-        subtitle="Primeira pedra registrada no minuto #9 (09, 19, 29, 39, 49, 59). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de primeira pedra do minuto #9 registrado recentemente."
-        cycles={a1Min9Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a3`}
-        eyebrow="Análise 3 · Segunda Pedra do Minuto #9"
-        title={`PEDRA ${selected}`}
-        subtitle="Segunda pedra registrada no minuto #9 (09, 19, 29, 39, 49, 59). Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de segunda pedra do minuto #9 registrado recentemente."
-        cycles={a3Cycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a19`}
-        eyebrow="Análise 19 · Sanduíche (Pontas Iguais)"
-        title={`PEDRA ${selected}`}
-        subtitle="Gatilho: P1 - P2 - P1 com P2 != P1. Tempo até o branco indexado pela numeração da 1ª e última pedra (P1)."
-        loading={loading}
-        err={err}
-        emptyLabel={`Nenhum gatilho de sanduíche com pontas na pedra ${selected} registrado.`}
-        cycles={aSandwichPontasCycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `Sanduíche Ponta (${c.value})`}
-      />
-      <AnalysisPanel
-        key={`${selected}-a20`}
-        eyebrow="Análise 20 · Sanduíche (Pedra do Meio)"
-        title={`PEDRA ${selected}`}
-        subtitle="Gatilho: P1 - P2 - P1 com P2 != P1. Tempo até o branco indexado pela numeração da pedra do meio (P2)."
-        loading={loading}
-        err={err}
-        emptyLabel={`Nenhum gatilho de sanduíche com meio na pedra ${selected} registrado.`}
-        cycles={aSandwichMeioCycles}
-        pedra={selected}
-        now={now}
-        detailFormatter={(c) => `Sanduíche Meio (${c.value})`}
-      />
-      <AnalysisPanel
-        key="soma-17"
-        eyebrow="Análise 14 · Soma 17 Consecutiva"
-        title="SOMA 17"
-        subtitle="Gatilho: duas pedras consecutivas somando 17. Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de soma 17 registrado recentemente."
-        cycles={aSoma17Cycles}
-        pedra={17}
-        now={now}
-        detailFormatter={(c) => `Soma 17 às ${fmtTime(c.triggerAt)}`}
-      />
-      <AnalysisPanel
-        key="soma-19"
-        eyebrow="Análise 15 · Soma 19 Consecutiva"
-        title="SOMA 19"
-        subtitle="Gatilho: duas pedras consecutivas somando 19. Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de soma 19 registrado recentemente."
-        cycles={aSoma19Cycles}
-        pedra={19}
-        now={now}
-        detailFormatter={(c) => `Soma 19 às ${fmtTime(c.triggerAt)}`}
-      />
-      <AnalysisPanel
-        key="soma-21"
-        eyebrow="Análise 16 · Soma 21 Consecutiva"
-        title="SOMA 21"
-        subtitle="Gatilho: duas pedras consecutivas somando 21. Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho de soma 21 registrado recentemente."
-        cycles={aSoma21Cycles}
-        pedra={21}
-        now={now}
-        detailFormatter={(c) => `Soma 21 às ${fmtTime(c.triggerAt)}`}
-      />
-      <AnalysisPanel
-        key="gatilho-8-11"
-        eyebrow="Análise 10 · Gatilho 8→11"
-        title="GATILHO 8 → 11"
-        subtitle="Gatilho: sequência [8 -> 11]. Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho 8→11 registrado recentemente."
-        cycles={a8_11Cycles}
-        pedra={811}
-        now={now}
-        detailFormatter={(c) => `8→11 às ${fmtTime(c.triggerAt)}`}
-      />
-      <AnalysisPanel
-        key="gatilho-11-11"
-        eyebrow="Análise 11 · Gatilho 11→11"
-        title="GATILHO 11 → 11"
-        subtitle="Gatilho: sequência [11 -> 11]. Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho 11→11 registrado recentemente."
-        cycles={a11_11Cycles}
-        pedra={1111}
-        now={now}
-        detailFormatter={(c) => `11→11 às ${fmtTime(c.triggerAt)}`}
-      />
-      <AnalysisPanel
-        key="gatilho-4-11"
-        eyebrow="Análise 12 · Gatilho 4→11"
-        title="GATILHO 4 → 11"
-        subtitle="Gatilho: sequência [4 -> 11]. Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho 4→11 registrado recentemente."
-        cycles={a4_11Cycles}
-        pedra={411}
-        now={now}
-        detailFormatter={(c) => `4→11 às ${fmtTime(c.triggerAt)}`}
-      />
-      <AnalysisPanel
-        key="gatilho-4-14"
-        eyebrow="Análise 13 · Gatilho 4↔14"
-        title="GATILHO 4 ↔ 14"
-        subtitle="Gatilho: sequências [4 -> 14] ou [14 -> 4]. Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho 4↔14 registrado recentemente."
-        cycles={a4_14Cycles}
-        pedra={414}
-        now={now}
-        detailFormatter={(c) => `4↔14 às ${fmtTime(c.triggerAt)}`}
-      />
-      <AnalysisPanel
-        key="gatilho-7-11"
-        eyebrow="Análise 21 · Gatilho 7↔11"
-        title="GATILHO 7 ↔ 11"
-        subtitle="Gatilho: sequências [7 -> 11] ou [11 -> 7]. Analisa até 14 tempos de Branco."
-        loading={loading}
-        err={err}
-        emptyLabel="Nenhum gatilho 7↔11 registrado recentemente."
-        cycles={a7_11Cycles}
-        pedra={711}
-        now={now}
-        detailFormatter={(c) => `7↔11 às ${fmtTime(c.triggerAt)}`}
-      />
+      {/* 1. SEÇÃO DE MINUTOS (0 A 9 EM ORDEM CRONOLÓGICA) */}
+      {showMinutes && (
+        <>
+          {/* Minuto 0 */}
+          <AnalysisPanel
+            key={`${selected}-a4`}
+            eyebrow="Análise 4 · Minuto 0 (1ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Primeira pedra registrada nos minutos de final 0 (00, 10, 20, 30, 40, 50). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de minuto #0 registrado recentemente."
+            cycles={a4Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+          <AnalysisPanel
+            key={`${selected}-a5`}
+            eyebrow="Análise 5 · Minuto 0 (2ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Segunda pedra registrada nos minutos de final 0 (00, 10, 20, 30, 40, 50). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de segunda pedra do minuto #0 registrado recentemente."
+            cycles={a5Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+
+          {/* Minuto 1 */}
+          <AnalysisPanel
+            key={`${selected}-a22`}
+            eyebrow="Análise 22 · Minuto 1 (1ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Primeira pedra registrada nos minutos de final 1 (01, 11, 21, 31, 41, 51). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de primeira pedra do minuto #1 registrado recentemente."
+            cycles={a1Min1Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+          <AnalysisPanel
+            key={`${selected}-a23`}
+            eyebrow="Análise 23 · Minuto 1 (2ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Segunda pedra registrada nos minutos de final 1 (01, 11, 21, 31, 41, 51). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de segunda pedra do minuto #1 registrado recentemente."
+            cycles={a2Min1Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+
+          {/* Minuto 2 */}
+          <AnalysisPanel
+            key={`${selected}-a24`}
+            eyebrow="Análise 24 · Minuto 2 (1ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Primeira pedra registrada nos minutos de final 2 (02, 12, 22, 32, 42, 52). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de primeira pedra do minuto #2 registrado recentemente."
+            cycles={a1Min2Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+          <AnalysisPanel
+            key={`${selected}-a25`}
+            eyebrow="Análise 25 · Minuto 2 (2ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Segunda pedra registrada nos minutos de final 2 (02, 12, 22, 32, 42, 52). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de segunda pedra do minuto #2 registrado recentemente."
+            cycles={a2Min2Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+
+          {/* Minuto 3 */}
+          <AnalysisPanel
+            key={`${selected}-a26`}
+            eyebrow="Análise 26 · Minuto 3 (1ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Primeira pedra registrada nos minutos de final 3 (03, 13, 23, 33, 43, 53). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de primeira pedra do minuto #3 registrado recentemente."
+            cycles={a1Min3Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+          <AnalysisPanel
+            key={`${selected}-a27`}
+            eyebrow="Análise 27 · Minuto 3 (2ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Segunda pedra registrada nos minutos de final 3 (03, 13, 23, 33, 43, 53). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de segunda pedra do minuto #3 registrado recentemente."
+            cycles={a2Min3Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+
+          {/* Minuto 4 */}
+          <AnalysisPanel
+            key={`${selected}-a28`}
+            eyebrow="Análise 28 · Minuto 4 (1ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Primeira pedra registrada nos minutos de final 4 (04, 14, 24, 34, 44, 54). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de primeira pedra do minuto #4 registrado recentemente."
+            cycles={a1Min4Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+          <AnalysisPanel
+            key={`${selected}-a29`}
+            eyebrow="Análise 29 · Minuto 4 (2ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Segunda pedra registrada nos minutos de final 4 (04, 14, 24, 34, 44, 54). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de segunda pedra do minuto #4 registrado recentemente."
+            cycles={a2Min4Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+
+          {/* Minuto 5 */}
+          <AnalysisPanel
+            key={`${selected}-a17`}
+            eyebrow="Análise 17 · Minuto 5 (1ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Primeira pedra registrada nos minutos de final 5 (05, 15, 25, 35, 45, 55). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de primeira pedra do minuto 5 registrado recentemente."
+            cycles={a1Min5Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `1ª min 5 (${String(c.triggerAt.getMinutes()).padStart(2, "0")})`
+            }
+          />
+          <AnalysisPanel
+            key={`${selected}-a18`}
+            eyebrow="Análise 18 · Minuto 5 (2ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Segunda pedra registrada nos minutos de final 5 (05, 15, 25, 35, 45, 55). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de segunda pedra do minuto 5 registrado recentemente."
+            cycles={a2Min5Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `2ª min 5 (${String(c.triggerAt.getMinutes()).padStart(2, "0")})`
+            }
+          />
+
+          {/* Minuto 6 */}
+          <AnalysisPanel
+            key={`${selected}-a30`}
+            eyebrow="Análise 30 · Minuto 6 (1ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Primeira pedra registrada nos minutos de final 6 (06, 16, 26, 36, 46, 56). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de primeira pedra do minuto #6 registrado recentemente."
+            cycles={a1Min6Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+          <AnalysisPanel
+            key={`${selected}-a31`}
+            eyebrow="Análise 31 · Minuto 6 (2ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Segunda pedra registrada nos minutos de final 6 (06, 16, 26, 36, 46, 56). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de segunda pedra do minuto #6 registrado recentemente."
+            cycles={a2Min6Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+
+          {/* Minuto 7 */}
+          <AnalysisPanel
+            key={`${selected}-a32`}
+            eyebrow="Análise 32 · Minuto 7 (1ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Primeira pedra registrada nos minutos de final 7 (07, 17, 27, 37, 47, 57). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de primeira pedra do minuto #7 registrado recentemente."
+            cycles={a1Min7Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+          <AnalysisPanel
+            key={`${selected}-a33`}
+            eyebrow="Análise 33 · Minuto 7 (2ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Segunda pedra registrada nos minutos de final 7 (07, 17, 27, 37, 47, 57). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de segunda pedra do minuto #7 registrado recentemente."
+            cycles={a2Min7Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+
+          {/* Minuto 8 */}
+          <AnalysisPanel
+            key={`${selected}-a34`}
+            eyebrow="Análise 34 · Minuto 8 (1ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Primeira pedra registrada nos minutos de final 8 (08, 18, 28, 38, 48, 58). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de primeira pedra do minuto #8 registrado recentemente."
+            cycles={a1Min8Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+          <AnalysisPanel
+            key={`${selected}-a35`}
+            eyebrow="Análise 35 · Minuto 8 (2ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Segunda pedra registrada nos minutos de final 8 (08, 18, 28, 38, 48, 58). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de segunda pedra do minuto #8 registrado recentemente."
+            cycles={a2Min8Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+
+          {/* Minuto 9 */}
+          <AnalysisPanel
+            key={`${selected}-a36`}
+            eyebrow="Análise 36 · Minuto 9 (1ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Primeira pedra registrada nos minutos de final 9 (09, 19, 29, 39, 49, 59). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de primeira pedra do minuto #9 registrado recentemente."
+            cycles={a1Min9Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+          <AnalysisPanel
+            key={`${selected}-a3`}
+            eyebrow="Análise 3 · Minuto 9 (2ª Pedra)"
+            title={`PEDRA ${selected}`}
+            subtitle="Segunda pedra registrada nos minutos de final 9 (09, 19, 29, 39, 49, 59). Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de segunda pedra do minuto #9 registrado recentemente."
+            cycles={a3Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) =>
+              `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
+            }
+          />
+        </>
+      )}
+
+      {/* 2. SEÇÃO DE PADRÕES DE PEDRA */}
+      {showPatterns && (
+        <>
+          <AnalysisPanel
+            key={`${selected}-a2`}
+            eyebrow="Análise 2 · Repetição Simples (X → X)"
+            title={`PEDRA ${selected}`}
+            subtitle="Gatilho: a mesma pedra sai duas vezes seguidas na roleta. Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de repetição dupla registrado recentemente."
+            cycles={a2Cycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) => `Repetição ${c.value}→${c.value}`}
+          />
+          <AnalysisPanel
+            key={`${selected}-a19`}
+            eyebrow="Análise 19 · Sanduíche (Pontas Iguais)"
+            title={`PEDRA ${selected}`}
+            subtitle="Gatilho: P1 - P2 - P1 com P2 != P1. Tempo até o branco indexado pela numeração das pontas (P1)."
+            loading={loading}
+            err={err}
+            emptyLabel={`Nenhum gatilho de sanduíche com pontas na pedra ${selected} registrado.`}
+            cycles={aSandwichPontasCycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) => `Sanduíche Ponta (${c.value})`}
+          />
+          <AnalysisPanel
+            key={`${selected}-a20`}
+            eyebrow="Análise 20 · Sanduíche (Pedra Central)"
+            title={`PEDRA ${selected}`}
+            subtitle="Gatilho: P1 - P2 - P1 com P2 != P1. Tempo até o branco indexado pela numeração da pedra central (P2)."
+            loading={loading}
+            err={err}
+            emptyLabel={`Nenhum gatilho de sanduíche com meio na pedra ${selected} registrado.`}
+            cycles={aSandwichMeioCycles}
+            pedra={selected}
+            now={now}
+            detailFormatter={(c) => `Sanduíche Meio (${c.value})`}
+          />
+        </>
+      )}
+
+      {/* 3. SEÇÃO DE GATILHOS DE SEQUÊNCIA */}
+      {showSequences && (
+        <>
+          <AnalysisPanel
+            key="gatilho-8-11"
+            eyebrow="Análise 10 · Gatilho 8 → 11"
+            title="GATILHO 8 → 11"
+            subtitle="Gatilho: sequência exata [8 -> 11]. Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho 8→11 registrado recentemente."
+            cycles={a8_11Cycles}
+            pedra={811}
+            now={now}
+            detailFormatter={(c) => `8→11 às ${fmtTime(c.triggerAt)}`}
+          />
+          <AnalysisPanel
+            key="gatilho-11-11"
+            eyebrow="Análise 11 · Gatilho 11 → 11"
+            title="GATILHO 11 → 11"
+            subtitle="Gatilho: sequência exata [11 -> 11]. Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho 11→11 registrado recentemente."
+            cycles={a11_11Cycles}
+            pedra={1111}
+            now={now}
+            detailFormatter={(c) => `11→11 às ${fmtTime(c.triggerAt)}`}
+          />
+          <AnalysisPanel
+            key="gatilho-4-11"
+            eyebrow="Análise 12 · Gatilho 4 → 11"
+            title="GATILHO 4 → 11"
+            subtitle="Gatilho: sequência exata [4 -> 11]. Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho 4→11 registrado recentemente."
+            cycles={a4_11Cycles}
+            pedra={411}
+            now={now}
+            detailFormatter={(c) => `4→11 às ${fmtTime(c.triggerAt)}`}
+          />
+          <AnalysisPanel
+            key="gatilho-4-14"
+            eyebrow="Análise 13 · Gatilho 4 ↔ 14"
+            title="GATILHO 4 ↔ 14"
+            subtitle="Gatilho: sequências [4 -> 14] ou [14 -> 4]. Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho 4↔14 registrado recentemente."
+            cycles={a4_14Cycles}
+            pedra={414}
+            now={now}
+            detailFormatter={(c) => `4↔14 às ${fmtTime(c.triggerAt)}`}
+          />
+          <AnalysisPanel
+            key="gatilho-7-11"
+            eyebrow="Análise 21 · Gatilho 7 ↔ 11"
+            title="GATILHO 7 ↔ 11"
+            subtitle="Gatilho: sequências [7 -> 11] ou [11 -> 7]. Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho 7↔11 registrado recentemente."
+            cycles={a7_11Cycles}
+            pedra={711}
+            now={now}
+            detailFormatter={(c) => `7↔11 às ${fmtTime(c.triggerAt)}`}
+          />
+        </>
+      )}
+
+      {/* 4. SEÇÃO DE SOMAS CONSECUTIVAS */}
+      {showSums && (
+        <>
+          <AnalysisPanel
+            key="soma-17"
+            eyebrow="Análise 14 · Soma 17 Consecutiva"
+            title="SOMA 17"
+            subtitle="Gatilho: duas pedras consecutivas somando 17. Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de soma 17 registrado recentemente."
+            cycles={aSoma17Cycles}
+            pedra={17}
+            now={now}
+            detailFormatter={(c) => `Soma 17 às ${fmtTime(c.triggerAt)}`}
+          />
+          <AnalysisPanel
+            key="soma-19"
+            eyebrow="Análise 15 · Soma 19 Consecutiva"
+            title="SOMA 19"
+            subtitle="Gatilho: duas pedras consecutivas somando 19. Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de soma 19 registrado recentemente."
+            cycles={aSoma19Cycles}
+            pedra={19}
+            now={now}
+            detailFormatter={(c) => `Soma 19 às ${fmtTime(c.triggerAt)}`}
+          />
+          <AnalysisPanel
+            key="soma-21"
+            eyebrow="Análise 16 · Soma 21 Consecutiva"
+            title="SOMA 21"
+            subtitle="Gatilho: duas pedras consecutivas somando 21. Analisa até 14 tempos de Branco."
+            loading={loading}
+            err={err}
+            emptyLabel="Nenhum gatilho de soma 21 registrado recentemente."
+            cycles={aSoma21Cycles}
+            pedra={21}
+            now={now}
+            detailFormatter={(c) => `Soma 21 às ${fmtTime(c.triggerAt)}`}
+          />
+        </>
+      )}
     </main>
   );
 }
