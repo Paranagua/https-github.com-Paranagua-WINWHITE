@@ -131,7 +131,7 @@ export type PredictiveSignal = {
   medal?: string;
   outcome?: "pending" | "green" | "red";
   resultTime?: string;
-  entryDate?: Date;
+  entryDate?: Date | string;
   isHighTendency?: boolean;
   isVerified?: boolean;
   isRare?: boolean;

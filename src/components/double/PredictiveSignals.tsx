@@ -5,11 +5,20 @@ import {
   subscribePredictive,
   setSignals,
   type StoredSignal,
+  type PredictiveSignal,
 } from "@/lib/signalsStore";
 import { Loader2, Sparkles, Target, Layers, Zap } from "lucide-react";
 import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
 import { parseUtcDate } from "@/lib/utils";
 import { Card } from "@/components/double/Card";
+import {
+  getCanonicalSignalKey,
+  getSignalRank,
+  evaluateSignalLevel,
+  hasWhiteInPreviousMinute,
+  mergeSignalsLifecycle,
+  SignalRank,
+} from "@/lib/signalHierarchy";
 import {
   buildA1,
   buildA2,
@@ -671,6 +680,7 @@ export function PredictiveSignals() {
       const m2: Mode2Signal[] = [];
 
       for (const [t, info] of Array.from(minuteProjections.entries()).sort((a, b) => a[0] - b[0])) {
+        const canonicalKey = getCanonicalSignalKey(t);
         if (info.top1.length > 0) {
           const values = Array.from(new Set(info.top1.map((p) => p.value))).sort((a, b) => a - b);
           const distinctTop1 = new Set(info.top1.map((p) => p.analysis));
@@ -685,7 +695,7 @@ export function PredictiveSignals() {
           const isRare = distinctTop1.size >= 2;
 
           m1.push({
-            key: `m1-${t}`,
+            key: canonicalKey,
             title: `Análise ${values.join(" + ")}`,
             at: new Date(t),
             pct: maxPct,
@@ -707,7 +717,7 @@ export function PredictiveSignals() {
               const confluence = sortedSources.map((p) => `A${p.analysis}·${p.value}`).join(", ");
 
               m2.push({
-                key: `m2-${t}`,
+                key: canonicalKey,
                 title: Array.from(distinctAnalyses)
                   .sort()
                   .map((a) => `Análise ${a}`)
@@ -758,7 +768,7 @@ export function PredictiveSignals() {
           const isRare = distinctTop1.size >= 2;
 
           rawUnifiedM1.push({
-            key: `m1-unified-${next1.at.getTime()}`,
+            key: getCanonicalSignalKey(next1.at),
             title: `Análise ${allValues.join(" + ")}`,
             at: next1.at,
             pct: maxPct,
@@ -851,45 +861,26 @@ export function PredictiveSignals() {
     };
   }, [rows, loading, generate]);
 
-  // Lista unificada de todos os sinais
+  // Lista unificada de todos os sinais com ciclo de vida estável
   const activeSignals = useMemo(() => {
-    return [
-      ...mode1.map((s) => {
-        const top1Sources = (s.sources || []).filter((src: any) => !src.top3 && !src.top5);
-        const top3Sources = (s.sources || []).filter((src: any) => src.top3 || src.top5);
-        const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
-
-        let category = "top1_isolated";
-        if (distinctTop1.size >= 4) {
-          category = "alavancagem";
-        } else if (distinctTop1.size >= 2 && top3Sources.length >= 1) {
-          category = "supreme";
-        } else if (distinctTop1.size >= 2) {
-          category = "rare";
-        } else if (distinctTop1.size === 1 && top3Sources.length >= 1) {
-          category = "top1_top3";
-        } else {
-          category = "top1_isolated";
-        }
-
-        const stored = liveStoredMap.get(s.key);
-
-        return {
-          ...s,
-          category,
-          isTop1: true,
-          isAlavancagem: category === "alavancagem" || distinctTop1.size >= 4,
-          isSupreme: category === "supreme",
-          isRare: category === "rare" || category === "supreme" || category === "alavancagem",
-          times: [s.at],
-          outcome: stored?.outcome || "pending",
-          resultTime: stored?.resultTime,
-          completedAt: stored?.completedAt,
-        };
-      }),
-      ...mode2.map((s) => {
-        const stored = liveStoredMap.get(s.key);
-        return {
+    const storedList = Array.from(liveStoredMap.values());
+    if (storedList.length === 0) {
+      // Fallback para os candidatos recém-gerados caso o store esteja vazio
+      return [
+        ...mode1.map((s) => {
+          let category = "top1_isolated";
+          if (s.isAlavancagem) category = "alavancagem";
+          else if (s.isSupreme) category = "supreme";
+          else if (s.isRare) category = "rare";
+          return {
+            ...s,
+            category,
+            isTop1: true,
+            times: [s.at],
+            outcome: "pending" as const,
+          };
+        }),
+        ...mode2.map((s) => ({
           ...s,
           category: "top3_only",
           isTop1: false,
@@ -897,39 +888,67 @@ export function PredictiveSignals() {
           isSupreme: false,
           isRare: false,
           at: s.times[0],
-          outcome: stored?.outcome || "pending",
-          resultTime: stored?.resultTime,
-          completedAt: stored?.completedAt,
-        };
-      }),
-    ].sort((a, b) => {
-      const tA = a.at instanceof Date ? a.at.getTime() : 0;
-      const tB = b.at instanceof Date ? b.at.getTime() : 0;
-      return tA - tB;
-    });
-  }, [mode1, mode2, liveStoredMap]);
+          outcome: "pending" as const,
+        })),
+      ];
+    }
 
-  // 0. 🚀 ALAVANCAGEM (4 ou mais análises Top 1)
+    return storedList
+      .map((s) => {
+        const dt =
+          s.entryDate instanceof Date
+            ? s.entryDate
+            : s.entryDate
+              ? parseUtcDate(s.entryDate as any)
+              : new Date();
+        const top1Sources = (s.sources || []).filter((src: any) => !src.top3 && !src.top5);
+        const top3Sources = (s.sources || []).filter((src: any) => src.top3 || src.top5);
+
+        const evalLevel = evaluateSignalLevel(top1Sources, top3Sources, {
+          forcedAlavancagem: s.isAlavancagem,
+          forcedSupreme: s.isSupreme,
+          forcedRare: s.isRare,
+        });
+
+        const rank = getSignalRank(s);
+
+        return {
+          ...s,
+          at: dt,
+          times: [dt],
+          category: s.category || evalLevel.category,
+          groupName: s.groupName || evalLevel.groupName,
+          isAlavancagem: rank === SignalRank.ALAVANCAGEM || s.isAlavancagem,
+          isSupreme: rank === SignalRank.SUPREME || s.isSupreme,
+          isRare: rank === SignalRank.RARE || s.isRare,
+          isTop1: rank >= SignalRank.TOP1,
+        };
+      })
+      .sort((a, b) => {
+        const tA = a.at instanceof Date ? a.at.getTime() : 0;
+        const tB = b.at instanceof Date ? b.at.getTime() : 0;
+        return tA - tB;
+      });
+  }, [liveStoredMap, mode1, mode2]);
+
+  // 0. 🚀 ALAVANCAGEM (Rank 6: 4+ Top 1)
   const alavancagemSignals = useMemo(() => {
     return activeSignals.filter((s) => {
-      const top1Sources = (s.sources || []).filter((src: any) => !src.top3);
-      const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
-      return distinctTop1.size >= 4 || s.category === "alavancagem";
+      const rank = getSignalRank(s);
+      return rank === SignalRank.ALAVANCAGEM || s.category === "alavancagem" || s.isAlavancagem;
     });
   }, [activeSignals]);
 
-  // 1. 🏆 WINN (Super Confluência Suprema: >= 2 Top 1 E >= 1 Top 3)
+  // 1. 🏆 WINN / SUPREMO (Rank 5: >= 2 Top 1 E >= 1 Top 3)
   const winnSignals = useMemo(() => {
     return activeSignals.filter((s) => {
       if (alavancagemSignals.some((a) => a.key === s.key)) return false;
-      const top1Sources = (s.sources || []).filter((src: any) => !src.top3);
-      const top3Sources = (s.sources || []).filter((src: any) => src.top3);
-      const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
-      return distinctTop1.size >= 2 && top3Sources.length >= 1;
+      const rank = getSignalRank(s);
+      return rank === SignalRank.SUPREME || s.category === "supreme" || s.isSupreme;
     });
   }, [activeSignals, alavancagemSignals]);
 
-  // 2. 💎 RARO (Múltiplas análises Top 1: >= 2 Top 1)
+  // 2. 💎 RARO (Rank 4: >= 2 Top 1)
   const rareSignals = useMemo(() => {
     return activeSignals.filter((s) => {
       if (
@@ -937,13 +956,12 @@ export function PredictiveSignals() {
         winnSignals.some((w) => w.key === s.key)
       )
         return false;
-      const top1Sources = (s.sources || []).filter((src: any) => !src.top3);
-      const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
-      return distinctTop1.size >= 2;
+      const rank = getSignalRank(s);
+      return rank === SignalRank.RARE || s.category === "rare" || s.isRare;
     });
   }, [activeSignals, alavancagemSignals, winnSignals]);
 
-  // 3. ⚡ TOP 1 & TOP 3 (Confluência Principal + Secundária: 1 Top 1 E >= 1 Top 3)
+  // 3. ⚡ TOP 1 & TOP 3 (Rank 3: 1 Top 1 E >= 1 Top 3)
   const top1Top3Signals = useMemo(() => {
     return activeSignals.filter((s) => {
       if (
@@ -952,14 +970,12 @@ export function PredictiveSignals() {
         rareSignals.some((r) => r.key === s.key)
       )
         return false;
-      const top1Sources = (s.sources || []).filter((src: any) => !src.top3);
-      const top3Sources = (s.sources || []).filter((src: any) => src.top3);
-      const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
-      return distinctTop1.size === 1 && top3Sources.length >= 1;
+      const rank = getSignalRank(s);
+      return rank === SignalRank.TOP1_TOP3 || s.category === "top1_top3";
     });
   }, [activeSignals, alavancagemSignals, winnSignals, rareSignals]);
 
-  // 4. 🎯 TOP 1 ISOLADO (Análise Principal Única: 1 Top 1 apenas)
+  // 4. 🎯 TOP 1 ISOLADO (Rank 2: 1 Top 1 apenas)
   const top1IsolatedSignals = useMemo(() => {
     return activeSignals.filter((s) => {
       if (
@@ -969,13 +985,12 @@ export function PredictiveSignals() {
         top1Top3Signals.some((t) => t.key === s.key)
       )
         return false;
-      const top1Sources = (s.sources || []).filter((src: any) => !src.top3);
-      const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
-      return s.isTop1 && distinctTop1.size === 1;
+      const rank = getSignalRank(s);
+      return rank === SignalRank.TOP1 || s.category === "top1_isolated" || s.isTop1;
     });
   }, [activeSignals, alavancagemSignals, winnSignals, rareSignals, top1Top3Signals]);
 
-  // 5. 📊 COINCIDÊNCIA TOP 3 (Análises Secundárias Top 2 ao Top 3: apenas Top 3, 0 Top 1)
+  // 5. 📊 COINCIDÊNCIA TOP 3 (Rank 1: apenas Top 3, 0 Top 1)
   const top3OnlySignals = useMemo(() => {
     return activeSignals.filter((s) => {
       if (
@@ -997,75 +1012,46 @@ export function PredictiveSignals() {
     top1IsolatedSignals,
   ]);
 
-  // Sincroniza os sinais gerados no `signalsStore`
+  // Sincroniza os sinais gerados no `signalsStore` garantindo ciclo de vida e não-desaparecimento
   useEffect(() => {
     if (!loading && rows.length > 0) {
       const existing = getPredictiveSignals();
-      const existingMap = new Map(existing.map((s) => [s.key, s]));
 
-      const syncSignals = [
+      const candidateSignals: PredictiveSignal[] = [
         ...(mode1 || []).map((s) => {
           if (!s) return null;
-          const prev = existingMap.get(s.key);
+          const canonicalKey = getCanonicalSignalKey(s.at);
           const atTime = s.at instanceof Date ? s.at.getTime() : new Date(s.at || 0).getTime();
           const top1Sources = (s.sources || []).filter((src: any) => !src.top3 && !src.top5);
           const top3Sources = (s.sources || []).filter((src: any) => src.top3 || src.top5);
-          const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
 
-          let category = "top1_isolated";
-          let groupName = "Top 1";
-          if (distinctTop1.size >= 4 || s.isAlavancagem) {
-            category = "alavancagem";
-            groupName = "Alavancagem";
-          } else if ((distinctTop1.size >= 2 && top3Sources.length >= 1) || s.isSupreme) {
-            category = "supreme";
-            groupName = "Supremo";
-          } else if (distinctTop1.size >= 2 || s.isRare) {
-            category = "rare";
-            groupName = "Raro";
-          } else if (distinctTop1.size === 1 && top3Sources.length >= 1) {
-            category = "top1_top3";
-            groupName = "Top 1 & Top 3";
-          } else {
-            category = "top1_isolated";
-            groupName = "Top 1";
-          }
-
-          let defaultLabel = "Top 1";
-          if (category === "alavancagem") defaultLabel = "Alavancagem";
-          else if (category === "supreme") defaultLabel = "Supremo";
-          else if (category === "rare") defaultLabel = "Raro";
-          else if (category === "top1_top3") defaultLabel = "Top 1 & Top 3";
+          const evalLevel = evaluateSignalLevel(top1Sources, top3Sources, {
+            isConsecutive: s.isConsecutive,
+            levelOffset: s.levelOffset,
+            forcedAlavancagem: s.isAlavancagem,
+            forcedSupreme: s.isSupreme,
+            forcedRare: s.isRare,
+          });
 
           return {
-            key: s.key,
+            key: canonicalKey,
             time: fmtClock(s.at),
             pct: Number.isFinite(s.pct) ? s.pct : 0,
-            label: s.label || defaultLabel,
+            label: s.label || evalLevel.label,
             confluence: s.sources
               ? s.sources.map((src) => `A${src.analysis}·${src.value}`).join(", ")
               : "",
-            medal: getMedalStyles(
-              distinctTop1.size || s.analysisCount || 0,
-              s.isConsecutive,
-              s.levelOffset || 0,
-              true,
-              category,
-            )?.label,
+            medal: evalLevel.medal,
             entryDate: s.at,
-            outcome: prev?.outcome || "pending",
-            resultTime: prev?.resultTime,
-            completedAt: prev?.completedAt,
-            winningResultId: prev?.winningResultId,
-            audit: prev?.audit,
+            outcome: "pending" as const,
             isHighTendency: !!s.isHighTendency,
             isVerified: !!s.isVerified,
-            category,
-            groupName,
-            isTop1: true,
-            isAlavancagem: category === "alavancagem",
-            isRare: category === "rare" || category === "supreme" || category === "alavancagem",
-            isSupreme: category === "supreme",
+            category: evalLevel.category,
+            groupName: evalLevel.groupName,
+            isTop1: evalLevel.isTop1,
+            isAlavancagem: evalLevel.isAlavancagem,
+            isRare: evalLevel.isRare,
+            isSupreme: evalLevel.isSupreme,
             strategyKey: s.strategyKey,
             sources: s.sources,
             isRecAlert: activeRecAlerts.some(
@@ -1075,8 +1061,8 @@ export function PredictiveSignals() {
         }),
         ...(mode2 || []).map((s) => {
           if (!s) return null;
-          const prev = existingMap.get(s.key);
           const rawTime = Array.isArray(s.times) && s.times.length > 0 ? s.times[0] : undefined;
+          const canonicalKey = getCanonicalSignalKey(rawTime || Date.now());
           const firstTime =
             rawTime instanceof Date
               ? rawTime.getTime()
@@ -1084,18 +1070,14 @@ export function PredictiveSignals() {
                 ? new Date(rawTime).getTime()
                 : NaN;
           return {
-            key: s.key,
+            key: canonicalKey,
             time: Array.isArray(s.times) ? s.times.map((t) => fmtClock(t)).join(" / ") : "--:--",
             pct: Number.isFinite(s.pct) ? s.pct : 0,
             label: "Confluência Top 3",
             confluence: s.confluence || "",
             medal: getMedalStyles(s.analysisCount || 0, false, 0, false, "top3_only")?.label,
             entryDate: rawTime,
-            outcome: prev?.outcome || "pending",
-            resultTime: prev?.resultTime,
-            completedAt: prev?.completedAt,
-            winningResultId: prev?.winningResultId,
-            audit: prev?.audit,
+            outcome: "pending" as const,
             isHighTendency: !!s.isHighTendency,
             category: "top3_only",
             groupName: "Top 3",
@@ -1104,34 +1086,27 @@ export function PredictiveSignals() {
             isSupreme: false,
             isRare: false,
             strategyKey: s.strategyKey,
+            sources: s.sources,
             isRecAlert: activeRecAlerts.some(
               (a) => !Number.isNaN(firstTime) && firstTime >= a.start && firstTime <= a.end,
             ),
           };
         }),
-      ]
-        .filter(Boolean)
-        .sort((a, b) => {
-          const tA =
-            a.entryDate instanceof Date
-              ? a.entryDate.getTime()
-              : a.entryDate
-                ? new Date(a.entryDate).getTime()
-                : 0;
-          const tB =
-            b.entryDate instanceof Date
-              ? b.entryDate.getTime()
-              : b.entryDate
-                ? new Date(b.entryDate).getTime()
-                : 0;
-          return (tA || 0) - (tB || 0);
-        });
+      ].filter(Boolean) as PredictiveSignal[];
 
-      setPredictiveSignals(syncSignals);
+      // Mescla com ciclo de vida monotônico garantindo que NADA é perdido e promoções são respeitadas
+      const mergedList = mergeSignalsLifecycle(existing, candidateSignals, rows, Date.now());
+
+      setPredictiveSignals(mergedList);
 
       // Sincroniza também no formato StoredSignal para a grelha de roleta
-      const storedSignalsList: StoredSignal[] = syncSignals.map((s) => {
-        const dt = s.entryDate instanceof Date ? s.entryDate : new Date(s.entryDate || 0);
+      const storedSignalsList: StoredSignal[] = mergedList.map((s) => {
+        const dt =
+          s.entryDate instanceof Date
+            ? s.entryDate
+            : s.entryDate
+              ? parseUtcDate(s.entryDate as any)
+              : new Date();
         return {
           id: s.key,
           color: "white",
