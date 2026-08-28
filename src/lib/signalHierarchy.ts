@@ -527,13 +527,14 @@ export function buildSignalConfluences(rawCandidates: RawCandidate[]): Predictiv
 
 /**
  * Mescla sinais existentes com novos candidatos gerados garantindo:
- * 1. Sinais PENDING NUNCA desaparecem.
- * 2. Promoção monotônica de nível (novo rank > rank atual).
- * 3. Downgrade é estritamente proibido (novo rank <= rank atual mantém o nível).
- * 4. Bloqueio de publicação e promoção se já houver branco em M-1.
- * 5. Identidade estável (signalKey canônica baseada no minuto alvo consolidado).
- * 6. Sinais concluídos (WIN/LOSS) permanecem imutáveis.
- * 7. Sem duplicação de sinais na janela de confluência (±1 minuto).
+ * 1. Congelamento estrito em (sinal - 1 minuto): ao atingir targetTime - 1 min, o sinal não pode mais ser atualizado por novas análises/gerações.
+ * 2. Aguarda a verificação de win/loss acontecer.
+ * 3. Após a resolução de win/loss, aguarda o período estabelecido (3 minutos) e sai da tela.
+ * 4. Sinais PENDING NUNCA desaparecem prematuramente.
+ * 5. Promoção monotônica de nível antes do congelamento (novo rank > rank atual).
+ * 6. Downgrade é estritamente proibido.
+ * 7. Bloqueio de publicação se já houver branco em M-1.
+ * 8. Sinais concluídos (WIN/LOSS) permanecem imutáveis.
  */
 export function mergeSignalsLifecycle(
   existingSignals: PredictiveSignal[],
@@ -547,35 +548,45 @@ export function mergeSignalsLifecycle(
   for (const sig of existingSignals || []) {
     if (!sig || !sig.entryDate) continue;
     const canonicalKey = getCanonicalSignalKey(sig.entryDate);
-    const normalizedSig: PredictiveSignal = {
-      ...sig,
-      key: sig.key || canonicalKey,
-    };
+    const sigTime =
+      sig.entryDate instanceof Date
+        ? sig.entryDate.getTime()
+        : parseUtcDate(sig.entryDate as any).getTime();
 
     // Sinais concluídos que já passaram da janela de 3 minutos de exibição são descartados
     if (
-      normalizedSig.outcome &&
-      normalizedSig.outcome !== "pending" &&
-      normalizedSig.completedAt &&
-      now - normalizedSig.completedAt > 180_000
+      sig.outcome &&
+      sig.outcome !== "pending" &&
+      sig.completedAt &&
+      now - sig.completedAt > 180_000
     ) {
       continue;
     }
 
     // Se for sinal pendente de categoria descontinuada (Top 1 isolado ou Apenas Top 3), remove
-    const cat = (normalizedSig.category || "").toLowerCase();
+    const cat = (sig.category || "").toLowerCase();
     if (
-      normalizedSig.outcome === "pending" &&
+      sig.outcome === "pending" &&
       (cat === "top1_isolated" ||
         cat === "top3_only" ||
         cat === "top5_only" ||
-        (!normalizedSig.isAlavancagem &&
-          !normalizedSig.isSupreme &&
-          !normalizedSig.isRare &&
+        (!sig.isAlavancagem &&
+          !sig.isSupreme &&
+          !sig.isRare &&
           cat !== "top1_top3"))
     ) {
       continue;
     }
+
+    // Se o horário (sinal - 1 minuto) já chegou, o sinal é congelado (isLocked)
+    // Janela: 1 minuto antes do minuto alvo (sigTime - 60_000 ms)
+    const isLocked = sig.isLocked || (!Number.isNaN(sigTime) && now >= sigTime - 60_000);
+
+    const normalizedSig: PredictiveSignal = {
+      ...sig,
+      key: sig.key || canonicalKey,
+      isLocked,
+    };
 
     resultMap.set(canonicalKey, normalizedSig);
   }
@@ -617,7 +628,13 @@ export function mergeSignalsLifecycle(
     const whiteInM1 = hasWhiteInPreviousMinute(cand.entryDate, results);
 
     if (!existing) {
-      // Novo candidato: se já houve branco em M-1, bloqueia a publicação!
+      // Novo candidato:
+      // Se o horário (sinal - 1) já passou para esse novo candidato, não publica novo sinal de última hora
+      if (!Number.isNaN(candTime) && now >= candTime - 60_000) {
+        continue;
+      }
+
+      // Se já houve branco em M-1, bloqueia a publicação!
       if (whiteInM1) {
         continue;
       }
@@ -626,11 +643,30 @@ export function mergeSignalsLifecycle(
         ...cand,
         key: canonicalKey,
         outcome: "pending",
+        isLocked: false,
       });
     } else {
       // Sinal já existente:
-      // Se já está concluído (WIN ou LOSS), é imutável!
+      // A. Se já está concluído (WIN ou LOSS), é estritamente imutável!
       if (existing.outcome && existing.outcome !== "pending") {
+        continue;
+      }
+
+      const existingTime =
+        existing.entryDate instanceof Date
+          ? existing.entryDate.getTime()
+          : parseUtcDate(existing.entryDate as any).getTime();
+
+      // B. Regra Fundamental: Quando o horário sinal - 1 chegar, o sinal NÃO PODE MAIS SER ATUALIZADO.
+      // Apenas aguarda a verificação do win/loss acontecer.
+      if (existing.isLocked || (!Number.isNaN(existingTime) && now >= existingTime - 60_000)) {
+        // Assegura que o sinal esteja marcado como locked e permanece 100% inalterado
+        if (!existing.isLocked) {
+          resultMap.set(existingKey || canonicalKey, {
+            ...existing,
+            isLocked: true,
+          });
+        }
         continue;
       }
 
@@ -655,7 +691,7 @@ export function mergeSignalsLifecycle(
       }
       const combinedSources = Array.from(mergedSourcesMap.values());
 
-      // Promoção de nível se o novo rank for superior E não houver branco em M-1
+      // Promoção de nível se o novo rank for superior E não houver branco em M-1 (antes do lock)
       if (candRank > existingRank && !whiteInM1) {
         resultMap.set(canonicalKey, {
           ...existing,
@@ -679,9 +715,10 @@ export function mergeSignalsLifecycle(
           isVerified: cand.isVerified || existing.isVerified,
           isConsecutive: cand.isConsecutive || existing.isConsecutive,
           levelOffset: cand.levelOffset || existing.levelOffset,
+          isLocked: false,
         });
       } else {
-        // Novo rank é igual ou inferior: NUNCA REBAIXAR! Mantém nível e apenas enriquece metadados/fontes
+        // Novo rank é igual ou inferior: NUNCA REBAIXAR! Mantém nível e apenas enriquece metadados/fontes (antes do lock)
         resultMap.set(canonicalKey, {
           ...existing,
           key: canonicalKey,
@@ -691,6 +728,7 @@ export function mergeSignalsLifecycle(
           sources: combinedSources.length > 0 ? combinedSources : existing.sources,
           isHighTendency: existing.isHighTendency || cand.isHighTendency,
           isRecAlert: existing.isRecAlert || cand.isRecAlert,
+          isLocked: false,
         });
       }
     }

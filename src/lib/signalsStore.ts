@@ -16,6 +16,7 @@ export type StoredSignal = {
   isRare?: boolean;
   isAlavancagem?: boolean;
   isTop1?: boolean;
+  isLocked?: boolean;
   label?: string;
   confluence?: string;
   sources?: Array<{
@@ -138,6 +139,7 @@ export type PredictiveSignal = {
   isSupreme?: boolean;
   isAlavancagem?: boolean;
   isTop1?: boolean;
+  isLocked?: boolean;
   category?: string;
   groupName?: string;
   completedAt?: number;
@@ -190,9 +192,11 @@ export function setPredictiveSignals(signals: PredictiveSignal[]) {
       isSupreme: s.isSupreme,
       isRare: s.isRare,
       isTop1: s.isTop1,
+      isLocked: s.isLocked,
       category: s.category,
       groupName: s.groupName,
       isVerified: s.isVerified,
+      completedAt: s.completedAt,
     }));
     const nextStr = JSON.stringify(normalized);
     if (nextStr === lastPredictiveSerialized) return;
