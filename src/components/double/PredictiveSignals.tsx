@@ -17,6 +17,8 @@ import {
   evaluateSignalLevel,
   hasWhiteInPreviousMinute,
   mergeSignalsLifecycle,
+  buildSignalConfluences,
+  type RawCandidate,
   SignalRank,
 } from "@/lib/signalHierarchy";
 import {
@@ -606,16 +608,8 @@ export function PredictiveSignals() {
         window.dispatchEvent(new CustomEvent("switch-audit-filter", { detail: "hoje" }));
       }
 
-      // Estratégia Unificada: Mapeamento de Projeções Top 1 e Top 3 por Minuto
-      type MinuteProj = {
-        top1: Array<{ analysis: number; value: number; pct: number; top3: false }>;
-        top3: Array<{ analysis: number; value: number; pct: number; top3: true; rank: number }>;
-        isHighTendency: boolean;
-        isPossibleRec: boolean;
-        strategyKey?: string;
-      };
-
-      const minuteProjections = new Map<number, MinuteProj>();
+      // 1. Extração de todos os candidatos brutos das análises elegíveis (>= 6 gatilhos)
+      const rawCandidates: RawCandidate[] = [];
 
       for (const item of active) {
         const hist = (engine[item.analysis] || []).filter((c) => c.value === item.value).slice(-6);
@@ -642,25 +636,17 @@ export function PredictiveSignals() {
               return signalTime >= alertStart && signalTime <= alertEnd;
             });
 
-            let cur = minuteProjections.get(t);
-            if (!cur) {
-              cur = {
-                top1: [],
-                top3: [],
-                isHighTendency: isTendency,
-                isPossibleRec,
-                strategyKey: `A${item.analysis}`,
-              };
-              minuteProjections.set(t, cur);
-            }
-            cur.top1.push({
+            rawCandidates.push({
               analysis: item.analysis,
               value: item.value,
               pct: top1Candidate.pct,
-              top3: false,
+              targetDate: at,
+              isTop1: true,
+              rank: 1,
+              isHighTendency: isTendency,
+              isRecAlert: isPossibleRec,
+              strategyKey: `A${item.analysis}`,
             });
-            if (isTendency) cur.isHighTendency = true;
-            if (isPossibleRec) cur.isPossibleRec = true;
           }
         }
 
@@ -682,165 +668,87 @@ export function PredictiveSignals() {
               return signalTime >= alertStart && signalTime <= alertEnd;
             });
 
-            let cur = minuteProjections.get(t);
-            if (!cur) {
-              cur = {
-                top1: [],
-                top3: [],
-                isHighTendency: isTendency,
-                isPossibleRec,
-                strategyKey: `A${item.analysis}`,
-              };
-              minuteProjections.set(t, cur);
-            }
-            cur.top3.push({
+            rawCandidates.push({
               analysis: item.analysis,
               value: item.value,
               pct: cand.pct,
-              top3: true,
+              targetDate: at,
+              isTop1: false,
               rank: idx + 2,
+              isHighTendency: isTendency,
+              isRecAlert: isPossibleRec,
+              strategyKey: `A${item.analysis}`,
             });
-            if (isTendency) cur.isHighTendency = true;
-            if (isPossibleRec) cur.isPossibleRec = true;
           }
         });
       }
 
-      // Constrói listas m1 e m2
-      const m1: Mode1Signal[] = [];
-      const m2: Mode2Signal[] = [];
+      // 2. Agrupamento por Confluência Proporcional (janela de ±1 minuto) e Avaliação de Nível Pós-Consolidação
+      const confluenceSignals = buildSignalConfluences(rawCandidates);
 
-      for (const [t, info] of Array.from(minuteProjections.entries()).sort((a, b) => a[0] - b[0])) {
-        const canonicalKey = getCanonicalSignalKey(t);
-        if (info.top1.length > 0) {
-          const values = Array.from(new Set(info.top1.map((p) => p.value))).sort((a, b) => a - b);
-          const distinctTop1 = new Set(info.top1.map((p) => p.analysis));
-          // Top 3 de análises complementares
-          const secondaryTop3 = info.top3.filter((p) => !distinctTop1.has(p.analysis));
-          const allSources = [...info.top1, ...secondaryTop3];
-          const maxPct = Math.max(...info.top1.map((p) => p.pct));
+      // Constrói listas m1 (Top 1) e m2 (Top 3 only)
+      const m1: Mode1Signal[] = confluenceSignals
+        .filter((s) => s.isTop1)
+        .map((s) => {
+          const dt = s.entryDate instanceof Date ? s.entryDate : new Date(s.entryDate);
+          const top1Vals = (s.sources || []).filter((src) => !src.top3).map((src) => src.value);
+          const values = Array.from(new Set(top1Vals)).sort((a, b) => a - b);
+          const analysisCount = new Set((s.sources || []).map((src) => src.analysis)).size;
 
-          // Classificações
-          const isAlavancagem = distinctTop1.size >= 4;
-          const isSupreme = distinctTop1.size >= 2 && secondaryTop3.length >= 1;
-          const isRare = distinctTop1.size >= 2;
+          return {
+            key: s.key,
+            title: `Análise ${values.length > 0 ? values.join(" + ") : s.label}`,
+            at: dt,
+            pct: s.pct,
+            label: s.label,
+            analysisCount,
+            sources: (s.sources || []).map((src) => ({
+              analysis: src.analysis,
+              value: src.value,
+              pct: src.pct,
+              top3: !!src.top3,
+              rank: src.rank,
+            })),
+            isHighTendency: !!s.isHighTendency,
+            isVerified: !!s.isVerified,
+            isRare: s.isRare,
+            isSupreme: s.isSupreme,
+            isAlavancagem: s.isAlavancagem,
+            strategyKey: s.strategyKey,
+            isConsecutive: s.isConsecutive,
+            levelOffset: s.levelOffset,
+          };
+        });
 
-          m1.push({
-            key: canonicalKey,
-            title: `Análise ${values.join(" + ")}`,
-            at: new Date(t),
-            pct: maxPct,
-            label: info.top1[0].value.toString(),
-            analysisCount: new Set(allSources.map((s) => s.analysis)).size,
-            sources: allSources,
-            isHighTendency: info.isHighTendency,
-            strategyKey: info.strategyKey,
-            isAlavancagem,
-            isSupreme,
-            isRare,
-          });
-        } else if (info.top3.length >= 2) {
-          const distinctAnalyses = new Set(info.top3.map((p) => p.analysis));
-          if (distinctAnalyses.size >= 2) {
-            const avgPct = info.top3.reduce((s, p) => s + p.pct, 0) / info.top3.length;
-            if (avgPct >= MIN_ASSERTIVIDADE_TOP3) {
-              const sortedSources = info.top3.slice().sort((a, b) => b.pct - a.pct);
-              const confluence = sortedSources.map((p) => `A${p.analysis}·${p.value}`).join(", ");
+      const m2: Mode2Signal[] = confluenceSignals
+        .filter((s) => !s.isTop1)
+        .map((s) => {
+          const dt = s.entryDate instanceof Date ? s.entryDate : new Date(s.entryDate);
+          const distinctAnalyses = Array.from(
+            new Set((s.sources || []).map((src) => src.analysis)),
+          ).sort();
+          return {
+            key: s.key,
+            title: distinctAnalyses.map((a) => `Análise ${a}`).join(" + "),
+            times: [dt],
+            pct: s.pct,
+            sources: (s.sources || []).map((src) => ({
+              analysis: src.analysis,
+              value: src.value,
+              pct: src.pct || 0,
+              top3: true,
+              rank: src.rank,
+            })),
+            confluence: s.confluence,
+            analysisCount: distinctAnalyses.length,
+            isHighTendency: !!s.isHighTendency,
+            isVerified: !!s.isVerified,
+            strategyKey: s.strategyKey,
+          };
+        });
 
-              m2.push({
-                key: canonicalKey,
-                title: Array.from(distinctAnalyses)
-                  .sort()
-                  .map((a) => `Análise ${a}`)
-                  .join(" + "),
-                times: [new Date(t)],
-                pct: avgPct,
-                sources: sortedSources,
-                confluence,
-                analysisCount: distinctAnalyses.size,
-                isHighTendency: info.isHighTendency,
-                strategyKey: sortedSources[0] ? `A${sortedSources[0].analysis}` : undefined,
-              });
-            }
-          }
-        }
-      }
-
+      setMode1(m1);
       setMode2(m2);
-
-      // ---- Level Elevation, Unification and Proximity Filtering ----
-      const rawUnifiedM1: Mode1Signal[] = [];
-
-      for (let i = 0; i < m1.length; i++) {
-        const sig = m1[i];
-        const next1 = m1[i + 1];
-        const next2 = m1[i + 2];
-
-        const isConsecutive3 =
-          next1 &&
-          next2 &&
-          next1.at.getTime() - sig.at.getTime() === 60000 &&
-          next2.at.getTime() - next1.at.getTime() === 60000;
-
-        if (isConsecutive3) {
-          // Fusão de 3 minutos consecutivos no minuto central (T+1)
-          const allSources = [...sig.sources, ...next1.sources, ...next2.sources];
-          const top1Sources = allSources.filter((s) => !s.top3);
-          const top3Sources = allSources.filter((s) => s.top3);
-          const distinctTop1 = new Set(top1Sources.map((s) => s.analysis));
-          const allAnalyses = new Set(allSources.map((s) => s.analysis));
-          const maxPct = Math.max(sig.pct, next1.pct, next2.pct);
-          const allValues = Array.from(new Set(top1Sources.map((s) => s.value))).sort(
-            (a: number, b: number) => a - b,
-          );
-
-          const isAlavancagem = distinctTop1.size >= 4;
-          const isSupreme = distinctTop1.size >= 2 && top3Sources.length >= 1;
-          const isRare = distinctTop1.size >= 2;
-
-          rawUnifiedM1.push({
-            key: getCanonicalSignalKey(next1.at),
-            title: `Análise ${allValues.join(" + ")}`,
-            at: next1.at,
-            pct: maxPct,
-            label: "3 Consecutivos",
-            analysisCount: allAnalyses.size,
-            sources: allSources,
-            isHighTendency: sig.isHighTendency || next1.isHighTendency || next2.isHighTendency,
-            isConsecutive: true,
-            levelOffset: 4,
-            isAlavancagem,
-            isSupreme,
-            isRare,
-            strategyKey: next1.strategyKey || sig.strategyKey,
-          });
-
-          i += 2;
-          continue;
-        }
-
-        rawUnifiedM1.push(sig);
-      }
-
-      // Regra de Proximidade (Mínimo 2 minutos de distância)
-      const filteredM1: Mode1Signal[] = [];
-      let lastAcceptedTime = -Infinity;
-
-      for (const sig of rawUnifiedM1) {
-        const sigTime = sig.at.getTime();
-        if (sigTime - lastAcceptedTime < 2 * 60000) {
-          const prevSig = filteredM1[filteredM1.length - 1];
-          if (prevSig && (sig.pct > prevSig.pct || sig.isConsecutive)) {
-            filteredM1[filteredM1.length - 1] = sig;
-            lastAcceptedTime = sigTime;
-          }
-          continue;
-        }
-        filteredM1.push(sig);
-        lastAcceptedTime = sigTime;
-      }
-
-      setMode1(filteredM1);
 
       const alertWindow = activeAlerts.map((a) => ({
         type: a.type,

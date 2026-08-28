@@ -301,14 +301,281 @@ export function hasWhiteInPreviousMinute(
   }
 }
 
+export interface RawCandidate {
+  analysis: number;
+  value: number;
+  pct: number;
+  targetDate: Date;
+  isTop1: boolean;
+  rank?: number;
+  isHighTendency?: boolean;
+  isRecAlert?: boolean;
+  strategyKey?: string;
+}
+
+export interface ConfluenceGroup {
+  representativeDate: Date;
+  clusterDates: Date[];
+  top1Sources: Array<{ analysis: number; value: number; pct: number; top3: false }>;
+  top3Sources: Array<{ analysis: number; value: number; pct: number; top3: true; rank?: number }>;
+  allSources: Array<{ analysis: number; value: number; pct: number; top3: boolean; rank?: number }>;
+  distinctTop1Analyses: number[];
+  distinctAnalyses: number[];
+  maxPct: number;
+  isHighTendency: boolean;
+  isRecAlert: boolean;
+  isConsecutive: boolean;
+  strategyKey?: string;
+  evaluation: SignalLevelEvaluation;
+}
+
+/**
+ * Agrupa candidatos gerados pelas análises em grupos de confluência com base na proximidade de horário (janela de ±1 minuto).
+ * O agrupamento é realizado ANTES de classificar o nível final do sinal.
+ */
+export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): ConfluenceGroup[] {
+  if (!candidates || candidates.length === 0) return [];
+
+  // 1. Normaliza os timestamps dos candidatos para o início do minuto
+  const normalizedCandidates: RawCandidate[] = candidates
+    .filter((c) => c && c.targetDate && !Number.isNaN(c.targetDate.getTime()))
+    .map((c) => {
+      const dt = new Date(c.targetDate.getTime());
+      dt.setSeconds(0, 0);
+      dt.setMilliseconds(0);
+      return { ...c, targetDate: dt };
+    });
+
+  if (normalizedCandidates.length === 0) return [];
+
+  // 2. Agrupa candidatos por minuto exato
+  const minuteMap = new Map<number, RawCandidate[]>();
+  for (const c of normalizedCandidates) {
+    const t = c.targetDate.getTime();
+    const list = minuteMap.get(t) || [];
+    list.push(c);
+    minuteMap.set(t, list);
+  }
+
+  // 3. Ordena os minutos de forma cronológica crescente
+  const sortedMinutes = Array.from(minuteMap.keys()).sort((a, b) => a - b);
+
+  // 4. Cria clusters de minutos adjacentes (diferença <= 1 minuto, limite de até 3 minutos consecutivos: m-1, m, m+1)
+  const clusters: number[][] = [];
+  let currentCluster: number[] = [];
+
+  for (const minute of sortedMinutes) {
+    if (currentCluster.length === 0) {
+      currentCluster.push(minute);
+    } else {
+      const prevMinute = currentCluster[currentCluster.length - 1];
+      const firstMinute = currentCluster[0];
+      const diffFromPrev = minute - prevMinute;
+      const totalSpan = minute - firstMinute;
+
+      // Agrupa se a diferença for de até 1 minuto (60.000 ms) e o span total não exceder 2 minutos (120.000 ms)
+      if (diffFromPrev <= 60_000 && totalSpan <= 120_000) {
+        currentCluster.push(minute);
+      } else {
+        clusters.push(currentCluster);
+        currentCluster = [minute];
+      }
+    }
+  }
+  if (currentCluster.length > 0) {
+    clusters.push(currentCluster);
+  }
+
+  // 5. Para cada cluster, determina o horário representativo, consolida fontes e avalia nível
+  const groups: ConfluenceGroup[] = [];
+
+  for (const cluster of clusters) {
+    const clusterCandidates: RawCandidate[] = [];
+    for (const m of cluster) {
+      const cList = minuteMap.get(m) || [];
+      clusterCandidates.push(...cList);
+    }
+
+    if (clusterCandidates.length === 0) continue;
+
+    // A. Determina horário representativo:
+    // Caso 1: 3 minutos consecutivos [m-1, m, m+1] -> Centro m (cluster[1])
+    // Caso 2: 2 minutos [m1, m2] -> Desempate por assertividade da melhor análise; se empate, maior nº de Top 1; se empate, mais antigo (m1)
+    // Caso 3: 1 minuto -> próprio minuto
+    let representativeTimestamp: number;
+
+    if (cluster.length === 3) {
+      representativeTimestamp = cluster[1]; // Centro
+    } else if (cluster.length === 2) {
+      const m1 = cluster[0];
+      const m2 = cluster[1];
+      const c1 = clusterCandidates.filter((c) => c.targetDate.getTime() === m1);
+      const c2 = clusterCandidates.filter((c) => c.targetDate.getTime() === m2);
+
+      const top1_c1 = c1.filter((c) => c.isTop1);
+      const top1_c2 = c2.filter((c) => c.isTop1);
+
+      const bestPct1 =
+        top1_c1.length > 0
+          ? Math.max(...top1_c1.map((c) => c.pct))
+          : c1.length > 0
+            ? Math.max(...c1.map((c) => c.pct))
+            : 0;
+      const bestPct2 =
+        top1_c2.length > 0
+          ? Math.max(...top1_c2.map((c) => c.pct))
+          : c2.length > 0
+            ? Math.max(...c2.map((c) => c.pct))
+            : 0;
+
+      if (bestPct2 > bestPct1) {
+        representativeTimestamp = m2;
+      } else if (bestPct1 > bestPct2) {
+        representativeTimestamp = m1;
+      } else {
+        // Empate de assertividade: quem tiver mais Top 1
+        if (top1_c2.length > top1_c1.length) {
+          representativeTimestamp = m2;
+        } else if (top1_c1.length > top1_c2.length) {
+          representativeTimestamp = m1;
+        } else {
+          representativeTimestamp = m1; // Padrão estável
+        }
+      }
+    } else {
+      representativeTimestamp = cluster[0];
+    }
+
+    const representativeDate = new Date(representativeTimestamp);
+
+    // B. Consolida fontes Top 1
+    const top1Map = new Map<
+      string,
+      { analysis: number; value: number; pct: number; top3: false }
+    >();
+    for (const c of clusterCandidates.filter((c) => c.isTop1)) {
+      const key = `A${c.analysis}_V${c.value}`;
+      const existing = top1Map.get(key);
+      if (!existing || c.pct > existing.pct) {
+        top1Map.set(key, {
+          analysis: c.analysis,
+          value: c.value,
+          pct: c.pct,
+          top3: false,
+        });
+      }
+    }
+    const top1Sources = Array.from(top1Map.values()).sort((a, b) => b.pct - a.pct);
+    const distinctTop1Analyses = Array.from(new Set(top1Sources.map((s) => s.analysis)));
+
+    // C. Consolida fontes Top 3 (secundárias de análises que não sejam Top 1 neste cluster)
+    const top3Map = new Map<
+      string,
+      { analysis: number; value: number; pct: number; top3: true; rank?: number }
+    >();
+    for (const c of clusterCandidates.filter((c) => !c.isTop1)) {
+      if (distinctTop1Analyses.includes(c.analysis)) continue;
+      const key = `A${c.analysis}_V${c.value}`;
+      const existing = top3Map.get(key);
+      if (!existing || c.pct > existing.pct) {
+        top3Map.set(key, {
+          analysis: c.analysis,
+          value: c.value,
+          pct: c.pct,
+          top3: true,
+          rank: c.rank,
+        });
+      }
+    }
+    const top3Sources = Array.from(top3Map.values()).sort((a, b) => b.pct - a.pct);
+
+    const allSources = [...top1Sources, ...top3Sources];
+    const distinctAnalyses = Array.from(new Set(allSources.map((s) => s.analysis)));
+
+    // Se não há nenhum Top 1 E menos de 2 Top 3, não atinge critério de sinal
+    if (top1Sources.length === 0 && top3Sources.length < 2) {
+      continue;
+    }
+
+    const maxPct = allSources.length > 0 ? Math.max(...allSources.map((s) => s.pct)) : 0;
+    const isHighTendency = clusterCandidates.some((c) => c.isHighTendency);
+    const isRecAlert = clusterCandidates.some((c) => c.isRecAlert);
+    const isConsecutive = cluster.length === 3;
+
+    // D. Avalia o nível final da confluência após o agrupamento
+    const evaluation = evaluateSignalLevel(top1Sources, top3Sources, { isConsecutive });
+
+    const strategyKey =
+      top1Sources.length > 0
+        ? `A${top1Sources[0].analysis}`
+        : top3Sources.length > 0
+          ? `A${top3Sources[0].analysis}`
+          : undefined;
+
+    groups.push({
+      representativeDate,
+      clusterDates: cluster.map((m) => new Date(m)),
+      top1Sources,
+      top3Sources,
+      allSources,
+      distinctTop1Analyses,
+      distinctAnalyses,
+      maxPct,
+      isHighTendency,
+      isRecAlert,
+      isConsecutive,
+      strategyKey,
+      evaluation,
+    });
+  }
+
+  return groups;
+}
+
+/**
+ * Constrói sinais preditivos a partir dos candidatos brutos já agrupados por confluência.
+ */
+export function buildSignalConfluences(rawCandidates: RawCandidate[]): PredictiveSignal[] {
+  const groups = groupCandidatesByTimeProximity(rawCandidates);
+
+  return groups.map((g) => {
+    const canonicalKey = getCanonicalSignalKey(g.representativeDate);
+    const confluenceText = g.allSources.map((s) => `A${s.analysis}·${s.value}`).join(", ");
+
+    return {
+      key: canonicalKey,
+      time: fmtClock(g.representativeDate),
+      pct: Number.isFinite(g.maxPct) ? g.maxPct : 0,
+      label: g.evaluation.label,
+      confluence: confluenceText,
+      medal: g.evaluation.medal,
+      entryDate: g.representativeDate,
+      outcome: "pending" as const,
+      isHighTendency: g.isHighTendency,
+      isRecAlert: g.isRecAlert,
+      category: g.evaluation.category,
+      groupName: g.evaluation.groupName,
+      isTop1: g.evaluation.isTop1,
+      isAlavancagem: g.evaluation.isAlavancagem,
+      isRare: g.evaluation.isRare,
+      isSupreme: g.evaluation.isSupreme,
+      strategyKey: g.strategyKey,
+      sources: g.allSources,
+      isConsecutive: g.isConsecutive,
+      levelOffset: g.isConsecutive ? 4 : 0,
+    };
+  });
+}
+
 /**
  * Mescla sinais existentes com novos candidatos gerados garantindo:
  * 1. Sinais PENDING NUNCA desaparecem.
  * 2. Promoção monotônica de nível (novo rank > rank atual).
  * 3. Downgrade é estritamente proibido (novo rank <= rank atual mantém o nível).
  * 4. Bloqueio de publicação e promoção se já houver branco em M-1.
- * 5. Identidade estável (signalKey canônica baseada no minuto alvo).
+ * 5. Identidade estável (signalKey canônica baseada no minuto alvo consolidado).
  * 6. Sinais concluídos (WIN/LOSS) permanecem imutáveis.
+ * 7. Sem duplicação de sinais na janela de confluência (±1 minuto).
  */
 export function mergeSignalsLifecycle(
   existingSignals: PredictiveSignal[],
@@ -340,11 +607,38 @@ export function mergeSignalsLifecycle(
     resultMap.set(canonicalKey, normalizedSig);
   }
 
-  // 2. Processa cada novo candidato gerado
+  // 2. Processa cada novo candidato consolidado
   for (const cand of newCandidates || []) {
     if (!cand || !cand.entryDate) continue;
     const canonicalKey = getCanonicalSignalKey(cand.entryDate);
-    const existing = resultMap.get(canonicalKey);
+    const candTime =
+      cand.entryDate instanceof Date
+        ? cand.entryDate.getTime()
+        : parseUtcDate(cand.entryDate as any).getTime();
+
+    // Procura sinal existente correspondente:
+    // Primeiro por chave canônica exata; se não houver, por proximidade de ±1 minuto (60.000 ms) entre sinais pendentes
+    let existingKey: string | undefined = undefined;
+    let existing: PredictiveSignal | undefined = undefined;
+
+    if (resultMap.has(canonicalKey)) {
+      existingKey = canonicalKey;
+      existing = resultMap.get(canonicalKey);
+    } else {
+      // Busca sinal pendente existente em janela de ±1 minuto (confluência temporal)
+      for (const [k, s] of resultMap.entries()) {
+        if (!s || !s.entryDate) continue;
+        const sTime =
+          s.entryDate instanceof Date
+            ? s.entryDate.getTime()
+            : parseUtcDate(s.entryDate as any).getTime();
+        if (Math.abs(candTime - sTime) <= 60_000 && s.outcome === "pending") {
+          existingKey = k;
+          existing = s;
+          break;
+        }
+      }
+    }
 
     const candRank = getSignalRank(cand);
     const whiteInM1 = hasWhiteInPreviousMinute(cand.entryDate, results);
@@ -369,10 +663,32 @@ export function mergeSignalsLifecycle(
 
       const existingRank = getSignalRank(existing);
 
+      // Se a chave mudou devido a novo horário representativo, remove a chave anterior para não duplicar cards
+      if (existingKey && existingKey !== canonicalKey) {
+        resultMap.delete(existingKey);
+      }
+
+      // Combina fontes sem perder histórico
+      const mergedSourcesMap = new Map<string, any>();
+      for (const s of existing.sources || []) {
+        if (s && s.analysis) {
+          mergedSourcesMap.set(`A${s.analysis}_V${s.value}`, s);
+        }
+      }
+      for (const s of cand.sources || []) {
+        if (s && s.analysis) {
+          mergedSourcesMap.set(`A${s.analysis}_V${s.value}`, s);
+        }
+      }
+      const combinedSources = Array.from(mergedSourcesMap.values());
+
       // Promoção de nível se o novo rank for superior E não houver branco em M-1
       if (candRank > existingRank && !whiteInM1) {
         resultMap.set(canonicalKey, {
           ...existing,
+          key: canonicalKey,
+          time: cand.time || existing.time,
+          entryDate: cand.entryDate,
           pct: Math.max(existing.pct, cand.pct),
           label: cand.label || existing.label,
           medal: cand.medal || existing.medal,
@@ -384,16 +700,24 @@ export function mergeSignalsLifecycle(
           isRare: cand.isRare || existing.isRare,
           isTop1: cand.isTop1 ?? existing.isTop1,
           strategyKey: cand.strategyKey || existing.strategyKey,
-          sources: cand.sources && cand.sources.length > 0 ? cand.sources : existing.sources,
+          sources: cand.sources && cand.sources.length > 0 ? cand.sources : combinedSources,
           isHighTendency: cand.isHighTendency || existing.isHighTendency,
+          isRecAlert: cand.isRecAlert || existing.isRecAlert,
           isVerified: cand.isVerified || existing.isVerified,
+          isConsecutive: cand.isConsecutive || existing.isConsecutive,
+          levelOffset: cand.levelOffset || existing.levelOffset,
         });
       } else {
-        // Novo rank é igual ou inferior: NUNCA REBAIXAR! Mantém nível e apenas enriquece metadados
+        // Novo rank é igual ou inferior: NUNCA REBAIXAR! Mantém nível e apenas enriquece metadados/fontes
         resultMap.set(canonicalKey, {
           ...existing,
+          key: canonicalKey,
+          time: cand.time || existing.time,
+          entryDate: cand.entryDate || existing.entryDate,
           pct: Math.max(existing.pct, cand.pct),
+          sources: combinedSources.length > 0 ? combinedSources : existing.sources,
           isHighTendency: existing.isHighTendency || cand.isHighTendency,
+          isRecAlert: existing.isRecAlert || cand.isRecAlert,
         });
       }
     }
