@@ -570,10 +570,7 @@ export function mergeSignalsLifecycle(
       (cat === "top1_isolated" ||
         cat === "top3_only" ||
         cat === "top5_only" ||
-        (!sig.isAlavancagem &&
-          !sig.isSupreme &&
-          !sig.isRare &&
-          cat !== "top1_top3"))
+        (!sig.isAlavancagem && !sig.isSupreme && !sig.isRare && cat !== "top1_top3"))
     ) {
       continue;
     }
