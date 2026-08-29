@@ -59,8 +59,10 @@ import {
   computeTop,
   fmtClock,
   latestByValue,
+  isValidCycle,
   MAX_ZEROS,
   MAX_CYCLES,
+  MIN_CYCLES,
   TIMEOUT_MINUTES,
   type Cycle,
   type Row,
@@ -108,7 +110,7 @@ type Mode2Signal = {
 
 const MIN_ASSERTIVIDADE_TOP1 = 65;
 const MIN_ASSERTIVIDADE_TOP3 = 55;
-const MIN_GATILHOS = 5;
+const MIN_GATILHOS = MIN_CYCLES; // Mínimo de 6 ciclos válidos (com no mínimo 1 resultado) para envio de sinais
 
 function addMinutes(d: Date, m: number) {
   const out = new Date(d.getTime() + m * 60_000);
@@ -540,14 +542,16 @@ export function PredictiveSignals() {
         window.dispatchEvent(new CustomEvent("switch-audit-filter", { detail: "hoje" }));
       }
 
-      // 1. Extração de todos os candidatos brutos das análises elegíveis (>= 5 gatilhos)
+      // 1. Extração de todos os candidatos brutos das análises elegíveis (>= 6 ciclos válidos)
       const rawCandidates: RawCandidate[] = [];
 
       for (const item of active) {
+        // Ciclos válidos: cada ciclo DEVE ter obtido no mínimo um resultado (c.gaps.length >= 1)
         const hist = (engine[item.analysis] || [])
-          .filter((c) => c.value === item.value)
+          .filter((c) => c.value === item.value && isValidCycle(c))
           .slice(-MAX_CYCLES);
-        // Regra: Mínimo de 5 ocorrências/gatilhos para uma análise ser elegível
+        // Regra: Mínimo de 6 ciclos válidos para uma análise ser elegível para envio de sinais.
+        // Análises com até 4 (ou 5) ciclos válidos NÃO são válidas para envio de sinais.
         if (hist.length < MIN_GATILHOS) continue;
 
         const candidates = computeTop(hist, CANDIDATE_DEPTH);

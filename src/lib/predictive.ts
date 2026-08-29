@@ -17,8 +17,29 @@ export type Cycle = {
 };
 
 export const MAX_ZEROS = 14;
-export const MAX_CYCLES = 5;
+export const MAX_CYCLES = 6;
+export const MIN_CYCLES = 6;
 export const TIMEOUT_MINUTES = 120;
+
+/**
+ * Verifica se um ciclo é válido:
+ * Um ciclo é válido apenas se tiver obtido no mínimo um resultado (gaps.length >= 1).
+ */
+export function isValidCycle(c?: Cycle | null): boolean {
+  return Boolean(c && Array.isArray(c.gaps) && c.gaps.length >= 1);
+}
+
+/**
+ * Retorna somente os ciclos válidos (com no mínimo um resultado).
+ */
+export function getValidCycles(cycles: Cycle[], value?: number, analysis?: number): Cycle[] {
+  return (cycles || []).filter(
+    (c) =>
+      isValidCycle(c) &&
+      (value === undefined || c.value === value) &&
+      (analysis === undefined || c.analysis === analysis),
+  );
+}
 
 function diffMinutes(a: Date, b: Date) {
   const diffMs = b.getTime() - a.getTime();
@@ -500,9 +521,7 @@ export function latestByValue(cycles: Cycle[]): Map<number, Cycle> {
 }
 
 export function cyclesOf(cycles: Cycle[], value: number, analysis?: number): Cycle[] {
-  return cycles
-    .filter((c) => c.value === value && (!analysis || c.analysis === analysis))
-    .slice(-MAX_CYCLES);
+  return getValidCycles(cycles, value, analysis).slice(-MAX_CYCLES);
 }
 
 export function fmtClock(d?: Date | string | number | null) {

@@ -55,6 +55,9 @@ import {
   buildASandwichMeio,
   buildA7_11,
   computeTop,
+  isValidCycle,
+  MIN_CYCLES,
+  MAX_CYCLES,
   type Cycle,
   type Row,
 } from "@/lib/predictive";
@@ -276,13 +279,19 @@ export default function SignalPercentageValidator() {
       }
 
       for (const [val, cList] of byVal.entries()) {
-        // Regra: Mínimo de 5 ocorrências/gatilhos para uma análise ser elegível
-        if (cList.length < 5) continue;
+        // Regra: Ciclos válidos (com no mínimo um resultado obtido: gaps.length >= 1)
+        const validList = cList.filter(isValidCycle);
 
-        // Itera ciclos para projetar a partir de 5 ocorrências
-        for (let idx = 5; idx < cList.length; idx++) {
-          const pastCycles = cList.slice(0, idx);
-          const currentTrigger = cList[idx];
+        // Regra: Mínimo de 6 ciclos válidos para uma análise ser elegível para envio de sinais.
+        // Análises com até 4 (ou 5) ciclos válidos NÃO são válidas para envio de sinais.
+        if (validList.length < MIN_CYCLES) continue;
+
+        // Itera ciclos para projetar a partir de MIN_CYCLES (6) ocorrências válidas
+        for (let idx = MIN_CYCLES; idx < validList.length; idx++) {
+          const pastCycles = validList.slice(Math.max(0, idx - MAX_CYCLES), idx);
+          if (pastCycles.length < MIN_CYCLES) continue;
+
+          const currentTrigger = validList[idx];
           if (!currentTrigger?.triggerAt) continue;
 
           const topGroups = computeTop(pastCycles, 3);
@@ -295,7 +304,8 @@ export default function SignalPercentageValidator() {
             // Regra: Top 3 >= 55%
             if (!isTop1 && group.pct < 55) return;
 
-            const targetMinute = group.m;
+            let targetMinute = group.m;
+            if (["A17", "A18"].includes(strat.key)) targetMinute += 1;
             const projectedDate = new Date(
               currentTrigger.triggerAt.getTime() + targetMinute * 60000,
             );
@@ -336,6 +346,14 @@ export default function SignalPercentageValidator() {
     const nowTime = Date.now();
 
     for (const [slotTime, data] of sortedSlots.slice(0, maxSignalsToEvaluate)) {
+      // Bloqueio de envio: se já houve branco no minuto anterior (M-1), o sinal é inválido para envio
+      const whiteInM1 = allResults.some((r) => {
+        const rTime = parseUtcDate(r.created_at).getTime();
+        const isWhite = Number(r.roll) === 0 || r.color === "white";
+        return isWhite && rTime >= slotTime - 60_000 && rTime < slotTime;
+      });
+      if (whiteInM1) continue;
+
       const distinctTop1 = new Set(data.top1.map((p) => p.strategyKey));
       const distinctTop3 = new Set(data.top3.map((p) => p.strategyKey));
       const totalSources = distinctTop1.size + distinctTop3.size;
@@ -352,7 +370,7 @@ export default function SignalPercentageValidator() {
       } else if (distinctTop1.size === 1 && distinctTop3.size >= 1) {
         category = "top1_top3";
       } else {
-        // Top 1 isolado e Top 3 apenas não geram sinais
+        // Top 1 isolado e Top 3 apenas não são válidos para envio de sinais
         continue;
       }
 
