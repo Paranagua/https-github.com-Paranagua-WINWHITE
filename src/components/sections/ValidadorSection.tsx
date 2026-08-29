@@ -282,11 +282,11 @@ export default function SignalPercentageValidator() {
         // Regra: Ciclos válidos (com no mínimo um resultado obtido: gaps.length >= 1)
         const validList = cList.filter(isValidCycle);
 
-        // Regra: Mínimo de 6 ciclos válidos para uma análise ser elegível para envio de sinais.
-        // Análises com até 4 (ou 5) ciclos válidos NÃO são válidas para envio de sinais.
+        // Regra: Mínimo de 5 ciclos válidos (janela de 5 a 6) para envio de sinais.
+        // Análises de 0 a 4 ciclos válidos são bloqueadas e NÃO geram sinais.
         if (validList.length < MIN_CYCLES) continue;
 
-        // Itera ciclos para projetar a partir de MIN_CYCLES (6) ocorrências válidas
+        // Itera ciclos para projetar a partir de MIN_CYCLES (5) ocorrências válidas
         for (let idx = MIN_CYCLES; idx < validList.length; idx++) {
           const pastCycles = validList.slice(Math.max(0, idx - MAX_CYCLES), idx);
           if (pastCycles.length < MIN_CYCLES) continue;

@@ -85,6 +85,7 @@ import AnaliseSection from "@/components/sections/AnaliseSection";
 import EstrategiasSection from "@/components/sections/EstrategiasSection";
 import HostmanSection from "@/components/sections/HostmanSection";
 import ValidadorSection from "@/components/sections/ValidadorSection";
+import { SignalNotificationWatcher } from "@/components/double/SignalNotificationWatcher";
 
 function SectionFallback() {
   return (
@@ -999,6 +1000,7 @@ function Index() {
       {/* Área principal scrollable - flex-1 garante que ocupa o resto do espaço */}
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
         <AppHeader />
+        <SignalNotificationWatcher />
 
         <div className="flex-1 overflow-y-auto scrollbar-none">
           {section === "sinais" ? (
