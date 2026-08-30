@@ -262,6 +262,17 @@ export function hasWhiteInPreviousMinute(
   }
 }
 
+export function getSourceCycleKey(src: {
+  analysis: number;
+  value: number;
+  cycleKey?: string;
+}): string {
+  if (src.cycleKey && typeof src.cycleKey === "string" && src.cycleKey.trim().length > 0) {
+    return src.cycleKey;
+  }
+  return `A${src.analysis}_V${src.value}`;
+}
+
 export interface RawCandidate {
   analysis: number;
   value: number;
@@ -604,23 +615,86 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
   // 6. PASSO 2: Ordena as confluências candidatas da MAIS FORTE para a MAIS FRACA
   candidateGroups.sort(compareConfluenceStrength);
 
-  // 7. PASSO 3: Aplica a exclusividade estrita de análises
-  // Se uma análise aparecer em duas confluências, mantém a confluência mais forte e descarta a mais fraca
-  const claimedAnalyses = new Set<number>();
+  // 7. PASSO 3: Aplica a exclusividade por Ciclo/Gatilho específico (cycleKey)
+  // O mesmo ciclo não pode gerar múltiplos sinais próximos (ex: 12:10, 12:12, 12:14).
+  // A confluência mais forte reserva o ciclo; ciclos diferentes da mesma análise são totalmente independentes.
+  const claimedCycleKeys = new Set<string>();
   const winningGroups: ConfluenceGroup[] = [];
 
   for (const group of candidateGroups) {
-    const hasConflict = group.distinctAnalyses.some((an) => claimedAnalyses.has(an));
-    if (hasConflict) {
-      // Descarta esta confluência mais fraca pois uma de suas análises já foi conquistada por uma confluência superior
+    const currentSources = group.allSources || [];
+    const groupCycleKeys = currentSources.map((s) => getSourceCycleKey(s));
+    const hasConflict = groupCycleKeys.some((ck) => claimedCycleKeys.has(ck));
+
+    if (!hasConflict) {
+      // Sem conflito: confluência inteira é aceita e reivindica seus cycleKeys
+      for (const ck of groupCycleKeys) {
+        claimedCycleKeys.add(ck);
+      }
+      winningGroups.push(group);
       continue;
     }
 
-    // Reivindica as análises para esta confluência vencedora
-    for (const an of group.distinctAnalyses) {
-      claimedAnalyses.add(an);
+    // Se houve conflito em algum cycleKey, filtra somente as fontes que não foram reivindicadas
+    const exclusiveSources = currentSources.filter(
+      (src) => !claimedCycleKeys.has(getSourceCycleKey(src)),
+    );
+
+    const remainingTop1 = exclusiveSources
+      .filter((s) => !s.top3)
+      .map((s) => ({
+        analysis: s.analysis,
+        value: s.value,
+        pct: s.pct,
+        top3: false as const,
+        cycleKey: s.cycleKey,
+      }));
+    const remainingTop3 = exclusiveSources
+      .filter((s) => s.top3)
+      .map((s) => ({
+        analysis: s.analysis,
+        value: s.value,
+        pct: s.pct,
+        top3: true as const,
+        rank: s.rank,
+        cycleKey: s.cycleKey,
+      }));
+
+    // Reavalia o nível da confluência com as fontes exclusivas restantes
+    const newEval = evaluateSignalLevel(remainingTop1, remainingTop3, {
+      isConsecutive: group.isConsecutive,
+    });
+
+    // Se perdeu os requisitos mínimos (ex: sem Top 1 ou confluência insuficiente), descarta
+    if (!newEval || remainingTop1.length === 0) {
+      continue;
     }
-    winningGroups.push(group);
+
+    // Caso permaneça válida, reivindica os cycleKeys exclusivos restantes
+    for (const src of exclusiveSources) {
+      claimedCycleKeys.add(getSourceCycleKey(src));
+    }
+
+    const distinctTop1Analyses = Array.from(new Set(remainingTop1.map((s) => s.analysis)));
+    const distinctAnalyses = Array.from(new Set(exclusiveSources.map((s) => s.analysis)));
+    const avgPct =
+      exclusiveSources.length > 0
+        ? Math.round(
+            (exclusiveSources.reduce((acc, s) => acc + (s.pct || 0), 0) / exclusiveSources.length) *
+              10,
+          ) / 10
+        : group.avgPct;
+
+    winningGroups.push({
+      ...group,
+      top1Sources: remainingTop1,
+      top3Sources: remainingTop3,
+      allSources: exclusiveSources,
+      distinctTop1Analyses,
+      distinctAnalyses,
+      avgPct,
+      evaluation: newEval,
+    });
   }
 
   // 8. Retorna as confluências vencedoras ordenadas cronologicamente
@@ -816,16 +890,16 @@ export function mergeSignalsLifecycle(
         resultMap.delete(existingKey);
       }
 
-      // Combina fontes sem perder histórico
+      // Combina fontes sem perder histórico (usando cycleKey para manter ciclos diferentes separados)
       const mergedSourcesMap = new Map<string, any>();
       for (const s of existing.sources || []) {
         if (s && s.analysis) {
-          mergedSourcesMap.set(`A${s.analysis}_V${s.value}`, s);
+          mergedSourcesMap.set(getSourceCycleKey(s), s);
         }
       }
       for (const s of cand.sources || []) {
         if (s && s.analysis) {
-          mergedSourcesMap.set(`A${s.analysis}_V${s.value}`, s);
+          mergedSourcesMap.set(getSourceCycleKey(s), s);
         }
       }
       const combinedSources = Array.from(mergedSourcesMap.values());
@@ -916,7 +990,10 @@ export function mergeSignalsLifecycle(
     }
   }
 
-  // 3. Regra de Exclusividade Estrita: Nenhuma análise pode participar de múltiplos sinais pendentes simultâneos!
+  // 3. Regra de Exclusividade por Ciclo/Gatilho específico (cycleKey):
+  // O mesmo ciclo não pode participar de múltiplos sinais pendentes simultâneos.
+  // Ciclos diferentes da mesma análise são totalmente independentes e podem gerar novos sinais!
+  // Sinais com resultado WIN ou LOSS liberam imediatamente seus ciclos.
   // Ordena os sinais pendentes do MAIS FORTE para o MAIS FRACO (usando a hierarquia estrita de rank).
   const pendingSignals = Array.from(resultMap.values())
     .filter((s) => s && s.outcome === "pending")
@@ -939,7 +1016,7 @@ export function mergeSignalsLifecycle(
       ).size;
       if (top1CountB !== top1CountA) return top1CountB - top1CountA;
 
-      // 4. Total de análises distintas
+      // 4. Total de fontes/análises distintas
       const totalAnalysesA = new Set((a.sources || []).map((s: any) => s.analysis)).size;
       const totalAnalysesB = new Set((b.sources || []).map((s: any) => s.analysis)).size;
       if (totalAnalysesB !== totalAnalysesA) return totalAnalysesB - totalAnalysesA;
@@ -959,73 +1036,76 @@ export function mergeSignalsLifecycle(
       return (tA || 0) - (tB || 0);
     });
 
-  const claimedAnalyses = new Set<number>();
+  const claimedCycleKeys = new Set<string>();
 
   for (const sig of pendingSignals) {
     const sigKey = sig.key || getCanonicalSignalKey(sig.entryDate);
     const currentSources = sig.sources || [];
-    const distinctAnalyses = Array.from(
-      new Set(currentSources.filter((s: any) => s && s.analysis).map((s: any) => s.analysis)),
-    );
+    const sourceCycleKeys = currentSources.map((s) => getSourceCycleKey(s));
 
-    // Se alguma análise já foi reivindicada por um sinal mais forte, descarta a confluência mais fraca
-    const hasConflict = distinctAnalyses.some((an) => claimedAnalyses.has(an));
-
-    if (hasConflict) {
-      if (!sig.isLocked) {
-        resultMap.delete(sigKey);
-        continue;
+    if (sig.isLocked) {
+      // Sinais travados em M-1 mantêm todas as suas fontes e reivindicam seus ciclos
+      for (const ck of sourceCycleKeys) {
+        claimedCycleKeys.add(ck);
       }
+      continue;
     }
 
-    // Filtra fontes exclusivas
-    const exclusiveSources = currentSources.filter((src) => {
-      if (!src || !src.analysis) return false;
-      return !claimedAnalyses.has(src.analysis);
-    });
+    // Se algum cycleKey já foi reivindicado por um sinal pendente mais forte, remove a fonte conflitante
+    const hasConflict = sourceCycleKeys.some((ck) => claimedCycleKeys.has(ck));
 
-    const top1Sources = exclusiveSources.filter((s: any) => !s.top3 && !s.top5);
-    const top3Sources = exclusiveSources.filter((s: any) => s.top3 || s.top5);
+    if (hasConflict) {
+      // Filtra fontes exclusivas (cujo cycleKey não foi reivindicado)
+      const exclusiveSources = currentSources.filter(
+        (src) => !claimedCycleKeys.has(getSourceCycleKey(src)),
+      );
 
-    const evalLevel = evaluateSignalLevel(top1Sources, top3Sources, {
-      isConsecutive: sig.isConsecutive,
-      levelOffset: sig.levelOffset,
-    });
+      const top1Sources = exclusiveSources.filter((s: any) => !s.top3 && !s.top5);
+      const top3Sources = exclusiveSources.filter((s: any) => s.top3 || s.top5);
 
-    if (!evalLevel || top1Sources.length === 0) {
-      if (!sig.isLocked) {
+      const evalLevel = evaluateSignalLevel(top1Sources, top3Sources, {
+        isConsecutive: sig.isConsecutive,
+        levelOffset: sig.levelOffset,
+      });
+
+      if (!evalLevel || top1Sources.length === 0) {
         resultMap.delete(sigKey);
+      } else {
+        // Reivindica os cycleKeys exclusivos
+        for (const src of exclusiveSources) {
+          claimedCycleKeys.add(getSourceCycleKey(src));
+        }
+
+        const confText = exclusiveSources.map((s) => `A${s.analysis}·${s.value}`).join(", ");
+        const avgPct =
+          exclusiveSources.length > 0
+            ? Math.round(
+                (exclusiveSources.reduce((acc, s) => acc + (s.pct || 0), 0) /
+                  exclusiveSources.length) *
+                  10,
+              ) / 10
+            : sig.pct;
+
+        resultMap.set(sigKey, {
+          ...sig,
+          sources: exclusiveSources,
+          label: evalLevel.label,
+          medal: evalLevel.medal,
+          confluence: confText,
+          category: evalLevel.category,
+          groupName: evalLevel.groupName,
+          isAlavancagem: evalLevel.isAlavancagem,
+          isSupreme: evalLevel.isSupreme,
+          isRare: evalLevel.isRare,
+          isTop1: evalLevel.isTop1,
+          pct: avgPct,
+        });
       }
     } else {
-      // Reivindica as análises
-      for (const an of distinctAnalyses) {
-        claimedAnalyses.add(an);
+      // Sem conflito: reivindica todos os cycleKeys deste sinal
+      for (const ck of sourceCycleKeys) {
+        claimedCycleKeys.add(ck);
       }
-
-      const confText = exclusiveSources.map((s) => `A${s.analysis}·${s.value}`).join(", ");
-      const avgPct =
-        exclusiveSources.length > 0
-          ? Math.round(
-              (exclusiveSources.reduce((acc, s) => acc + (s.pct || 0), 0) /
-                exclusiveSources.length) *
-                10,
-            ) / 10
-          : sig.pct;
-
-      resultMap.set(sigKey, {
-        ...sig,
-        sources: exclusiveSources,
-        label: evalLevel.label,
-        medal: evalLevel.medal,
-        confluence: confText,
-        category: evalLevel.category,
-        groupName: evalLevel.groupName,
-        isAlavancagem: evalLevel.isAlavancagem,
-        isSupreme: evalLevel.isSupreme,
-        isRare: evalLevel.isRare,
-        isTop1: evalLevel.isTop1,
-        pct: avgPct,
-      });
     }
   }
 
