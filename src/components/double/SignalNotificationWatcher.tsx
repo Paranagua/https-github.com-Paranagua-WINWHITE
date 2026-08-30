@@ -4,6 +4,8 @@ import { useSection, setSection } from "@/lib/sectionStore";
 import {
   getPredictiveSignals,
   subscribePredictive,
+  getRobotEnabled,
+  subscribeRobot,
   type PredictiveSignal,
 } from "@/lib/signalsStore";
 import { getSignalRank, SignalRank } from "@/lib/signalHierarchy";
@@ -29,13 +31,23 @@ interface SignalSnapshot {
 
 export function SignalNotificationWatcher() {
   const [mounted, setMounted] = useState(false);
+  const [robotEnabled, setRobotEnabledState] = useState(getRobotEnabled());
   const section = useSection();
   const prevSignalsRef = useRef<Map<string, SignalSnapshot>>(new Map());
   const isInitialRef = useRef(true);
 
   useEffect(() => {
     setMounted(true);
+    setRobotEnabledState(getRobotEnabled());
   }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const unsub = subscribeRobot(() => {
+      setRobotEnabledState(getRobotEnabled());
+    });
+    return unsub;
+  }, [mounted]);
 
   // Solicita permissão nativa de notificação do navegador de forma não-intrusiva
   useEffect(() => {
@@ -82,8 +94,8 @@ export function SignalNotificationWatcher() {
         return;
       }
 
-      // Se o usuário já está na aba de sinais, não dispara notificações flutuantes
-      if (section === "sinais") {
+      // Se o usuário já está na aba de sinais ou os sinais estão desativados, não dispara notificações flutuantes
+      if (section === "sinais" || !getRobotEnabled()) {
         prevSignalsRef.current = nextMap;
         return;
       }
@@ -222,10 +234,10 @@ export function SignalNotificationWatcher() {
 
   if (!mounted) return null;
 
-  // Se o usuário não estiver na aba de sinais, mantém o PredictiveSignals rodando em segundo plano
+  // Se o usuário não estiver na aba de sinais e os sinais estiverem ativados, mantém o PredictiveSignals rodando em segundo plano
   return (
     <>
-      {section !== "sinais" && (
+      {section !== "sinais" && robotEnabled && (
         <div className="hidden pointer-events-none" aria-hidden="true" tabIndex={-1}>
           <PredictiveSignals />
         </div>

@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, Component, type ReactNode } from "react";
 import {
   setPredictiveSignals,
-  getRobotEnabled,
-  setRobotEnabled,
-  subscribeRobot,
   getPredictiveSignals,
   subscribePredictive,
   type PredictiveSignal,
@@ -12,7 +9,6 @@ import { useSignalStatsStore } from "@/lib/signalStatsStore";
 import { auditSignalWithRounds, deduplicateResults } from "@/lib/signalAuditEngine";
 import {
   Radio,
-  Power,
   Cpu,
   AlertCircle,
   ShieldCheck,
@@ -25,7 +21,6 @@ import { setSection } from "@/lib/sectionStore";
 import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
 import { colorOf, fmtTime, type Color } from "@/components/double/types";
 import { parseUtcDate } from "@/lib/utils";
-import { Switch } from "@/components/ui/switch";
 import { PredictiveSignals } from "@/components/double/PredictiveSignals";
 
 const ALL_ANALYSES_METADATA = [
@@ -238,7 +233,6 @@ export default function SinaisSection() {
 
 function SinaisSectionContent() {
   const [resultsForValidation, setResultsForValidation] = useState<Result[]>([]);
-  const [robotOn, setRobotOn] = useState(getRobotEnabled());
   const [predictiveList, setPredictiveList] = useState<PredictiveSignal[]>(getPredictiveSignals());
   const [auditFilter, setAuditFilter] = useState<"geral" | "hoje">("geral");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -338,9 +332,6 @@ function SinaisSectionContent() {
       setPredictiveList(getPredictiveSignals());
     };
     const unsub = subscribePredictive(handlePredictiveChange);
-    const subRobot = subscribeRobot(() => {
-      setRobotOn(getRobotEnabled());
-    });
 
     const handleSwitchFilter = (e: any) => {
       if (e.detail === "hoje") setAuditFilter("hoje");
@@ -349,7 +340,6 @@ function SinaisSectionContent() {
 
     return () => {
       unsub();
-      subRobot();
       window.removeEventListener("switch-audit-filter", handleSwitchFilter);
     };
   }, []);
@@ -537,25 +527,6 @@ function SinaisSectionContent() {
             <span className="hidden sm:inline">Auditar Porcentagens</span>
             <span className="sm:hidden">Validador</span>
           </button>
-
-          <div className="flex items-center gap-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 backdrop-blur-md">
-            <Power className="h-4 w-4 text-emerald-500" />
-            <div className="text-xs leading-tight">
-              <div className="text-[#9CA3AF] font-bold tracking-widest text-[9px] uppercase">
-                ROBÔ · SINAIS
-              </div>
-              <div className="font-black text-emerald-400 text-sm font-outfit">
-                {robotOn ? "ACTIVE" : "STANDBY"}
-              </div>
-            </div>
-            <Switch
-              checked={robotOn}
-              onCheckedChange={(v) => {
-                setRobotOn(v);
-                setRobotEnabled(v);
-              }}
-            />
-          </div>
         </div>
       </div>
 

@@ -68,6 +68,7 @@ import {
   subscribeSignals,
   type StoredSignal,
   getRobotEnabled,
+  setRobotEnabled,
   subscribeRobot,
   getPredictiveSignals,
   getPredictiveServerSnapshot,
@@ -1269,6 +1270,16 @@ function Index() {
                           checked={viewMode === "colunas"}
                           onChange={(v) => setViewMode(v ? "colunas" : "lista")}
                           label="Colunas fixas"
+                        />
+                      </div>
+                      <div className="flex shrink-0 items-center">
+                        <Switch
+                          checked={robotOn}
+                          onChange={(v) => {
+                            setRobotOn(v);
+                            setRobotEnabled(v);
+                          }}
+                          label="Ativar sinais"
                         />
                       </div>
                       <div className="flex shrink-0 items-center">
