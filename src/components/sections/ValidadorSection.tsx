@@ -282,14 +282,16 @@ export default function SignalPercentageValidator() {
         // Regra: Ciclos válidos (com no mínimo um resultado obtido: gaps.length >= 1)
         const validList = cList.filter(isValidCycle);
 
-        // Regra: Mínimo de 5 ciclos válidos (janela de 5 a 6) para envio de sinais.
-        // Análises de 0 a 4 ciclos válidos são bloqueadas e NÃO geram sinais.
-        if (validList.length < MIN_CYCLES) continue;
+        // Regra: Mínimo de 5 ciclos válidos (4 passados + 1 gatilho ativo) para envio de sinais.
+        // Análises de 0 a 4 ciclos válidos no total são bloqueadas e NÃO geram sinais.
+        if (validList.length < 5) continue;
 
-        // Itera ciclos para projetar a partir de MIN_CYCLES (5) ocorrências válidas
-        for (let idx = MIN_CYCLES; idx < validList.length; idx++) {
-          const pastCycles = validList.slice(Math.max(0, idx - MAX_CYCLES), idx);
-          if (pastCycles.length < MIN_CYCLES) continue;
+        // Itera ciclos para projetar a partir do 5º ciclo válido (índice 4, com 4 ciclos anteriores para análise)
+        for (let idx = 4; idx < validList.length; idx++) {
+          // Se idx === 4 (5º ciclo): analisa os 4 anteriores (índices 0..3).
+          // Se idx >= 5 (6º ciclo em diante): analisa os 5 ciclos anteriores mais recentes (janela deslizante de 5).
+          const pastCycles = validList.slice(Math.max(0, idx - 5), idx);
+          if (pastCycles.length < 4) continue;
 
           const currentTrigger = validList[idx];
           if (!currentTrigger?.triggerAt) continue;

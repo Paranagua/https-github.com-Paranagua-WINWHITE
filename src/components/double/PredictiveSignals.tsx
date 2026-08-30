@@ -542,17 +542,25 @@ export function PredictiveSignals() {
         window.dispatchEvent(new CustomEvent("switch-audit-filter", { detail: "hoje" }));
       }
 
-      // 1. Extração de todos os candidatos brutos das análises elegíveis (5 a 6 ciclos válidos)
+      // 1. Extração de todos os candidatos brutos das análises elegíveis (mínimo de 5 ciclos totais: 4 passados + 1 gatilho ativo)
       const rawCandidates: RawCandidate[] = [];
 
       for (const item of active) {
-        // Ciclos válidos: cada ciclo DEVE ter obtido no mínimo um resultado (c.gaps.length >= 1)
-        const hist = (engine[item.analysis] || [])
-          .filter((c) => c.value === item.value && isValidCycle(c))
-          .slice(-MAX_CYCLES);
-        // Regra: Mínimo de 5 ciclos válidos (janela de 5 a 6) para envio de sinais.
-        // Análises de 0 a 4 ciclos válidos são bloqueadas e NÃO geram sinais.
-        if (hist.length < MIN_GATILHOS) continue;
+        // Obter todos os ciclos daquela análise para aquele valor
+        const allCycles = (engine[item.analysis] || []).filter((c) => c.value === item.value);
+
+        // Ciclos anteriores ao gatilho ativo atual (item.open) que já são válidos (gaps.length >= 1)
+        const pastValid = allCycles.filter((c) => c !== item.open && isValidCycle(c));
+
+        // Regra de ciclos para envio de sinais:
+        // - Se a análise tem 5 ciclos no total: analisa os 4 ciclos passados e o 5º é o gatilho ativo.
+        // - Se a análise tem 6 ciclos no total: analisa os 5 ciclos passados e o 6º é o gatilho ativo.
+        // - Se a análise tem 7 ou mais ciclos: analisa os 5 ciclos anteriores mais recentes.
+        // - Se tiver menos de 4 ciclos anteriores válidos (menos de 5 ciclos totais com o gatilho), bloqueia o envio.
+        if (pastValid.length < 4) continue;
+
+        // Janela estatística: 4 ciclos passados (se total for 5) ou 5 ciclos passados mais recentes (se total for 6+)
+        const hist = pastValid.slice(-5);
 
         const candidates = computeTop(hist, CANDIDATE_DEPTH);
         if (!candidates.length) continue;
