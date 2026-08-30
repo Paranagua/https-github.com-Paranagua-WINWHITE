@@ -279,6 +279,7 @@ export interface ConfluenceGroup {
   distinctTop1Analyses: number[];
   distinctAnalyses: number[];
   maxPct: number;
+  avgPct: number;
   isHighTendency: boolean;
   isRecAlert: boolean;
   isConsecutive: boolean;
@@ -481,6 +482,12 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
     }
 
     const maxPct = allSources.length > 0 ? Math.max(...allSources.map((s) => s.pct)) : 0;
+    const avgPct =
+      allSources.length > 0
+        ? Math.round(
+            (allSources.reduce((acc, s) => acc + (s.pct || 0), 0) / allSources.length) * 10,
+          ) / 10
+        : 0;
     const isHighTendency = clusterCandidates.some((c) => c.isHighTendency);
     const isRecAlert = clusterCandidates.some((c) => c.isRecAlert);
 
@@ -513,6 +520,7 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
       distinctTop1Analyses,
       distinctAnalyses,
       maxPct,
+      avgPct,
       isHighTendency,
       isRecAlert,
       isConsecutive,
@@ -534,11 +542,12 @@ export function buildSignalConfluences(rawCandidates: RawCandidate[]): Predictiv
   return groups.map((g) => {
     const canonicalKey = getCanonicalSignalKey(g.representativeDate);
     const confluenceText = g.allSources.map((s) => `A${s.analysis}·${s.value}`).join(", ");
+    const displayPct = Number.isFinite(g.avgPct) && g.avgPct > 0 ? g.avgPct : g.maxPct;
 
     return {
       key: canonicalKey,
       time: fmtClock(g.representativeDate),
-      pct: Number.isFinite(g.maxPct) ? g.maxPct : 0,
+      pct: displayPct,
       label: g.evaluation.label,
       confluence: confluenceText,
       medal: g.evaluation.medal,
@@ -842,9 +851,13 @@ export function mergeSignalsLifecycle(
       }
 
       const confText = exclusiveSources.map((s) => `A${s.analysis}·${s.value}`).join(", ");
-      const maxPct =
+      const avgPct =
         exclusiveSources.length > 0
-          ? Math.max(...exclusiveSources.map((s) => s.pct || 0))
+          ? Math.round(
+              (exclusiveSources.reduce((acc, s) => acc + (s.pct || 0), 0) /
+                exclusiveSources.length) *
+                10,
+            ) / 10
           : sig.pct;
 
       resultMap.set(sigKey, {
@@ -859,7 +872,7 @@ export function mergeSignalsLifecycle(
         isSupreme: evalLevel.isSupreme,
         isRare: evalLevel.isRare,
         isTop1: evalLevel.isTop1,
-        pct: Math.max(sig.pct, maxPct),
+        pct: avgPct,
       });
     }
   }

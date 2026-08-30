@@ -376,8 +376,12 @@ export default function SignalPercentageValidator() {
         continue;
       }
 
-      // Maior porcentagem individual entre as fontes do sinal
-      const maxPct = Math.max(...data.top1.map((p) => p.pct), ...data.top3.map((p) => p.pct), 0);
+      // Porcentagem média entre as fontes confluentes do sinal
+      const allPcts = [...data.top1.map((p) => p.pct), ...data.top3.map((p) => p.pct)];
+      const avgPct =
+        allPcts.length > 0
+          ? Math.round((allPcts.reduce((a, b) => a + b, 0) / allPcts.length) * 10) / 10
+          : 0;
 
       const primary = data.top1[0] || data.top3[0];
       const slotDate = new Date(slotTime);
@@ -418,7 +422,7 @@ export default function SignalPercentageValidator() {
         strategyLabel: primary.strategyLabel,
         sourceValue: primary.value,
         predictedMinute: slotDate.getMinutes(),
-        projectedPct: maxPct,
+        projectedPct: avgPct,
         category,
         sourcesCount: totalSources,
         top1Count: distinctTop1.size,
