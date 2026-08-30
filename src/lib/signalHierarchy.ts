@@ -2,6 +2,10 @@ import { fmtClock } from "@/lib/predictive";
 import { parseUtcDate } from "@/lib/utils";
 import type { PredictiveSignal, StoredSignal } from "@/lib/signalsStore";
 import type { AuditResultItem } from "@/lib/signalAuditEngine";
+import {
+  mergeConfirmedStrategies,
+  applyConfirmationStrategies,
+} from "@/lib/confirmationStrategies";
 
 /**
  * Hierarquia estrita e monotônica dos sinais (do mais forte ao mais fraco):
@@ -268,14 +272,35 @@ export interface RawCandidate {
   isHighTendency?: boolean;
   isRecAlert?: boolean;
   strategyKey?: string;
+  cycleKey?: string;
 }
 
 export interface ConfluenceGroup {
   representativeDate: Date;
   clusterDates: Date[];
-  top1Sources: Array<{ analysis: number; value: number; pct: number; top3: false }>;
-  top3Sources: Array<{ analysis: number; value: number; pct: number; top3: true; rank?: number }>;
-  allSources: Array<{ analysis: number; value: number; pct: number; top3: boolean; rank?: number }>;
+  top1Sources: Array<{
+    analysis: number;
+    value: number;
+    pct: number;
+    top3: false;
+    cycleKey?: string;
+  }>;
+  top3Sources: Array<{
+    analysis: number;
+    value: number;
+    pct: number;
+    top3: true;
+    rank?: number;
+    cycleKey?: string;
+  }>;
+  allSources: Array<{
+    analysis: number;
+    value: number;
+    pct: number;
+    top3: boolean;
+    rank?: number;
+    cycleKey?: string;
+  }>;
   distinctTop1Analyses: number[];
   distinctAnalyses: number[];
   maxPct: number;
@@ -289,11 +314,57 @@ export interface ConfluenceGroup {
 }
 
 /**
+ * Compara a força/nível de duas confluências usando a hierarquia estrita:
+ * 1. 🚀 Alavancagem (Rank 4) > 👑 Supremo (Rank 3) > 💎 Raro (Rank 2) > ⚡ Top 1 & Top 3 (Rank 1)
+ * 2. Quantidade de análises Top 1 distintas (mais Top 1 = mais forte)
+ * 3. Quantidade total de análises distintas (mais análises = mais forte)
+ * 4. Média de assertividade (avgPct)
+ * 5. Maior assertividade individual (maxPct)
+ * 6. Horário (mais cedo primeiro para estabilidade)
+ */
+export function compareConfluenceStrength(a: ConfluenceGroup, b: ConfluenceGroup): number {
+  const rankA = a.evaluation?.rank ?? getSignalRank(a.evaluation?.category);
+  const rankB = b.evaluation?.rank ?? getSignalRank(b.evaluation?.category);
+  if (rankB !== rankA) {
+    return rankB - rankA;
+  }
+
+  const top1A = a.distinctTop1Analyses.length;
+  const top1B = b.distinctTop1Analyses.length;
+  if (top1B !== top1A) {
+    return top1B - top1A;
+  }
+
+  const totalA = a.distinctAnalyses.length;
+  const totalB = b.distinctAnalyses.length;
+  if (totalB !== totalA) {
+    return totalB - totalA;
+  }
+
+  const avgA = a.avgPct || 0;
+  const avgB = b.avgPct || 0;
+  if (Math.abs(avgB - avgA) >= 0.01) {
+    return avgB - avgA;
+  }
+
+  const maxA = a.maxPct || 0;
+  const maxB = b.maxPct || 0;
+  if (Math.abs(maxB - maxA) >= 0.01) {
+    return maxB - maxA;
+  }
+
+  return a.representativeDate.getTime() - b.representativeDate.getTime();
+}
+
+/**
  * Agrupa candidatos gerados pelas análises em grupos de confluência com base na proximidade de horário (janela primária de até 3 minutos).
  * Regras de negócio:
- * 1. Vizinhos primários com o do meio faltando (ex: 13:55 + 13:57) -> horário do meio (13:56) é o horário oficial de referência.
- * 2. Cada análise só pode participar de UMA única confluência (exclusividade estrita).
- * 3. O sinal só pode oscilar (+1/-1) quando a confluência for formada por exatamente 2 vizinhos seguidos (ex: 12:34 e 12:35).
+ * 1. Permite múltiplos ciclos ativos por análise (diferenciados por cycleKey).
+ * 2. Gera primeiro TODAS as confluências possíveis sem exclusividade prematura.
+ * 3. Avalia o nível de cada confluência: 🚀 Alavancagem > 👑 Supremo > 💎 Raro > ⚡ Top 1 & Top 3.
+ * 4. Ordena as confluências da mais forte para a mais fraca.
+ * 5. Aplica a exclusividade: uma mesma análise não pode participar de dois sinais concorrentes.
+ *    Se uma análise aparecer em duas confluências, mantém a confluência mais forte e descarta a mais fraca.
  */
 export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): ConfluenceGroup[] {
   if (!candidates || candidates.length === 0) return [];
@@ -346,19 +417,15 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
     clusters.push(currentCluster);
   }
 
-  // 5. Para cada cluster, determina o horário representativo, consolida fontes e avalia nível
-  const groups: ConfluenceGroup[] = [];
-  const usedAnalyses = new Set<number>();
+  // 5. PASSO 1: Gera primeiro TODAS as confluências possíveis de cada cluster (sem descartes prematuros)
+  const candidateGroups: ConfluenceGroup[] = [];
 
   for (const cluster of clusters) {
-    // Coleta candidatos apenas de análises que AINDA NÃO participam de outra confluência (Regra 2: exclusividade de análise)
     const clusterCandidates: RawCandidate[] = [];
     for (const m of cluster) {
       const cList = minuteMap.get(m) || [];
       for (const c of cList) {
-        if (!usedAnalyses.has(c.analysis)) {
-          clusterCandidates.push(c);
-        }
+        clusterCandidates.push(c);
       }
     }
 
@@ -432,13 +499,13 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
 
     const representativeDate = new Date(representativeTimestamp);
 
-    // B. Consolida fontes Top 1
+    // B. Consolida fontes Top 1 (preserva cycleKey para distinguir ciclos diferentes da mesma análise)
     const top1Map = new Map<
       string,
-      { analysis: number; value: number; pct: number; top3: false }
+      { analysis: number; value: number; pct: number; top3: false; cycleKey?: string }
     >();
     for (const c of clusterCandidates.filter((c) => c.isTop1)) {
-      const key = `A${c.analysis}_V${c.value}`;
+      const key = c.cycleKey || `A${c.analysis}_V${c.value}`;
       const existing = top1Map.get(key);
       if (!existing || c.pct > existing.pct) {
         top1Map.set(key, {
@@ -446,6 +513,7 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
           value: c.value,
           pct: c.pct,
           top3: false,
+          cycleKey: c.cycleKey,
         });
       }
     }
@@ -455,11 +523,18 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
     // C. Consolida fontes Top 3 (secundárias de análises que não sejam Top 1 neste cluster)
     const top3Map = new Map<
       string,
-      { analysis: number; value: number; pct: number; top3: true; rank?: number }
+      {
+        analysis: number;
+        value: number;
+        pct: number;
+        top3: true;
+        rank?: number;
+        cycleKey?: string;
+      }
     >();
     for (const c of clusterCandidates.filter((c) => !c.isTop1)) {
       if (distinctTop1Analyses.includes(c.analysis)) continue;
-      const key = `A${c.analysis}_V${c.value}`;
+      const key = c.cycleKey || `A${c.analysis}_V${c.value}`;
       const existing = top3Map.get(key);
       if (!existing || c.pct > existing.pct) {
         top3Map.set(key, {
@@ -468,6 +543,7 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
           pct: c.pct,
           top3: true,
           rank: c.rank,
+          cycleKey: c.cycleKey,
         });
       }
     }
@@ -476,7 +552,7 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
     const allSources = [...top1Sources, ...top3Sources];
     const distinctAnalyses = Array.from(new Set(allSources.map((s) => s.analysis)));
 
-    // Se não há nenhum Top 1, não gera sinal (coincidências Top 3 não enviam mais sinais)
+    // Se não há nenhum Top 1, não gera sinal
     if (top1Sources.length === 0) {
       continue;
     }
@@ -494,14 +570,9 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
     // D. Avalia o nível final da confluência após o agrupamento
     const evaluation = evaluateSignalLevel(top1Sources, top3Sources, { isConsecutive });
 
-    // Se for Top 1 isolado ou não atingir critério de confluência, não envia sinal!
+    // Se for Top 1 isolado ou não atingir critério de confluência, não envia sinal
     if (!evaluation) {
       continue;
-    }
-
-    // Regra 2: Marca todas as análises participantes como usadas para que não participem de outra confluência
-    for (const an of distinctAnalyses) {
-      usedAnalyses.add(an);
     }
 
     const strategyKey =
@@ -511,7 +582,7 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
           ? `A${top3Sources[0].analysis}`
           : undefined;
 
-    groups.push({
+    candidateGroups.push({
       representativeDate,
       clusterDates: cluster.map((m) => new Date(m)),
       top1Sources,
@@ -530,7 +601,32 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
     });
   }
 
-  return groups;
+  // 6. PASSO 2: Ordena as confluências candidatas da MAIS FORTE para a MAIS FRACA
+  candidateGroups.sort(compareConfluenceStrength);
+
+  // 7. PASSO 3: Aplica a exclusividade estrita de análises
+  // Se uma análise aparecer em duas confluências, mantém a confluência mais forte e descarta a mais fraca
+  const claimedAnalyses = new Set<number>();
+  const winningGroups: ConfluenceGroup[] = [];
+
+  for (const group of candidateGroups) {
+    const hasConflict = group.distinctAnalyses.some((an) => claimedAnalyses.has(an));
+    if (hasConflict) {
+      // Descarta esta confluência mais fraca pois uma de suas análises já foi conquistada por uma confluência superior
+      continue;
+    }
+
+    // Reivindica as análises para esta confluência vencedora
+    for (const an of group.distinctAnalyses) {
+      claimedAnalyses.add(an);
+    }
+    winningGroups.push(group);
+  }
+
+  // 8. Retorna as confluências vencedoras ordenadas cronologicamente
+  return winningGroups.sort(
+    (a, b) => a.representativeDate.getTime() - b.representativeDate.getTime(),
+  );
 }
 
 /**
@@ -754,6 +850,18 @@ export function mergeSignalsLifecycle(
         resultMap.delete(existingKey);
       }
 
+      const mergedConfirmed = mergeConfirmedStrategies(
+        existing.confirmedStrategies || [],
+        cand.confirmedStrategies || [],
+      );
+      const hasYellow =
+        cand.hasYellowSeal ||
+        existing.hasYellowSeal ||
+        mergedConfirmed.some((c) => c.type === "yellow");
+      const hasBlue =
+        cand.hasBlueSeal || existing.hasBlueSeal || mergedConfirmed.some((c) => c.type === "blue");
+      const isVerified = hasYellow || hasBlue || cand.isVerified || existing.isVerified;
+
       // Promoção de nível se o novo rank for superior E não houver branco em M-1 (antes do lock)
       if (candRank > existingRank && !whiteInM1) {
         resultMap.set(targetKey, {
@@ -777,7 +885,10 @@ export function mergeSignalsLifecycle(
           allowsOscillation: cand.allowsOscillation ?? existing.allowsOscillation,
           isHighTendency: cand.isHighTendency || existing.isHighTendency,
           isRecAlert: cand.isRecAlert || existing.isRecAlert,
-          isVerified: cand.isVerified || existing.isVerified,
+          isVerified,
+          hasYellowSeal: hasYellow,
+          hasBlueSeal: hasBlue,
+          confirmedStrategies: mergedConfirmed,
           isConsecutive: cand.isConsecutive || existing.isConsecutive,
           levelOffset: cand.levelOffset || existing.levelOffset,
           isLocked: false,
@@ -795,6 +906,10 @@ export function mergeSignalsLifecycle(
           allowsOscillation: cand.allowsOscillation ?? existing.allowsOscillation,
           isHighTendency: existing.isHighTendency || cand.isHighTendency,
           isRecAlert: existing.isRecAlert || cand.isRecAlert,
+          isVerified,
+          hasYellowSeal: hasYellow,
+          hasBlueSeal: hasBlue,
+          confirmedStrategies: mergedConfirmed,
           isLocked: false,
         });
       }
@@ -802,10 +917,37 @@ export function mergeSignalsLifecycle(
   }
 
   // 3. Regra de Exclusividade Estrita: Nenhuma análise pode participar de múltiplos sinais pendentes simultâneos!
-  // Processa todos os sinais pendentes em ordem cronológica (sinais mais próximos no tempo têm prioridade sobre as análises).
+  // Ordena os sinais pendentes do MAIS FORTE para o MAIS FRACO (usando a hierarquia estrita de rank).
   const pendingSignals = Array.from(resultMap.values())
     .filter((s) => s && s.outcome === "pending")
     .sort((a, b) => {
+      // 1. Sinais travados (isLocked) têm prioridade de preservação
+      if (a.isLocked && !b.isLocked) return -1;
+      if (!a.isLocked && b.isLocked) return 1;
+
+      // 2. Rank da Hierarquia (Alavancagem > Supremo > Raro > Top 1 & Top 3)
+      const rankA = getSignalRank(a);
+      const rankB = getSignalRank(b);
+      if (rankB !== rankA) return rankB - rankA;
+
+      // 3. Quantidade de fontes Top 1 distintas
+      const top1CountA = new Set(
+        (a.sources || []).filter((s: any) => !s.top3 && !s.top5).map((s: any) => s.analysis),
+      ).size;
+      const top1CountB = new Set(
+        (b.sources || []).filter((s: any) => !s.top3 && !s.top5).map((s: any) => s.analysis),
+      ).size;
+      if (top1CountB !== top1CountA) return top1CountB - top1CountA;
+
+      // 4. Total de análises distintas
+      const totalAnalysesA = new Set((a.sources || []).map((s: any) => s.analysis)).size;
+      const totalAnalysesB = new Set((b.sources || []).map((s: any) => s.analysis)).size;
+      if (totalAnalysesB !== totalAnalysesA) return totalAnalysesB - totalAnalysesA;
+
+      // 5. Assertividade
+      if (Math.abs((b.pct || 0) - (a.pct || 0)) >= 0.01) return (b.pct || 0) - (a.pct || 0);
+
+      // 6. Horário (mais cedo primeiro se empatado em tudo)
       const tA =
         a.entryDate instanceof Date
           ? a.entryDate.getTime()
@@ -822,32 +964,42 @@ export function mergeSignalsLifecycle(
   for (const sig of pendingSignals) {
     const sigKey = sig.key || getCanonicalSignalKey(sig.entryDate);
     const currentSources = sig.sources || [];
+    const distinctAnalyses = Array.from(
+      new Set(currentSources.filter((s: any) => s && s.analysis).map((s: any) => s.analysis)),
+    );
 
-    // Filtra apenas as análises que ainda não foram reivindicadas por um sinal pendente anterior
+    // Se alguma análise já foi reivindicada por um sinal mais forte, descarta a confluência mais fraca
+    const hasConflict = distinctAnalyses.some((an) => claimedAnalyses.has(an));
+
+    if (hasConflict) {
+      if (!sig.isLocked) {
+        resultMap.delete(sigKey);
+        continue;
+      }
+    }
+
+    // Filtra fontes exclusivas
     const exclusiveSources = currentSources.filter((src) => {
       if (!src || !src.analysis) return false;
-      if (claimedAnalyses.has(src.analysis)) {
-        return false;
-      }
-      return true;
+      return !claimedAnalyses.has(src.analysis);
     });
 
     const top1Sources = exclusiveSources.filter((s: any) => !s.top3 && !s.top5);
     const top3Sources = exclusiveSources.filter((s: any) => s.top3 || s.top5);
 
-    // Se após a remoção de análises duplicadas o sinal não tiver pelo menos 1 Top 1 ou não formar confluência válida:
     const evalLevel = evaluateSignalLevel(top1Sources, top3Sources, {
       isConsecutive: sig.isConsecutive,
       levelOffset: sig.levelOffset,
     });
 
     if (!evalLevel || top1Sources.length === 0) {
-      // Se não tem fontes suficientes, descarta este sinal pendente duplicado
-      resultMap.delete(sigKey);
+      if (!sig.isLocked) {
+        resultMap.delete(sigKey);
+      }
     } else {
-      // Marca as análises exclusivas como reivindicadas por este sinal
-      for (const src of exclusiveSources) {
-        claimedAnalyses.add(src.analysis);
+      // Reivindica as análises
+      for (const an of distinctAnalyses) {
+        claimedAnalyses.add(an);
       }
 
       const confText = exclusiveSources.map((s) => `A${s.analysis}·${s.value}`).join(", ");
@@ -877,8 +1029,8 @@ export function mergeSignalsLifecycle(
     }
   }
 
-  // Retorna a lista ordenada por horário de entrada
-  return Array.from(resultMap.values()).sort((a, b) => {
+  // Retorna a lista ordenada por horário de entrada com estratégias de confirmação aplicadas
+  const sortedList = Array.from(resultMap.values()).sort((a, b) => {
     const tA =
       a.entryDate instanceof Date
         ? a.entryDate.getTime()
@@ -893,4 +1045,6 @@ export function mergeSignalsLifecycle(
           : 0;
     return (tA || 0) - (tB || 0);
   });
+
+  return applyConfirmationStrategies(sortedList, results);
 }

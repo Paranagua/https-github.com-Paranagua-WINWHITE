@@ -1,4 +1,5 @@
 import type { SignalAuditInfo } from "./signalAuditEngine";
+import type { ConfirmedStrategyInfo } from "./confirmationStrategies";
 
 // Store leve para compartilhar sinais entre /sinais e /historico via localStorage.
 export type StoredSignal = {
@@ -19,6 +20,10 @@ export type StoredSignal = {
   isLocked?: boolean;
   label?: string;
   confluence?: string;
+  isVerified?: boolean;
+  hasYellowSeal?: boolean;
+  hasBlueSeal?: boolean;
+  confirmedStrategies?: ConfirmedStrategyInfo[];
   sources?: Array<{
     analysis: number;
     value: number;
@@ -135,6 +140,9 @@ export type PredictiveSignal = {
   entryDate?: Date | string;
   isHighTendency?: boolean;
   isVerified?: boolean;
+  hasYellowSeal?: boolean;
+  hasBlueSeal?: boolean;
+  confirmedStrategies?: ConfirmedStrategyInfo[];
   isRare?: boolean;
   isSupreme?: boolean;
   isAlavancagem?: boolean;
@@ -198,6 +206,13 @@ export function setPredictiveSignals(signals: PredictiveSignal[]) {
       category: s.category,
       groupName: s.groupName,
       isVerified: s.isVerified,
+      hasYellowSeal: s.hasYellowSeal,
+      hasBlueSeal: s.hasBlueSeal,
+      confirmedStrategies: (s.confirmedStrategies || []).map((c) => ({
+        id: c.id,
+        code: c.code,
+        type: c.type,
+      })),
       completedAt: s.completedAt,
     }));
     const nextStr = JSON.stringify(normalized);

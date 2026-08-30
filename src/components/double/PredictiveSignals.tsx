@@ -78,6 +78,9 @@ type Mode1Signal = {
   sources: Array<{ analysis: number; value: number; pct?: number; top3?: boolean; rank?: number }>;
   isHighTendency: boolean;
   isVerified?: boolean;
+  hasYellowSeal?: boolean;
+  hasBlueSeal?: boolean;
+  confirmedStrategies?: any[];
   isRare?: boolean;
   isSupreme?: boolean;
   isAlavancagem?: boolean;
@@ -99,6 +102,9 @@ type Mode2Signal = {
   analysisCount: number;
   isHighTendency: boolean;
   isVerified?: boolean;
+  hasYellowSeal?: boolean;
+  hasBlueSeal?: boolean;
+  confirmedStrategies?: any[];
   isRare?: boolean;
   isSupreme?: boolean;
   isAlavancagem?: boolean;
@@ -220,9 +226,59 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
               {s.sources?.[0]?.analysis ? `A${s.sources[0].analysis}` : "AUTO"}
             </span>
           </div>
-          {s.isVerified && (
+          {s.hasYellowSeal && (
+            <span
+              className="flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[8.5px] font-black text-amber-300 border border-amber-500/40 shadow-sm"
+              title={
+                s.confirmedStrategies?.filter((c: any) => c.type === "yellow").length
+                  ? `Confirmado por: ${s.confirmedStrategies
+                      .filter((c: any) => c.type === "yellow")
+                      .map((c: any) => `${c.code}: ${c.description}`)
+                      .join(" | ")}`
+                  : "Confirmado por Estratégias 1–10 (🟨 Selo Amarelo)"
+              }
+            >
+              <span>🟨 VERIFICADO</span>
+              {s.confirmedStrategies?.some((c: any) => c.type === "yellow") && (
+                <span className="opacity-75 font-mono text-[7.5px]">
+                  (
+                  {s.confirmedStrategies
+                    .filter((c: any) => c.type === "yellow")
+                    .map((c: any) => c.code)
+                    .join(", ")}
+                  )
+                </span>
+              )}
+            </span>
+          )}
+          {s.hasBlueSeal && (
+            <span
+              className="flex items-center gap-1 rounded-full bg-blue-500/20 px-2 py-0.5 text-[8.5px] font-black text-blue-300 border border-blue-500/40 shadow-sm"
+              title={
+                s.confirmedStrategies?.filter((c: any) => c.type === "blue").length
+                  ? `Confirmado por: ${s.confirmedStrategies
+                      .filter((c: any) => c.type === "blue")
+                      .map((c: any) => `${c.code}: ${c.description}`)
+                      .join(" | ")}`
+                  : "Confirmado por Estratégias 11–15 (🟦 Selo Azul)"
+              }
+            >
+              <span>🟦 VERIFICADO</span>
+              {s.confirmedStrategies?.some((c: any) => c.type === "blue") && (
+                <span className="opacity-75 font-mono text-[7.5px]">
+                  (
+                  {s.confirmedStrategies
+                    .filter((c: any) => c.type === "blue")
+                    .map((c: any) => c.code)
+                    .join(", ")}
+                  )
+                </span>
+              )}
+            </span>
+          )}
+          {!s.hasYellowSeal && !s.hasBlueSeal && s.isVerified && (
             <span className="flex items-center gap-0.5 rounded-full bg-blue-500/20 px-1.5 py-0.5 text-[8px] font-black text-blue-400 border border-blue-500/30">
-              ✓ SELO AZUL
+              ✓ VERIFICADO
             </span>
           )}
           {isAlavancagem ? (
@@ -568,6 +624,8 @@ export function PredictiveSignals() {
         const candidates = computeTop(hist, CANDIDATE_DEPTH);
         if (!candidates.length) continue;
 
+        const cycleKey = `A${item.analysis}_V${item.value}_T${item.open.triggerAt.getTime()}`;
+
         // 1. Projeção Top 1 Principal (Regra: Top 1 >= 65%)
         const top1Candidate = candidates[0];
         if (top1Candidate && top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP1) {
@@ -595,6 +653,7 @@ export function PredictiveSignals() {
               isHighTendency: isTendency,
               isRecAlert: isPossibleRec,
               strategyKey: `A${item.analysis}`,
+              cycleKey,
             });
           }
         }
@@ -627,6 +686,7 @@ export function PredictiveSignals() {
               isHighTendency: isTendency,
               isRecAlert: isPossibleRec,
               strategyKey: `A${item.analysis}`,
+              cycleKey,
             });
           }
         });
@@ -948,6 +1008,10 @@ export function PredictiveSignals() {
           winningResultId: s.winningResultId,
           audit: s.audit,
           sources: s.sources,
+          isVerified: s.isVerified,
+          hasYellowSeal: s.hasYellowSeal,
+          hasBlueSeal: s.hasBlueSeal,
+          confirmedStrategies: s.confirmedStrategies,
         };
       });
       setSignals(storedSignalsList);

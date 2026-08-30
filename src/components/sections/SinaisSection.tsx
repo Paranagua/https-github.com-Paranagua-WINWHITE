@@ -727,13 +727,31 @@ function SinaisSectionContent() {
                         >
                           {/* Topo: Lado Esquerdo = Tipo do Sinal | Lado Direito = Horário */}
                           <div className="flex items-center justify-between gap-1 w-full pb-1 border-b border-white/5">
-                            <span
-                              className={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[8px] font-black uppercase tracking-tight border ${typeBadge.badgeClass}`}
-                              title={typeBadge.name}
-                            >
-                              <span>{typeBadge.icon}</span>
-                              <span className="truncate max-w-[48px]">{typeBadge.short}</span>
-                            </span>
+                            <div className="flex items-center gap-0.5">
+                              <span
+                                className={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[8px] font-black uppercase tracking-tight border ${typeBadge.badgeClass}`}
+                                title={typeBadge.name}
+                              >
+                                <span>{typeBadge.icon}</span>
+                                <span className="truncate max-w-[48px]">{typeBadge.short}</span>
+                              </span>
+                              {sig.hasYellowSeal && (
+                                <span
+                                  className="text-[7.5px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 rounded"
+                                  title="Confirmado por Estratégias 1–10 (🟨 Selo Amarelo)"
+                                >
+                                  🟨
+                                </span>
+                              )}
+                              {sig.hasBlueSeal && (
+                                <span
+                                  className="text-[7.5px] font-black bg-blue-500/20 text-blue-300 border border-blue-500/30 px-1 rounded"
+                                  title="Confirmado por Estratégias 11–15 (🟦 Selo Azul)"
+                                >
+                                  🟦
+                                </span>
+                              )}
+                            </div>
 
                             <div className="flex items-center gap-0.5 text-[9px] font-bold font-mono opacity-80">
                               <Clock className="h-2.5 w-2.5" />
