@@ -74,9 +74,22 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
   const distinctTop1 = new Set(top1Sources.map((s: any) => s.analysis));
   const distinctTop3 = new Set(top3Sources.map((s: any) => s.analysis));
 
-  // 1. 🚀 Alavancagem (4+ Top 1) - SEMPRE PRIORITÁRIO
+  // Quando fontes estruturadas estão presentes, calcula estritamente pelas regras dos grupos:
+  if (distinctTop1.size > 0 || distinctTop3.size > 0) {
+    if (distinctTop1.size >= 4) return SignalRank.ALAVANCAGEM;
+    if ((distinctTop1.size === 2 || distinctTop1.size === 3) && distinctTop3.size >= 2) {
+      return SignalRank.SUPREME;
+    }
+    if ((distinctTop1.size === 2 || distinctTop1.size === 3) && distinctTop3.size < 2) {
+      return SignalRank.RARE;
+    }
+    if (distinctTop1.size === 1 && distinctTop3.size >= 1) {
+      return SignalRank.TOP1_TOP3;
+    }
+  }
+
+  // Fallback por flags/tags
   if (
-    distinctTop1.size >= 4 ||
     sig.isAlavancagem ||
     cat.includes("alavanc") ||
     label.includes("ALAVANC") ||
@@ -86,9 +99,7 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
     return SignalRank.ALAVANCAGEM;
   }
 
-  // 2. 👑 Supremo (2x ou 3x Top 1 + 2+ Top 2/3)
   if (
-    ((distinctTop1.size === 2 || distinctTop1.size === 3) && distinctTop3.size >= 2) ||
     sig.isSupreme ||
     cat.includes("suprem") ||
     cat.includes("winn") ||
@@ -101,9 +112,7 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
     return SignalRank.SUPREME;
   }
 
-  // 3. 💎 Raro (2x ou 3x Top 1 + 0 ou 1 Top 2/3)
   if (
-    distinctTop1.size >= 2 ||
     sig.isRare ||
     cat.includes("rare") ||
     cat.includes("raro") ||
@@ -114,13 +123,15 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
     return SignalRank.RARE;
   }
 
-  // 4. ⚡ Top 1 & Top 3 (1 Top 1 + 1+ Top 2/3)
   return SignalRank.TOP1_TOP3;
 }
 
 /**
  * Avalia o nível do sinal com base na hierarquia estrita:
- * 🚀 Alavancagem > 👑 Supremo > 💎 Raro > ⚡ Top 1 & Top 3
+ * 1. 🚀 Alavancagem: 4 ou mais análises Top 1 considerando vizinhos (Top 2/3 não altera o grupo).
+ * 2. 👑 Supremo: 2 a 3 análises Top 1 considerando vizinhos + 2 ou mais Top 2/3.
+ * 3. 💎 Raro: 2 a 3 análises Top 1 considerando vizinhos (com 0 ou 1 Top 2/3).
+ * 4. ⚡ Top 1 & Top 3: 1 análise Top 1 juntamente de 1 ou mais Top 2/3 considerando vizinhos.
  *
  * Retorna null para Top 1 isolado (1x Top 1 + 0 Top 2/3) ou Apenas Top 3 (0x Top 1).
  */
@@ -130,9 +141,6 @@ export function evaluateSignalLevel(
   options?: {
     isConsecutive?: boolean;
     levelOffset?: number;
-    forcedAlavancagem?: boolean;
-    forcedSupreme?: boolean;
-    forcedRare?: boolean;
   },
 ): SignalLevelEvaluation | null {
   const distinctTop1 = new Set(top1Sources.map((s) => s.analysis));
@@ -140,8 +148,8 @@ export function evaluateSignalLevel(
   const top1Count = distinctTop1.size;
   const top3Count = distinctTop3.size;
 
-  // 1. 🚀 ALAVANCAGEM: 4x ou mais Top 1 (+ 0 ou mais Top 2/3)
-  if (top1Count >= 4 || options?.forcedAlavancagem) {
+  // 1. 🚀 ALAVANCAGEM: 4x ou mais Top 1 (Top 2/3 não altera seu grupo)
+  if (top1Count >= 4) {
     return {
       rank: SignalRank.ALAVANCAGEM,
       category: "alavancagem",
@@ -155,8 +163,8 @@ export function evaluateSignalLevel(
     };
   }
 
-  // 2. 👑 SUPREMO: 2x ou 3x Top 1 + 2 ou mais Top 2/3
-  if (((top1Count === 2 || top1Count === 3) && top3Count >= 2) || options?.forcedSupreme) {
+  // 2. 👑 SUPREMO: 2 a 3 análises Top 1 + 2 ou mais Top 2/3
+  if ((top1Count === 2 || top1Count === 3) && top3Count >= 2) {
     return {
       rank: SignalRank.SUPREME,
       category: "supreme",
@@ -170,12 +178,8 @@ export function evaluateSignalLevel(
     };
   }
 
-  // 3. 💎 RARO: 2x ou 3x Top 1 + 0 ou 1 Top 2/3
-  if (
-    ((top1Count === 2 || top1Count === 3) && top3Count <= 1) ||
-    (top1Count >= 2 && !options?.forcedSupreme && !options?.forcedAlavancagem) ||
-    options?.forcedRare
-  ) {
+  // 3. 💎 RARO: 2 a 3 análises Top 1 (sem 2+ Top 2/3)
+  if ((top1Count === 2 || top1Count === 3) && top3Count < 2) {
     return {
       rank: SignalRank.RARE,
       category: "rare",
@@ -785,6 +789,78 @@ export function mergeSignalsLifecycle(
           isLocked: false,
         });
       }
+    }
+  }
+
+  // 3. Regra de Exclusividade Estrita: Nenhuma análise pode participar de múltiplos sinais pendentes simultâneos!
+  // Processa todos os sinais pendentes em ordem cronológica (sinais mais próximos no tempo têm prioridade sobre as análises).
+  const pendingSignals = Array.from(resultMap.values())
+    .filter((s) => s && s.outcome === "pending")
+    .sort((a, b) => {
+      const tA =
+        a.entryDate instanceof Date
+          ? a.entryDate.getTime()
+          : parseUtcDate(a.entryDate as any).getTime();
+      const tB =
+        b.entryDate instanceof Date
+          ? b.entryDate.getTime()
+          : parseUtcDate(b.entryDate as any).getTime();
+      return (tA || 0) - (tB || 0);
+    });
+
+  const claimedAnalyses = new Set<number>();
+
+  for (const sig of pendingSignals) {
+    const sigKey = sig.key || getCanonicalSignalKey(sig.entryDate);
+    const currentSources = sig.sources || [];
+
+    // Filtra apenas as análises que ainda não foram reivindicadas por um sinal pendente anterior
+    const exclusiveSources = currentSources.filter((src) => {
+      if (!src || !src.analysis) return false;
+      if (claimedAnalyses.has(src.analysis)) {
+        return false;
+      }
+      return true;
+    });
+
+    const top1Sources = exclusiveSources.filter((s: any) => !s.top3 && !s.top5);
+    const top3Sources = exclusiveSources.filter((s: any) => s.top3 || s.top5);
+
+    // Se após a remoção de análises duplicadas o sinal não tiver pelo menos 1 Top 1 ou não formar confluência válida:
+    const evalLevel = evaluateSignalLevel(top1Sources, top3Sources, {
+      isConsecutive: sig.isConsecutive,
+      levelOffset: sig.levelOffset,
+    });
+
+    if (!evalLevel || top1Sources.length === 0) {
+      // Se não tem fontes suficientes, descarta este sinal pendente duplicado
+      resultMap.delete(sigKey);
+    } else {
+      // Marca as análises exclusivas como reivindicadas por este sinal
+      for (const src of exclusiveSources) {
+        claimedAnalyses.add(src.analysis);
+      }
+
+      const confText = exclusiveSources.map((s) => `A${s.analysis}·${s.value}`).join(", ");
+      const maxPct =
+        exclusiveSources.length > 0
+          ? Math.max(...exclusiveSources.map((s) => s.pct || 0))
+          : sig.pct;
+
+      resultMap.set(sigKey, {
+        ...sig,
+        sources: exclusiveSources,
+        label: evalLevel.label,
+        medal: evalLevel.medal,
+        confluence: confText,
+        category: evalLevel.category,
+        groupName: evalLevel.groupName,
+        isAlavancagem: evalLevel.isAlavancagem,
+        isSupreme: evalLevel.isSupreme,
+        isRare: evalLevel.isRare,
+        isTop1: evalLevel.isTop1,
+        pct: Math.max(sig.pct, maxPct),
+      });
     }
   }
 

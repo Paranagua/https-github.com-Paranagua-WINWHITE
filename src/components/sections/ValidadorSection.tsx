@@ -367,7 +367,7 @@ export default function SignalPercentageValidator() {
         category = "alavancagem";
       } else if ((distinctTop1.size === 2 || distinctTop1.size === 3) && distinctTop3.size >= 2) {
         category = "supreme";
-      } else if (distinctTop1.size >= 2) {
+      } else if ((distinctTop1.size === 2 || distinctTop1.size === 3) && distinctTop3.size < 2) {
         category = "rare";
       } else if (distinctTop1.size === 1 && distinctTop3.size >= 1) {
         category = "top1_top3";

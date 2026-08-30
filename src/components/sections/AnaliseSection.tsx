@@ -1,6 +1,15 @@
 import { parseUtcDate } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Sparkles, Clock, Layers, Shuffle, Plus } from "lucide-react";
+import {
+  Loader2,
+  Sparkles,
+  Clock,
+  Layers,
+  Shuffle,
+  Plus,
+  AlertCircle,
+  ShieldCheck,
+} from "lucide-react";
 import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
 import { Card } from "@/components/double/Card";
 import {
@@ -35,6 +44,8 @@ import {
   buildASandwichPontas,
   buildASandwichMeio,
   buildA7_11,
+  computeTop,
+  isValidCycle,
   type Cycle as EngineCycle,
   type Row,
 } from "@/lib/predictive";
@@ -47,6 +58,8 @@ type UiCycle = {
   gaps: number[];
   pending: number;
   elapsed: number;
+  isInCalculationBase: boolean;
+  isOpenTrigger: boolean;
 };
 
 const ALL_NUMBERS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
@@ -57,65 +70,6 @@ const BRAZIL_TIME_ZONE = "America/Sao_Paulo";
 
 function diffMinutes(a: Date, b: Date) {
   return Math.max(0, Math.round((b.getTime() - a.getTime()) / 60000));
-}
-
-type GroupResult = {
-  m: number;
-  label: string;
-  count: number;
-  pct: number;
-};
-
-function computeTop3(cycles: UiCycle[]): { rows: GroupResult[]; totalRows: number } {
-  const rowSets: Set<number>[] = cycles.map((c) => new Set(c.gaps));
-  const totalRows = cycles.length;
-  const candidates: GroupResult[] = [];
-
-  let maxGap = 0;
-  for (const rs of rowSets) for (const v of rs) if (v > maxGap) maxGap = v;
-
-  for (let m = 0; m <= maxGap + 1; m++) {
-    let hasM = false;
-    let hasMinus = false;
-    let hasPlus = false;
-    let count = 0;
-    for (const rs of rowSets) {
-      const inM = rs.has(m);
-      const inMinus = m > 0 && rs.has(m - 1);
-      const inPlus = rs.has(m + 1);
-      if (inM || inMinus || inPlus) {
-        count++;
-        if (inM) hasM = true;
-        if (inMinus) hasMinus = true;
-        if (inPlus) hasPlus = true;
-      }
-    }
-    if (!count) continue;
-    const parts: string[] = [];
-    if (hasMinus) parts.push(`${m - 1}`);
-    if (hasM) parts.push(`${m}`);
-    if (hasPlus) parts.push(`${m + 1}`);
-    candidates.push({
-      m,
-      label: parts.join(" - "),
-      count,
-      pct: totalRows > 0 ? (count / totalRows) * 100 : 0,
-    });
-  }
-
-  candidates.sort((a, b) => b.count - a.count || a.m - b.m);
-
-  const picked: GroupResult[] = [];
-  const used = new Set<number>();
-  for (const cand of candidates) {
-    const nums = [cand.m - 1, cand.m, cand.m + 1];
-    if (nums.some((n) => used.has(n))) continue;
-    picked.push(cand);
-    nums.forEach((n) => used.add(n));
-    if (picked.length >= TOP_N) break;
-  }
-
-  return { rows: picked, totalRows };
 }
 
 function fmtTime(d: Date | string | null | undefined): string {
@@ -155,15 +109,48 @@ function AnalysisPanel({
   maxZeros?: number;
   detailFormatter?: (c: EngineCycle) => string;
 }) {
-  const filtered = useMemo(() => {
-    return cycles.filter((c) => c.value === pedra).slice(-MAX_DETAIL_ROWS);
+  // Todos os ciclos desta pedra
+  const allStoneCycles = useMemo(() => {
+    return cycles.filter((c) => c.value === pedra);
   }, [cycles, pedra]);
 
+  // Ciclo aberto ativo (se houver, com gaps < MAX_ZEROS)
+  const openCycle = useMemo(() => {
+    return allStoneCycles.find((c) => c.gaps.length < maxZeros);
+  }, [allStoneCycles, maxZeros]);
+
+  // Ciclos anteriores que já são válidos (gaps.length >= 1)
+  const pastValidCycles = useMemo(() => {
+    return allStoneCycles.filter((c) => c !== openCycle && isValidCycle(c));
+  }, [allStoneCycles, openCycle]);
+
+  // Regra Estrita dos 5 Ciclos:
+  // - Requer no mínimo 4 ciclos anteriores válidos (+ 1 gatilho ativo = 5 ciclos no total)
+  const isEligible = pastValidCycles.length >= 4;
+
+  // Janela estatística usada para o cálculo: 4 ciclos passados (se total for 5) ou 5 ciclos passados mais recentes (se total for 6+)
+  const calculationBase = useMemo(() => {
+    if (!isEligible) return [];
+    return pastValidCycles.slice(-5);
+  }, [isEligible, pastValidCycles]);
+
+  const baseSet = useMemo(() => new Set(calculationBase), [calculationBase]);
+
+  // Top 3 calculado estritamente sobre a base válida
+  const topRows = useMemo(() => {
+    if (!isEligible || calculationBase.length === 0) return [];
+    return computeTop(calculationBase, TOP_N);
+  }, [isEligible, calculationBase]);
+
+  // Ciclos recentes a exibir na tabela (até 6)
   const uiCycles: UiCycle[] = useMemo(() => {
-    return filtered.map((c, i) => {
+    const displayed = allStoneCycles.slice(-MAX_DETAIL_ROWS);
+    return displayed.map((c, i) => {
       const dt = c.triggerAt;
       const elapsed = diffMinutes(dt, now);
       const pending = Math.max(0, maxZeros - c.gaps.length);
+      const isOpen = c === openCycle;
+      const inBase = baseSet.has(c);
       return {
         index: i + 1,
         triggerAt: dt,
@@ -174,27 +161,43 @@ function AnalysisPanel({
         gaps: c.gaps,
         pending,
         elapsed,
+        isInCalculationBase: inBase,
+        isOpenTrigger: isOpen,
       };
     });
-  }, [filtered, now, maxZeros, detailFormatter]);
-
-  const { rows: topRows, totalRows } = useMemo(() => computeTop3(uiCycles), [uiCycles]);
+  }, [allStoneCycles, openCycle, baseSet, now, maxZeros, detailFormatter]);
 
   return (
     <Card className="glass-card p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="text-[10px] font-black uppercase tracking-[0.4em] text-primary font-outfit">
-            {eyebrow}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary font-outfit">
+              {eyebrow}
+            </span>
+            {isEligible ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-400">
+                <ShieldCheck className="h-2.5 w-2.5" />
+                Ativa ({calculationBase.length} ciclos base)
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-400">
+                <AlertCircle className="h-2.5 w-2.5" />
+                Bloqueada ({pastValidCycles.length}/4 ciclos válidos)
+              </span>
+            )}
           </div>
-          <h3 className="text-xl font-black text-white sm:text-2xl font-outfit uppercase tracking-tighter">
+          <h3 className="text-xl font-black text-white sm:text-2xl font-outfit uppercase tracking-tighter mt-0.5">
             {title}
           </h3>
           <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
         </div>
-        <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
+        <div className="flex flex-col items-end gap-1 text-xs font-bold text-muted-foreground">
           <span>
-            {uiCycles.length} de {cycles.filter((c) => c.value === pedra).length} ciclos recentes
+            {uiCycles.length} de {allStoneCycles.length} ciclos totais
+          </span>
+          <span className="text-[10px] text-muted-foreground/80 font-mono">
+            {pastValidCycles.length} ciclos válidos registrados
           </span>
         </div>
       </div>
@@ -230,31 +233,53 @@ function AnalysisPanel({
               </thead>
               <tbody className="divide-y divide-white/[0.05]">
                 {uiCycles.map((c) => (
-                  <tr key={c.index} className="hover:bg-white/[0.02]">
-                    <td className="py-2.5 font-mono font-bold text-white">{c.triggerLabel}</td>
+                  <tr
+                    key={c.index}
+                    className={`transition-colors ${
+                      c.isOpenTrigger
+                        ? "bg-primary/[0.08] border-l-2 border-primary"
+                        : c.isInCalculationBase
+                          ? "hover:bg-white/[0.04] bg-white/[0.01]"
+                          : "hover:bg-white/[0.02] opacity-75"
+                    }`}
+                  >
+                    <td className="py-2.5 font-mono font-bold text-white flex items-center gap-1.5">
+                      {c.triggerLabel}
+                      {c.isOpenTrigger && (
+                        <span className="rounded bg-primary/20 px-1 py-0.2 text-[8px] font-black text-primary animate-pulse">
+                          GATILHO
+                        </span>
+                      )}
+                    </td>
                     <td className="py-2.5 text-muted-foreground">{c.triggerDetail}</td>
                     <td className="py-2.5">
                       <div className="flex flex-wrap gap-1">
                         {c.gaps.map((g, gi) => (
                           <span
                             key={gi}
-                            className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-mono font-bold text-white"
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-bold ${
+                              c.isInCalculationBase
+                                ? "bg-white/15 text-white shadow-sm"
+                                : "bg-white/5 text-white/70"
+                            }`}
                           >
                             {g}m
                           </span>
                         ))}
                         {c.gaps.length === 0 && (
-                          <span className="text-[10px] text-muted-foreground">
-                            Aguardando brancos...
+                          <span className="text-[10px] text-primary/80 font-bold animate-pulse">
+                            Aguardando brancos (T0)...
                           </span>
                         )}
                       </div>
                     </td>
                     <td className="py-2.5 text-right font-mono text-[10px]">
-                      {c.pending === 0 ? (
-                        <span className="text-emerald-400 font-bold">Completo</span>
+                      {c.isOpenTrigger ? (
+                        <span className="text-primary font-bold">Gatilho Aberto</span>
+                      ) : c.pending === 0 ? (
+                        <span className="text-emerald-400 font-bold">Completo (14)</span>
                       ) : (
-                        <span className="text-amber-400 font-bold">Faltam {c.pending}</span>
+                        <span className="text-amber-400 font-bold">{c.gaps.length}/14</span>
                       )}
                     </td>
                   </tr>
@@ -263,7 +288,7 @@ function AnalysisPanel({
             </table>
           </div>
 
-          {/* Top Tempos Mais Recorrentes - Apenas Porcentagens */}
+          {/* Top Tempos Mais Recorrentes */}
           <div className="flex flex-col justify-between rounded-xl border border-white/10 bg-white/[0.02] p-4 lg:col-span-5">
             <div>
               <div className="flex items-center justify-between mb-3">
@@ -271,11 +296,11 @@ function AnalysisPanel({
                   Top Tempos Recorrentes
                 </span>
                 <span className="text-[10px] font-bold text-muted-foreground font-mono">
-                  {totalRows} {totalRows === 1 ? "ciclo" : "ciclos"}
+                  {isEligible ? `${calculationBase.length} ciclos base` : "Bloqueada (< 5 ciclos)"}
                 </span>
               </div>
 
-              {topRows.length > 0 ? (
+              {isEligible && topRows.length > 0 ? (
                 <div className="flex flex-col gap-2.5">
                   {topRows.map((r, i) => {
                     const rankBadgeColors = [
@@ -284,6 +309,9 @@ function AnalysisPanel({
                       "text-amber-600 border-amber-700/30 bg-amber-700/15",
                     ];
                     const barFillColors = ["bg-amber-400", "bg-slate-300", "bg-amber-600"];
+                    const isTop1Valid = i === 0 && r.pct >= 65;
+                    const isTop3Valid = i > 0 && r.pct >= 55;
+
                     return (
                       <div
                         key={r.m}
@@ -301,6 +329,16 @@ function AnalysisPanel({
                             <span className="font-mono text-xs font-bold text-white">
                               {r.label} min
                             </span>
+                            {isTop1Valid && (
+                              <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[9px] font-bold text-emerald-400">
+                                Top 1 (≥65%)
+                              </span>
+                            )}
+                            {isTop3Valid && (
+                              <span className="rounded bg-blue-500/20 px-1.5 py-0.2 text-[9px] font-bold text-blue-400">
+                                Top 3 (≥55%)
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-2 font-mono">
                             <span className="text-sm font-black text-white">
@@ -324,8 +362,15 @@ function AnalysisPanel({
                   })}
                 </div>
               ) : (
-                <div className="flex h-36 items-center justify-center text-xs text-muted-foreground">
-                  Dados insuficientes para calcular porcentagens
+                <div className="flex flex-col items-center justify-center h-44 rounded-lg border border-dashed border-white/10 p-4 text-center">
+                  <AlertCircle className="h-6 w-6 text-amber-400/80 mb-2" />
+                  <span className="text-xs font-bold text-white font-outfit uppercase tracking-tight">
+                    Análise Bloqueada para Sinais
+                  </span>
+                  <p className="mt-1 text-[11px] text-muted-foreground max-w-[240px]">
+                    Requer no mínimo 5 ciclos no total (4 passados válidos + 1 gatilho ativo).
+                    Atualmente possui apenas {pastValidCycles.length} ciclo(s) válido(s).
+                  </p>
                 </div>
               )}
             </div>
