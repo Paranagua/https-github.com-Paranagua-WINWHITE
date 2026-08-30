@@ -477,7 +477,7 @@ export function PredictiveSignals() {
     }
   }, [rows]);
 
-  /** Ciclos em aberto (status < MAX_ZEROS) por análise + valor. */
+  /** Ciclos em aberto (status < MAX_ZEROS) por análise + valor. Permite múltiplos gatilhos ativos por análise/ciclo. */
   const active = useMemo(() => {
     try {
       const out: Array<{ analysis: number; value: number; open: Cycle }> = [];
@@ -487,10 +487,9 @@ export function PredictiveSignals() {
       ];
       mainIds.forEach((a) => {
         const cycles = engine[a] || [];
-        const latest = latestByValue(cycles);
-        latest.forEach((cycle, value) => {
+        cycles.forEach((cycle) => {
           if (cycle.gaps.length < MAX_ZEROS) {
-            out.push({ analysis: a, value, open: cycle });
+            out.push({ analysis: a, value: cycle.value, open: cycle });
           }
         });
       });
@@ -508,10 +507,9 @@ export function PredictiveSignals() {
       for (let i = 1; i <= 9; i++) {
         const a = 100 + i;
         const cycles = engine[a] || [];
-        const latest = latestByValue(cycles);
-        latest.forEach((cycle, value) => {
+        cycles.forEach((cycle) => {
           if (cycle.gaps.length < MAX_ZEROS) {
-            out.push({ analysis: a, value, open: cycle });
+            out.push({ analysis: a, value: cycle.value, open: cycle });
           }
         });
       }
@@ -550,7 +548,12 @@ export function PredictiveSignals() {
         const allCycles = (engine[item.analysis] || []).filter((c) => c.value === item.value);
 
         // Ciclos anteriores ao gatilho ativo atual (item.open) que já são válidos (gaps.length >= 1)
-        const pastValid = allCycles.filter((c) => c !== item.open && isValidCycle(c));
+        const pastValid = allCycles.filter(
+          (c) =>
+            c !== item.open &&
+            c.triggerAt.getTime() <= item.open.triggerAt.getTime() &&
+            isValidCycle(c),
+        );
 
         // Regra de ciclos para envio de sinais:
         // - Se a análise tem 5 ciclos no total: analisa os 4 ciclos passados e o 5º é o gatilho ativo.

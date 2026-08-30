@@ -114,18 +114,20 @@ function AnalysisPanel({
     return cycles.filter((c) => c.value === pedra);
   }, [cycles, pedra]);
 
-  // Ciclo aberto ativo (se houver, com gaps < MAX_ZEROS)
-  const openCycle = useMemo(() => {
-    return allStoneCycles.find((c) => c.gaps.length < maxZeros);
+  // Ciclos abertos ativos (se houver, com gaps < MAX_ZEROS)
+  const openCycles = useMemo(() => {
+    return allStoneCycles.filter((c) => c.gaps.length < maxZeros);
   }, [allStoneCycles, maxZeros]);
 
-  // Ciclos anteriores que já são válidos (gaps.length >= 1)
+  const openCycleSet = useMemo(() => new Set(openCycles), [openCycles]);
+
+  // Ciclos anteriores que já são válidos (gaps.length >= 1 e não são gatilhos abertos)
   const pastValidCycles = useMemo(() => {
-    return allStoneCycles.filter((c) => c !== openCycle && isValidCycle(c));
-  }, [allStoneCycles, openCycle]);
+    return allStoneCycles.filter((c) => !openCycleSet.has(c) && isValidCycle(c));
+  }, [allStoneCycles, openCycleSet]);
 
   // Regra Estrita dos 5 Ciclos:
-  // - Requer no mínimo 4 ciclos anteriores válidos (+ 1 gatilho ativo = 5 ciclos no total)
+  // - Requer no mínimo 4 ciclos anteriores válidos (+ gatilho(s) ativo(s) = 5 ciclos no total)
   const isEligible = pastValidCycles.length >= 4;
 
   // Janela estatística usada para o cálculo: 4 ciclos passados (se total for 5) ou 5 ciclos passados mais recentes (se total for 6+)
@@ -149,7 +151,7 @@ function AnalysisPanel({
       const dt = c.triggerAt;
       const elapsed = diffMinutes(dt, now);
       const pending = Math.max(0, maxZeros - c.gaps.length);
-      const isOpen = c === openCycle;
+      const isOpen = openCycleSet.has(c);
       const inBase = baseSet.has(c);
       return {
         index: i + 1,
@@ -165,7 +167,7 @@ function AnalysisPanel({
         isOpenTrigger: isOpen,
       };
     });
-  }, [allStoneCycles, openCycle, baseSet, now, maxZeros, detailFormatter]);
+  }, [allStoneCycles, openCycleSet, baseSet, now, maxZeros, detailFormatter]);
 
   return (
     <Card className="glass-card p-6">
