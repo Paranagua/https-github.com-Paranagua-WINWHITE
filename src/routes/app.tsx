@@ -823,26 +823,28 @@ function Index() {
       }
       row.cells[unit].push(s);
     }
-    // Garante que blocos com sinais pendentes/verdes apareçam mesmo sem spins ainda.
-    for (const s of storedSignals) {
-      const d = new Date(s.targetIso);
-      if (Number.isNaN(d.getTime())) continue;
-      const parts = formatter.formatToParts(d);
-      const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-      const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-      const tens = Math.floor(minute / 10);
-      const unit = minute % 10;
+    // Garante que blocos com sinais pendentes/verdes apareçam mesmo sem spins ainda quando o robô estiver ativo.
+    if (robotOn) {
+      for (const s of storedSignals) {
+        const d = new Date(s.targetIso);
+        if (Number.isNaN(d.getTime())) continue;
+        const parts = formatter.formatToParts(d);
+        const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+        const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+        const tens = Math.floor(minute / 10);
+        const unit = minute % 10;
 
-      // Filtro de Coluna no modo Colunas Fixas para sinais removido
+        // Filtro de Coluna no modo Colunas Fixas para sinais removido
 
-      const key = `${hour}:${tens}`;
-      if (!rowMap.has(key)) {
-        rowMap.set(key, {
-          key,
-          label: `${String(hour).padStart(2, "0")}:${tens}0`,
-          order: hour * 6 + tens,
-          cells: Array.from({ length: 10 }, () => []),
-        });
+        const key = `${hour}:${tens}`;
+        if (!rowMap.has(key)) {
+          rowMap.set(key, {
+            key,
+            label: `${String(hour).padStart(2, "0")}:${tens}0`,
+            order: hour * 6 + tens,
+            cells: Array.from({ length: 10 }, () => []),
+          });
+        }
       }
     }
     // Adiciona blocos futuros vazios (+10/+20/+30 minutos à frente do agora).
@@ -887,7 +889,7 @@ function Index() {
       }
     }
     return rows.sort((a, b) => b.order - a.order);
-  }, [deferredSpins, storedSignals, futureSlots, viewMode, highlightKey]);
+  }, [deferredSpins, storedSignals, futureSlots, viewMode, highlightKey, robotOn]);
 
   const applyCustom = () => setAppliedTick((v) => v + 1);
   const historyGridTemplate = `repeat(10, var(--colW, 120px))`;
