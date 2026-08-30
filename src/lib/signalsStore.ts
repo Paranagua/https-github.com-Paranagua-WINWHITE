@@ -145,6 +145,8 @@ export type PredictiveSignal = {
   completedAt?: number;
   strategyKey?: string;
   winningResultId?: string | null;
+  clusterTimestamps?: number[];
+  allowsOscillation?: boolean;
   audit?: SignalAuditInfo;
   sources?: Array<{
     analysis: number;

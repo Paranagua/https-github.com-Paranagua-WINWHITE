@@ -278,13 +278,17 @@ export interface ConfluenceGroup {
   isHighTendency: boolean;
   isRecAlert: boolean;
   isConsecutive: boolean;
+  allowsOscillation: boolean;
   strategyKey?: string;
   evaluation: SignalLevelEvaluation;
 }
 
 /**
- * Agrupa candidatos gerados pelas análises em grupos de confluência com base na proximidade de horário (janela de ±1 minuto).
- * O agrupamento é realizado ANTES de classificar o nível final do sinal.
+ * Agrupa candidatos gerados pelas análises em grupos de confluência com base na proximidade de horário (janela primária de até 3 minutos).
+ * Regras de negócio:
+ * 1. Vizinhos primários com o do meio faltando (ex: 13:55 + 13:57) -> horário do meio (13:56) é o horário oficial de referência.
+ * 2. Cada análise só pode participar de UMA única confluência (exclusividade estrita).
+ * 3. O sinal só pode oscilar (+1/-1) quando a confluência for formada por exatamente 2 vizinhos seguidos (ex: 12:34 e 12:35).
  */
 export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): ConfluenceGroup[] {
   if (!candidates || candidates.length === 0) return [];
@@ -313,7 +317,7 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
   // 3. Ordena os minutos de forma cronológica crescente
   const sortedMinutes = Array.from(minuteMap.keys()).sort((a, b) => a - b);
 
-  // 4. Cria clusters de minutos adjacentes (diferença <= 1 minuto, limite de até 3 minutos consecutivos: m-1, m, m+1)
+  // 4. Cria clusters de vizinhos primários (span total máximo de 2 minutos = 120.000 ms, ou seja janela de 3 minutos m-1, m, m+1)
   const clusters: number[][] = [];
   let currentCluster: number[] = [];
 
@@ -321,13 +325,11 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
     if (currentCluster.length === 0) {
       currentCluster.push(minute);
     } else {
-      const prevMinute = currentCluster[currentCluster.length - 1];
       const firstMinute = currentCluster[0];
-      const diffFromPrev = minute - prevMinute;
       const totalSpan = minute - firstMinute;
 
-      // Agrupa se a diferença for de até 1 minuto (60.000 ms) e o span total não exceder 2 minutos (120.000 ms)
-      if (diffFromPrev <= 60_000 && totalSpan <= 120_000) {
+      // Agrupa se o span total não exceder 2 minutos (120.000 ms = janela primária de 3 minutos)
+      if (totalSpan <= 120_000) {
         currentCluster.push(minute);
       } else {
         clusters.push(currentCluster);
@@ -341,62 +343,86 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
 
   // 5. Para cada cluster, determina o horário representativo, consolida fontes e avalia nível
   const groups: ConfluenceGroup[] = [];
+  const usedAnalyses = new Set<number>();
 
   for (const cluster of clusters) {
+    // Coleta candidatos apenas de análises que AINDA NÃO participam de outra confluência (Regra 2: exclusividade de análise)
     const clusterCandidates: RawCandidate[] = [];
     for (const m of cluster) {
       const cList = minuteMap.get(m) || [];
-      clusterCandidates.push(...cList);
+      for (const c of cList) {
+        if (!usedAnalyses.has(c.analysis)) {
+          clusterCandidates.push(c);
+        }
+      }
     }
 
     if (clusterCandidates.length === 0) continue;
 
-    // A. Determina horário representativo:
-    // Caso 1: 3 minutos consecutivos [m-1, m, m+1] -> Centro m (cluster[1])
-    // Caso 2: 2 minutos [m1, m2] -> Desempate por assertividade da melhor análise; se empate, maior nº de Top 1; se empate, mais antigo (m1)
-    // Caso 3: 1 minuto -> próprio minuto
+    // A. Determina horário representativo e se permite oscilação:
     let representativeTimestamp: number;
+    let allowsOscillation = false;
+    let isConsecutive = false;
 
-    if (cluster.length === 3) {
-      representativeTimestamp = cluster[1]; // Centro
+    if (cluster.length >= 3) {
+      // 3 minutos consecutivos [m-1, m, m+1] -> Centro m (cluster[1]), fixo sem oscilação
+      representativeTimestamp = cluster[1];
+      allowsOscillation = false;
+      isConsecutive = true;
     } else if (cluster.length === 2) {
       const m1 = cluster[0];
       const m2 = cluster[1];
-      const c1 = clusterCandidates.filter((c) => c.targetDate.getTime() === m1);
-      const c2 = clusterCandidates.filter((c) => c.targetDate.getTime() === m2);
+      const span = m2 - m1;
 
-      const top1_c1 = c1.filter((c) => c.isTop1);
-      const top1_c2 = c2.filter((c) => c.isTop1);
-
-      const bestPct1 =
-        top1_c1.length > 0
-          ? Math.max(...top1_c1.map((c) => c.pct))
-          : c1.length > 0
-            ? Math.max(...c1.map((c) => c.pct))
-            : 0;
-      const bestPct2 =
-        top1_c2.length > 0
-          ? Math.max(...top1_c2.map((c) => c.pct))
-          : c2.length > 0
-            ? Math.max(...c2.map((c) => c.pct))
-            : 0;
-
-      if (bestPct2 > bestPct1) {
-        representativeTimestamp = m2;
-      } else if (bestPct1 > bestPct2) {
-        representativeTimestamp = m1;
+      if (span >= 120_000) {
+        // Regra 1: Vizinhos com o do meio faltando (ex: 13:55 + 13:57) -> Horário faltante do meio (13:56) como referência, fixo sem oscilação
+        representativeTimestamp = m1 + 60_000;
+        allowsOscillation = false;
+        isConsecutive = true;
       } else {
-        // Empate de assertividade: quem tiver mais Top 1
-        if (top1_c2.length > top1_c1.length) {
+        // Regra 3: Dois vizinhos seguidos (ex: 12:34 + 12:35) -> Escolhe por assertividade/peso e PERMITE OSCILAÇÃO (+1/-1)
+        allowsOscillation = true;
+        isConsecutive = false;
+
+        const c1 = clusterCandidates.filter((c) => c.targetDate.getTime() === m1);
+        const c2 = clusterCandidates.filter((c) => c.targetDate.getTime() === m2);
+
+        const top1_c1 = c1.filter((c) => c.isTop1);
+        const top1_c2 = c2.filter((c) => c.isTop1);
+
+        const bestPct1 =
+          top1_c1.length > 0
+            ? Math.max(...top1_c1.map((c) => c.pct))
+            : c1.length > 0
+              ? Math.max(...c1.map((c) => c.pct))
+              : 0;
+        const bestPct2 =
+          top1_c2.length > 0
+            ? Math.max(...top1_c2.map((c) => c.pct))
+            : c2.length > 0
+              ? Math.max(...c2.map((c) => c.pct))
+              : 0;
+
+        if (bestPct2 > bestPct1) {
           representativeTimestamp = m2;
-        } else if (top1_c1.length > top1_c2.length) {
+        } else if (bestPct1 > bestPct2) {
           representativeTimestamp = m1;
         } else {
-          representativeTimestamp = m1; // Padrão estável
+          // Empate de assertividade: quem tiver mais Top 1
+          if (top1_c2.length > top1_c1.length) {
+            representativeTimestamp = m2;
+          } else if (top1_c1.length > top1_c2.length) {
+            representativeTimestamp = m1;
+          } else {
+            representativeTimestamp = m1; // Padrão estável
+          }
         }
       }
     } else {
+      // 1 minuto único -> próprio minuto, fixo sem oscilação
       representativeTimestamp = cluster[0];
+      allowsOscillation = false;
+      isConsecutive = false;
     }
 
     const representativeDate = new Date(representativeTimestamp);
@@ -453,7 +479,6 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
     const maxPct = allSources.length > 0 ? Math.max(...allSources.map((s) => s.pct)) : 0;
     const isHighTendency = clusterCandidates.some((c) => c.isHighTendency);
     const isRecAlert = clusterCandidates.some((c) => c.isRecAlert);
-    const isConsecutive = cluster.length === 3;
 
     // D. Avalia o nível final da confluência após o agrupamento
     const evaluation = evaluateSignalLevel(top1Sources, top3Sources, { isConsecutive });
@@ -461,6 +486,11 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
     // Se for Top 1 isolado ou não atingir critério de confluência, não envia sinal!
     if (!evaluation) {
       continue;
+    }
+
+    // Regra 2: Marca todas as análises participantes como usadas para que não participem de outra confluência
+    for (const an of distinctAnalyses) {
+      usedAnalyses.add(an);
     }
 
     const strategyKey =
@@ -482,6 +512,7 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
       isHighTendency,
       isRecAlert,
       isConsecutive,
+      allowsOscillation,
       strategyKey,
       evaluation,
     });
@@ -519,6 +550,8 @@ export function buildSignalConfluences(rawCandidates: RawCandidate[]): Predictiv
       isSupreme: g.evaluation.isSupreme,
       strategyKey: g.strategyKey,
       sources: g.allSources,
+      clusterTimestamps: g.clusterDates.map((d) => d.getTime()),
+      allowsOscillation: g.allowsOscillation,
       isConsecutive: g.isConsecutive,
       levelOffset: g.isConsecutive ? 4 : 0,
     };
@@ -688,13 +721,33 @@ export function mergeSignalsLifecycle(
       }
       const combinedSources = Array.from(mergedSourcesMap.values());
 
+      // Regra de Oscilação de Horários da Confluência:
+      // - 3 horários vizinhos primários (ex: 12:33, 12:34, 12:35): centro fixo (12:34), NÃO oscila (+1/-1).
+      // - 2 vizinhos com o do meio faltando (ex: 13:55 + 13:57): centro faltante fixo (13:56), NÃO oscila (+1/-1).
+      // - 2 horários vizinhos seguidos (ex: 12:34 e 12:35): pode oscilar (+1/-1) entre esses 2 horários específicos conforme assertividade.
+      // - 1 horário único: horário fixo.
+      const allowsOscillation = cand.allowsOscillation ?? existing.allowsOscillation ?? false;
+
+      const targetEntryDate: Date | string = allowsOscillation
+        ? cand.entryDate || existing.entryDate
+        : existing.entryDate || cand.entryDate;
+
+      const targetTime =
+        targetEntryDate instanceof Date ? fmtClock(targetEntryDate) : cand.time || existing.time;
+      const targetKey = getCanonicalSignalKey(targetEntryDate);
+
+      // Se a chave mudou devido a oscilação válida de 2 horários, remove a chave antiga
+      if (existingKey && existingKey !== targetKey) {
+        resultMap.delete(existingKey);
+      }
+
       // Promoção de nível se o novo rank for superior E não houver branco em M-1 (antes do lock)
       if (candRank > existingRank && !whiteInM1) {
-        resultMap.set(canonicalKey, {
+        resultMap.set(targetKey, {
           ...existing,
-          key: canonicalKey,
-          time: cand.time || existing.time,
-          entryDate: cand.entryDate,
+          key: targetKey,
+          time: targetTime,
+          entryDate: targetEntryDate,
           pct: Math.max(existing.pct, cand.pct),
           label: cand.label || existing.label,
           medal: cand.medal || existing.medal,
@@ -707,6 +760,8 @@ export function mergeSignalsLifecycle(
           isTop1: cand.isTop1 ?? existing.isTop1,
           strategyKey: cand.strategyKey || existing.strategyKey,
           sources: cand.sources && cand.sources.length > 0 ? cand.sources : combinedSources,
+          clusterTimestamps: cand.clusterTimestamps || existing.clusterTimestamps,
+          allowsOscillation: cand.allowsOscillation ?? existing.allowsOscillation,
           isHighTendency: cand.isHighTendency || existing.isHighTendency,
           isRecAlert: cand.isRecAlert || existing.isRecAlert,
           isVerified: cand.isVerified || existing.isVerified,
@@ -716,13 +771,15 @@ export function mergeSignalsLifecycle(
         });
       } else {
         // Novo rank é igual ou inferior: NUNCA REBAIXAR! Mantém nível e apenas enriquece metadados/fontes (antes do lock)
-        resultMap.set(canonicalKey, {
+        resultMap.set(targetKey, {
           ...existing,
-          key: canonicalKey,
-          time: cand.time || existing.time,
-          entryDate: cand.entryDate || existing.entryDate,
+          key: targetKey,
+          time: allowsOscillation ? targetTime : existing.time || targetTime,
+          entryDate: allowsOscillation ? targetEntryDate : existing.entryDate || targetEntryDate,
           pct: Math.max(existing.pct, cand.pct),
           sources: combinedSources.length > 0 ? combinedSources : existing.sources,
+          clusterTimestamps: cand.clusterTimestamps || existing.clusterTimestamps,
+          allowsOscillation: cand.allowsOscillation ?? existing.allowsOscillation,
           isHighTendency: existing.isHighTendency || cand.isHighTendency,
           isRecAlert: existing.isRecAlert || cand.isRecAlert,
           isLocked: false,
