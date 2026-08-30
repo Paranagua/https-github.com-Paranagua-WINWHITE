@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useSection, setSection } from "@/lib/sectionStore";
 import {
@@ -8,7 +8,7 @@ import {
 } from "@/lib/signalsStore";
 import { getSignalRank, SignalRank } from "@/lib/signalHierarchy";
 import { PredictiveSignals } from "@/components/double/PredictiveSignals";
-import { Zap, Sparkles, Bell } from "lucide-react";
+import { Zap, Sparkles } from "lucide-react";
 
 function getGroupDisplayName(sig: Partial<PredictiveSignal>): string {
   const rank = getSignalRank(sig);
@@ -28,12 +28,18 @@ interface SignalSnapshot {
 }
 
 export function SignalNotificationWatcher() {
+  const [mounted, setMounted] = useState(false);
   const section = useSection();
   const prevSignalsRef = useRef<Map<string, SignalSnapshot>>(new Map());
   const isInitialRef = useRef(true);
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Solicita permissão nativa de notificação do navegador de forma não-intrusiva
   useEffect(() => {
+    if (!mounted) return;
     if (
       typeof window !== "undefined" &&
       "Notification" in window &&
@@ -45,9 +51,11 @@ export function SignalNotificationWatcher() {
         // ignore
       }
     }
-  }, []);
+  }, [mounted]);
 
   useEffect(() => {
+    if (!mounted) return;
+
     function handleSignalsChange() {
       const currentList = getPredictiveSignals();
       if (!Array.isArray(currentList)) return;
@@ -210,7 +218,9 @@ export function SignalNotificationWatcher() {
     return () => {
       unsub();
     };
-  }, [section]);
+  }, [section, mounted]);
+
+  if (!mounted) return null;
 
   // Se o usuário não estiver na aba de sinais, mantém o PredictiveSignals rodando em segundo plano
   return (
