@@ -69,7 +69,9 @@ const MAX_DETAIL_ROWS = 6;
 const BRAZIL_TIME_ZONE = "America/Sao_Paulo";
 
 function diffMinutes(a: Date, b: Date) {
-  return Math.max(0, Math.round((b.getTime() - a.getTime()) / 60000));
+  const minA = Math.floor(a.getTime() / 60000);
+  const minB = Math.floor(b.getTime() / 60000);
+  return Math.max(0, minB - minA);
 }
 
 function fmtTime(d: Date | string | null | undefined): string {
@@ -114,20 +116,20 @@ function AnalysisPanel({
     return cycles.filter((c) => c.value === pedra);
   }, [cycles, pedra]);
 
-  // Ciclos abertos ativos (se houver, com gaps < MAX_ZEROS)
-  const openCycles = useMemo(() => {
-    return allStoneCycles.filter((c) => c.gaps.length < maxZeros);
+  // O gatilho aberto ativo é estritamente o ciclo mais recente desta pedra, caso ainda tenha menos de 14 brancos
+  const openCycle = useMemo(() => {
+    if (!allStoneCycles.length) return null;
+    const latest = allStoneCycles[allStoneCycles.length - 1];
+    return latest.gaps.length < maxZeros ? latest : null;
   }, [allStoneCycles, maxZeros]);
 
-  const openCycleSet = useMemo(() => new Set(openCycles), [openCycles]);
-
-  // Ciclos anteriores que já são válidos (gaps.length >= 1 e não são gatilhos abertos)
+  // Ciclos anteriores que já são válidos (gaps.length >= 1 e não são o gatilho aberto atual)
   const pastValidCycles = useMemo(() => {
-    return allStoneCycles.filter((c) => !openCycleSet.has(c) && isValidCycle(c));
-  }, [allStoneCycles, openCycleSet]);
+    return allStoneCycles.filter((c) => c !== openCycle && isValidCycle(c));
+  }, [allStoneCycles, openCycle]);
 
   // Regra Estrita dos 5 Ciclos:
-  // - Requer no mínimo 4 ciclos anteriores válidos (+ gatilho(s) ativo(s) = 5 ciclos no total)
+  // - Requer no mínimo 4 ciclos anteriores válidos (+ gatilho ativo = 5 ciclos no total)
   const isEligible = pastValidCycles.length >= 4;
 
   // Janela estatística usada para o cálculo: 4 ciclos passados (se total for 5) ou 5 ciclos passados mais recentes (se total for 6+)
@@ -138,7 +140,7 @@ function AnalysisPanel({
 
   const baseSet = useMemo(() => new Set(calculationBase), [calculationBase]);
 
-  // Top 3 calculado estritamente sobre a base válida
+  // Top 3 calculado estritamente sobre a base estatística válida
   const topRows = useMemo(() => {
     if (!isEligible || calculationBase.length === 0) return [];
     return computeTop(calculationBase, TOP_N);
@@ -151,7 +153,7 @@ function AnalysisPanel({
       const dt = c.triggerAt;
       const elapsed = diffMinutes(dt, now);
       const pending = Math.max(0, maxZeros - c.gaps.length);
-      const isOpen = openCycleSet.has(c);
+      const isOpen = c === openCycle;
       const inBase = baseSet.has(c);
       return {
         index: i + 1,
@@ -167,7 +169,7 @@ function AnalysisPanel({
         isOpenTrigger: isOpen,
       };
     });
-  }, [allStoneCycles, openCycleSet, baseSet, now, maxZeros, detailFormatter]);
+  }, [allStoneCycles, openCycle, baseSet, now, maxZeros, detailFormatter]);
 
   return (
     <Card className="glass-card p-6">
@@ -277,11 +279,13 @@ function AnalysisPanel({
                     </td>
                     <td className="py-2.5 text-right font-mono text-[10px]">
                       {c.isOpenTrigger ? (
-                        <span className="text-primary font-bold">Gatilho Aberto</span>
+                        <span className="text-primary font-bold animate-pulse">Gatilho Aberto</span>
                       ) : c.pending === 0 ? (
                         <span className="text-emerald-400 font-bold">Completo (14)</span>
                       ) : (
-                        <span className="text-amber-400 font-bold">{c.gaps.length}/14</span>
+                        <span className="text-amber-400 font-bold">
+                          {c.gaps.length}/14 (Encerrado)
+                        </span>
                       )}
                     </td>
                   </tr>
@@ -346,7 +350,9 @@ function AnalysisPanel({
                             <span className="text-sm font-black text-white">
                               {r.pct.toFixed(1)}%
                             </span>
-                            <span className="text-[10px] text-muted-foreground">({r.count}x)</span>
+                            <span className="text-[10px] text-muted-foreground">
+                              ({r.count}/{calculationBase.length}x)
+                            </span>
                           </div>
                         </div>
 

@@ -42,8 +42,9 @@ export function getValidCycles(cycles: Cycle[], value?: number, analysis?: numbe
 }
 
 function diffMinutes(a: Date, b: Date) {
-  const diffMs = b.getTime() - a.getTime();
-  return Math.max(0, Math.round(diffMs / 60000));
+  const minA = Math.floor(a.getTime() / 60000);
+  const minB = Math.floor(b.getTime() / 60000);
+  return Math.max(0, minB - minA);
 }
 
 function collectGaps(rows: Row[], i: number, dt: Date): number[] {
@@ -462,7 +463,7 @@ export function buildSecondary(rows: Row[], offset: number): Cycle[] {
   return out;
 }
 
-export type Group = { m: number; label: string; count: number; pct: number };
+export type Group = { m: number; label: string; count: number; pct: number; directHits?: number };
 
 /** Top N por presença única de linha, janela (M-1, M, M+1), com dedup. */
 export function computeTop(cycles: Cycle[], topN: number): Group[] {
@@ -472,19 +473,23 @@ export function computeTop(cycles: Cycle[], topN: number): Group[] {
   let maxGap = 0;
   for (const rs of rowSets) for (const v of rs) if (v > maxGap) maxGap = v;
 
-  const candidates: Group[] = [];
+  const candidates: Array<Group & { directHits: number }> = [];
   for (let m = 0; m <= maxGap + 1; m++) {
     let hasM = false;
     let hasMinus = false;
     let hasPlus = false;
     let count = 0;
+    let directHits = 0;
     for (const rs of rowSets) {
       const inM = rs.has(m);
       const inMinus = m > 0 && rs.has(m - 1);
       const inPlus = rs.has(m + 1);
       if (inM || inMinus || inPlus) {
         count++;
-        if (inM) hasM = true;
+        if (inM) {
+          hasM = true;
+          directHits++;
+        }
         if (inMinus) hasMinus = true;
         if (inPlus) hasPlus = true;
       }
@@ -494,9 +499,15 @@ export function computeTop(cycles: Cycle[], topN: number): Group[] {
     if (hasMinus) parts.push(`${m - 1}`);
     if (hasM) parts.push(`${m}`);
     if (hasPlus) parts.push(`${m + 1}`);
-    candidates.push({ m, label: parts.join(" - "), count, pct: (count / totalRows) * 100 });
+    candidates.push({
+      m,
+      label: parts.join(" - "),
+      count,
+      pct: (count / totalRows) * 100,
+      directHits,
+    });
   }
-  candidates.sort((a, b) => b.count - a.count || a.m - b.m);
+  candidates.sort((a, b) => b.count - a.count || b.directHits - a.directHits || a.m - b.m);
 
   const picked: Group[] = [];
   const used = new Set<number>();
