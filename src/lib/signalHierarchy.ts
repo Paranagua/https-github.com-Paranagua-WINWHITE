@@ -1,13 +1,14 @@
 import { fmtClock } from "@/lib/predictive";
 import { parseUtcDate } from "@/lib/utils";
 import type { PredictiveSignal, StoredSignal } from "@/lib/signalsStore";
-import type { AuditResultItem } from "@/lib/signalAuditEngine";
+import { auditSignalWithRounds, type AuditResultItem } from "@/lib/signalAuditEngine";
 import {
   mergeConfirmedStrategies,
   applyConfirmationStrategies,
   type StrategyProjection,
 } from "@/lib/confirmationStrategies";
-import type { Sum19TriggerProjection } from "@/lib/sum19Strategies";
+import type { SumTriggerProjection } from "@/lib/sum19Strategies";
+import { useSignalStatsStore } from "@/lib/signalStatsStore";
 
 /**
  * Hierarquia estrita e monotônica dos sinais (do mais forte ao mais fraco):
@@ -756,23 +757,23 @@ export function buildSignalConfluences(rawCandidates: RawCandidate[]): Predictiv
  * 4. Toda a hierarquia de grupos (Alavancagem, Supremo, Raro, Top 1 & Top 3) é mantida e ponderada pelas confluências.
  */
 export function buildStrategyTriggeredSignals(
-  sum19Projections: Sum19TriggerProjection[],
+  sumProjections: SumTriggerProjection[],
   analysisCandidates: RawCandidate[],
   confirmationProjections: StrategyProjection[] = [],
   activeRecAlerts: Array<{ type: string; start: number; end: number }> = [],
   now: number = Date.now(),
 ): PredictiveSignal[] {
-  if (!sum19Projections || sum19Projections.length === 0) return [];
+  if (!sumProjections || sumProjections.length === 0) return [];
 
-  // Filtra projeções futuras das estratégias de soma 19 (janela segura: entre now - 60s e now + 60 min)
-  const validTriggers = sum19Projections.filter((p) => {
+  // Filtra projeções futuras das estratégias de soma (janela segura: entre now - 60s e now + 60 min)
+  const validTriggers = sumProjections.filter((p) => {
     const t = p.targetDate.getTime();
     return !Number.isNaN(t) && t >= now - 60_000 && t <= now + 60 * 60_000;
   });
 
   if (validTriggers.length === 0) return [];
 
-  // Agrupa gatilhos de Soma 19 normalizando para o início do minuto
+  // Agrupa gatilhos de Soma normalizando para o início do minuto
   const normalizedTriggers = validTriggers.map((trig) => {
     const dt = new Date(trig.targetDate.getTime());
     dt.setSeconds(0, 0);
@@ -1079,12 +1080,12 @@ export function mergeSignalsLifecycle(
         ? sig.entryDate.getTime()
         : parseUtcDate(sig.entryDate as any).getTime();
 
-    // Sinais concluídos que já passaram da janela de 3 minutos de exibição são descartados
+    // Sinais concluídos que já passaram da janela de 5 minutos de exibição são descartados da tela ao vivo
     if (
       sig.outcome &&
       sig.outcome !== "pending" &&
       sig.completedAt &&
-      now - sig.completedAt > 180_000
+      now - sig.completedAt > 300_000
     ) {
       continue;
     }
@@ -1424,6 +1425,49 @@ export function mergeSignalsLifecycle(
       // Sem conflito: reivindica todos os cycleKeys deste sinal
       for (const ck of sourceCycleKeys) {
         claimedCycleKeys.add(ck);
+      }
+    }
+  }
+
+  // 4. Auditoria e captura automática de resultado (WIN/LOSS) de todos os sinais com base nas rodadas reais
+  for (const sig of resultMap.values()) {
+    if (!sig || !sig.entryDate) continue;
+
+    // Apenas sinais pendentes ou sem outcome definitivo são auditados
+    if (sig.outcome === "pending" || !sig.outcome) {
+      const auditRes = auditSignalWithRounds(sig, results as any, now);
+      if (auditRes.outcome === "green" || auditRes.outcome === "red") {
+        sig.outcome = auditRes.outcome;
+        sig.label = auditRes.outcome === "green" ? "WIN" : "LOSS";
+        sig.resultTime = auditRes.resultTime || sig.resultTime;
+        sig.winningResultId = auditRes.winningResultId || sig.winningResultId;
+        sig.completedAt = sig.completedAt || auditRes.completedAt || now;
+        sig.audit = auditRes.audit || sig.audit;
+
+        // Captura e grava no validador/estatísticas
+        try {
+          useSignalStatsStore.getState().recordCompletedSignal({
+            key: sig.key || getCanonicalSignalKey(sig.entryDate),
+            time: sig.time,
+            outcome: auditRes.outcome,
+            label: sig.label,
+            confluence: sig.confluence,
+            resultTime: sig.resultTime,
+            targetTime: sig.time,
+            checkedResults: auditRes.audit?.checkedResults,
+            winningResultId: sig.winningResultId,
+            winningResultCreatedAt: auditRes.audit?.winningResultCreatedAt,
+            audit: sig.audit,
+            sources: sig.sources,
+            category: sig.category,
+            isSupreme: sig.isSupreme,
+            isRare: sig.isRare,
+            isAlavancagem: sig.isAlavancagem,
+            isTop1: sig.isTop1,
+          });
+        } catch {
+          // fallback silencioso caso store não esteja disponível
+        }
       }
     }
   }

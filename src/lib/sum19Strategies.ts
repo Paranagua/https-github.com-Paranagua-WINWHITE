@@ -1,27 +1,23 @@
 import { parseUtcDate } from "./utils";
 import type { ResultItemInput } from "./signalAuditEngine";
 
-export interface Sum19StrategyDefinition {
+export interface SumTriggerProjection {
   id: string;
-  code: string; // "10-9", "9-10", "11-8", "8-11", "12-7", "7-12", "6-13", "13-6", "14-5", "5-14"
+  code: string; // "10-9", "9-10", "11-8", "8-11", "12-7", "7-12", "6-13", "13-6", "14-5", "5-14", "10-7", "7-10", "8-9", "9-8"
   name: string;
-  description: string;
-  requiredFollowingRolls: number; // 2 ou 4
-}
-
-export interface Sum19TriggerProjection {
-  id: string;
-  code: string;
-  name: string;
+  sumType: "Soma 19" | "Soma 17";
   description: string;
   triggerDate: Date;
   targetDate: Date;
   targetTimestamp: number;
   targetMinute: number;
-  followingRolls: number[];
+  followingRolls?: number[];
+  previousRolls?: number[];
   baseMinuteText: string;
   sumFormulaText: string;
 }
+
+export type Sum19TriggerProjection = SumTriggerProjection;
 
 function parseRowDate(row: any): Date | null {
   if (!row) return null;
@@ -121,7 +117,8 @@ export function computeSum19TriggerProjections(
           projections.push({
             id,
             code,
-            name: `Estratégia ${code}`,
+            name: `Estratégia ${code} (Soma 19)`,
+            sumType: "Soma 19",
             description: `Gatilho ${code} no mesmo min (${d1.toISOString().substring(11, 16)}) + 2 seg (${p1}, ${p2}) somadas ao min de p1 (${p1Date.getMinutes()}m) = ${targetDate.toISOString().substring(11, 16)}`,
             triggerDate,
             targetDate,
@@ -157,7 +154,8 @@ export function computeSum19TriggerProjections(
           projections.push({
             id,
             code,
-            name: `Estratégia ${code}`,
+            name: `Estratégia ${code} (Soma 19)`,
+            sumType: "Soma 19",
             description: `Gatilho 11-8 no mesmo min (${triggerMinute}m) + 4 seg (${p1}, ${p2}, ${p3}, ${p4}) = ${targetDate.toISOString().substring(11, 16)}`,
             triggerDate,
             targetDate,
@@ -191,7 +189,8 @@ export function computeSum19TriggerProjections(
           projections.push({
             id,
             code,
-            name: `Estratégia ${code}`,
+            name: `Estratégia ${code} (Soma 19)`,
+            sumType: "Soma 19",
             description: `Gatilho 8-11 no mesmo min (${triggerMinute}m) + 2 seg (${p1}, ${p2}) = ${targetDate.toISOString().substring(11, 16)}`,
             triggerDate,
             targetDate,
@@ -227,7 +226,8 @@ export function computeSum19TriggerProjections(
           projections.push({
             id,
             code,
-            name: `Estratégia ${code}`,
+            name: `Estratégia ${code} (Soma 19)`,
+            sumType: "Soma 19",
             description: `Gatilho ${code} no mesmo min (${triggerMinute}m) + 4 seg (${p1}, ${p2}, ${p3}, ${p4}) = ${targetDate.toISOString().substring(11, 16)}`,
             triggerDate,
             targetDate,
@@ -263,7 +263,8 @@ export function computeSum19TriggerProjections(
           projections.push({
             id,
             code,
-            name: `Estratégia ${code}`,
+            name: `Estratégia ${code} (Soma 19)`,
+            sumType: "Soma 19",
             description: `Gatilho ${code} no mesmo min (${triggerMinute}m) + 2 seg (${p1}, ${p2}) somadas ao min anterior (${prevMinute}m) = ${targetDate.toISOString().substring(11, 16)}`,
             triggerDate,
             targetDate,
@@ -297,7 +298,8 @@ export function computeSum19TriggerProjections(
           projections.push({
             id,
             code,
-            name: `Estratégia ${code}`,
+            name: `Estratégia ${code} (Soma 19)`,
+            sumType: "Soma 19",
             description: `Gatilho ${code} no mesmo min (${triggerMinute}m) + 2 seg (${p1}, ${p2}) = ${targetDate.toISOString().substring(11, 16)}`,
             triggerDate,
             targetDate,
@@ -313,4 +315,149 @@ export function computeSum19TriggerProjections(
   }
 
   return projections;
+}
+
+/**
+ * Calcula todas as projeções válidas das Estratégias de Gatilho de Soma 17 no mesmo minuto:
+ *
+ * 1. 10-7: soma 15 min ao horário do gatilho
+ * 2. 7-10: soma 7 min ao horário do gatilho
+ * 3. 8-9 ou 9-8: soma as 4 pedras anteriores com o minuto do gatilho
+ */
+export function computeSum17TriggerProjections(
+  results: ResultItemInput[] | any[],
+): SumTriggerProjection[] {
+  if (!Array.isArray(results) || results.length < 2) return [];
+
+  const rows = results.slice().sort((a, b) => {
+    const idA = typeof a.id === "number" ? a.id : Number.parseInt(String(a.id), 10) || 0;
+    const idB = typeof b.id === "number" ? b.id : Number.parseInt(String(b.id), 10) || 0;
+    if (idA !== 0 && idB !== 0 && idA !== idB) return idA - idB;
+
+    const tA = parseRowDate(a)?.getTime() || 0;
+    const tB = parseRowDate(b)?.getTime() || 0;
+    return tA - tB;
+  });
+
+  const projections: SumTriggerProjection[] = [];
+
+  for (let i = 0; i < rows.length - 1; i++) {
+    const r1 = rows[i];
+    const r2 = rows[i + 1];
+
+    const v1 = getRowRoll(r1);
+    const v2 = getRowRoll(r2);
+    if (v1 < 0 || v2 < 0) continue;
+
+    // Condição Primária: Soma = 17
+    if (v1 + v2 !== 17) continue;
+
+    const d1 = parseRowDate(r1);
+    const d2 = parseRowDate(r2);
+    if (!d1 || !d2) continue;
+
+    // Condição Primária: Ocorrer no MESMO minuto do relógio
+    const min1 = Math.floor(d1.getTime() / 60_000);
+    const min2 = Math.floor(d2.getTime() / 60_000);
+    if (min1 !== min2) continue;
+
+    const triggerDate = d2;
+    const triggerMinute = triggerDate.getMinutes();
+
+    // 1. Estratégia 10-7: soma 15 min ao horário do gatilho
+    if (v1 === 10 && v2 === 7) {
+      const targetDate = new Date(triggerDate.getTime() + 15 * 60_000);
+      targetDate.setSeconds(0, 0);
+      targetDate.setMilliseconds(0);
+      const targetTimestamp = Math.floor(targetDate.getTime() / 60_000) * 60_000;
+      const code = "10-7";
+      const id = `S17_${code}_${triggerDate.getTime()}`;
+
+      projections.push({
+        id,
+        code,
+        name: `Estratégia ${code} (Soma 17)`,
+        sumType: "Soma 17",
+        description: `Gatilho 10-7 no mesmo min (${d1.toISOString().substring(11, 16)}) + 15 min = ${targetDate.toISOString().substring(11, 16)}`,
+        triggerDate,
+        targetDate,
+        targetTimestamp,
+        targetMinute: targetDate.getMinutes(),
+        baseMinuteText: `horário gatilho + 15m`,
+        sumFormulaText: `${triggerMinute}m + 15 min = ${targetDate.toISOString().substring(11, 16)}`,
+      });
+    }
+
+    // 2. Estratégia 7-10: soma 7 min ao horário do gatilho
+    else if (v1 === 7 && v2 === 10) {
+      const targetDate = new Date(triggerDate.getTime() + 7 * 60_000);
+      targetDate.setSeconds(0, 0);
+      targetDate.setMilliseconds(0);
+      const targetTimestamp = Math.floor(targetDate.getTime() / 60_000) * 60_000;
+      const code = "7-10";
+      const id = `S17_${code}_${triggerDate.getTime()}`;
+
+      projections.push({
+        id,
+        code,
+        name: `Estratégia ${code} (Soma 17)`,
+        sumType: "Soma 17",
+        description: `Gatilho 7-10 no mesmo min (${d1.toISOString().substring(11, 16)}) + 7 min = ${targetDate.toISOString().substring(11, 16)}`,
+        triggerDate,
+        targetDate,
+        targetTimestamp,
+        targetMinute: targetDate.getMinutes(),
+        baseMinuteText: `horário gatilho + 7m`,
+        sumFormulaText: `${triggerMinute}m + 7 min = ${targetDate.toISOString().substring(11, 16)}`,
+      });
+    }
+
+    // 3. Estratégia 8-9 ou 9-8: soma as 4 pedras anteriores com o minuto do gatilho
+    else if ((v1 === 8 && v2 === 9) || (v1 === 9 && v2 === 8)) {
+      if (i >= 4) {
+        const p1 = getRowRoll(rows[i - 4]);
+        const p2 = getRowRoll(rows[i - 3]);
+        const p3 = getRowRoll(rows[i - 2]);
+        const p4 = getRowRoll(rows[i - 1]);
+
+        if (p1 >= 0 && p2 >= 0 && p3 >= 0 && p4 >= 0) {
+          const sumOffset = p1 + p2 + p3 + p4;
+          const targetDate = new Date(triggerDate.getTime() + sumOffset * 60_000);
+          targetDate.setSeconds(0, 0);
+          targetDate.setMilliseconds(0);
+          const targetTimestamp = Math.floor(targetDate.getTime() / 60_000) * 60_000;
+          const code = `${v1}-${v2}`;
+          const id = `S17_${code}_${triggerDate.getTime()}`;
+
+          projections.push({
+            id,
+            code,
+            name: `Estratégia ${code} (Soma 17)`,
+            sumType: "Soma 17",
+            description: `Gatilho ${code} no mesmo min (${triggerMinute}m) + 4 pedras anteriores (${p1}, ${p2}, ${p3}, ${p4}) = ${targetDate.toISOString().substring(11, 16)}`,
+            triggerDate,
+            targetDate,
+            targetTimestamp,
+            targetMinute: targetDate.getMinutes(),
+            previousRolls: [p1, p2, p3, p4],
+            baseMinuteText: `minuto gatilho (${triggerMinute}m)`,
+            sumFormulaText: `${triggerMinute}m + ${p1} + ${p2} + ${p3} + ${p4} = ${targetDate.toISOString().substring(11, 16)}`,
+          });
+        }
+      }
+    }
+  }
+
+  return projections;
+}
+
+/**
+ * Calcula todas as projeções de estratégias de soma de gatilho (Soma 19 + Soma 17).
+ */
+export function computeAllSumTriggerProjections(
+  results: ResultItemInput[] | any[],
+): SumTriggerProjection[] {
+  const sum19 = computeSum19TriggerProjections(results);
+  const sum17 = computeSum17TriggerProjections(results);
+  return [...sum19, ...sum17];
 }

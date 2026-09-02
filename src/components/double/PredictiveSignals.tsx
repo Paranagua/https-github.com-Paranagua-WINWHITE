@@ -22,7 +22,7 @@ import {
   type RawCandidate,
   SignalRank,
 } from "@/lib/signalHierarchy";
-import { computeSum19TriggerProjections } from "@/lib/sum19Strategies";
+import { computeAllSumTriggerProjections } from "@/lib/sum19Strategies";
 import { computeConfirmationProjections } from "@/lib/confirmationStrategies";
 import {
   buildA2,
@@ -709,8 +709,8 @@ export function PredictiveSignals() {
         });
       }
 
-      // 2. Extração dos Gatilhos Exclusivos das Estratégias de Soma 19 e Confirmações
-      const sum19Projections = computeSum19TriggerProjections(rows);
+      // 2. Extração dos Gatilhos Exclusivos das Estratégias de Soma (Soma 19 + Soma 17) e Confirmações
+      const sumProjections = computeAllSumTriggerProjections(rows);
       const confProjections = computeConfirmationProjections(rows);
 
       const alertWindow = activeAlerts.map((a) => ({
@@ -720,10 +720,10 @@ export function PredictiveSignals() {
       }));
       setActiveRecAlerts(alertWindow);
 
-      // 3. Geração de Sinais: Somente Estratégias de Soma 19 disparam sinais,
+      // 3. Geração de Sinais: Estratégias de Soma 19 e Soma 17 disparam sinais,
       // exigindo confluência com Análises ou com Outra Estratégia.
       const strategySignals = buildStrategyTriggeredSignals(
-        sum19Projections,
+        sumProjections,
         rawCandidates,
         confProjections,
         alertWindow,

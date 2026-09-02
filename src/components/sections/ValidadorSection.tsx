@@ -61,6 +61,8 @@ import {
   type Cycle,
   type Row,
 } from "@/lib/predictive";
+import { computeAllSumTriggerProjections } from "@/lib/sum19Strategies";
+import { useSignalStatsStore } from "@/lib/signalStatsStore";
 
 type SignalAuditItem = {
   id: string;
@@ -231,6 +233,53 @@ export default function SignalPercentageValidator() {
     const signals: SignalAuditItem[] = [];
     const allResults = rawRows;
 
+    // Conexão com os Sinais Reais Empregados ao Vivo (Capturados no Armazenamento de Auditoria)
+    const recordedLive = useSignalStatsStore.getState().recentSignals || [];
+    const recordedKeys = new Set<string>();
+
+    for (const rec of recordedLive) {
+      if (!rec || !rec.time) continue;
+      const recTime = rec.timestamp || Date.now();
+      if (feedMode === "from_now" && recTime < baselineTime - 60_000) continue;
+
+      recordedKeys.add(rec.key);
+      const cat: SignalAuditItem["category"] =
+        rec.category === "alavancagem" || rec.isAlavancagem
+          ? "alavancagem"
+          : rec.category === "supreme" || rec.isSupreme
+            ? "supreme"
+            : rec.category === "rare" || rec.isRare
+              ? "rare"
+              : "top1_top3";
+
+      signals.push({
+        id: `live-${rec.key}`,
+        timeStr: rec.time,
+        timestamp: recTime,
+        strategyKey: rec.strategyKey || "Soma 19/17",
+        strategyLabel: rec.label || `Sinal ${rec.time}`,
+        sourceValue: (rec.sources && rec.sources[0]?.value) || 0,
+        predictedMinute: Number.parseInt(rec.time.split(":")[1] || "0", 10),
+        projectedPct: 80.0,
+        category: cat,
+        sourcesCount: rec.sources?.length || 2,
+        top1Count: (rec.sources || []).filter((s: any) => !s.top3 && !s.top5).length,
+        status: rec.outcome === "green" ? "green" : rec.outcome === "red" ? "red" : "pending",
+        matchedRoll: rec.audit?.winningResultRoll ?? undefined,
+        matchedColor: "white",
+        matchedTime: rec.resultTime || rec.audit?.winningResultTime || undefined,
+      });
+    }
+
+    // Calcula também todos os gatilhos de Soma 19 e Soma 17
+    const sumProjections = computeAllSumTriggerProjections(allResults);
+    const sumMapBySlot = new Map<number, typeof sumProjections>();
+    for (const sp of sumProjections) {
+      const slot = sp.targetTimestamp;
+      const list = sumMapBySlot.get(slot) || [];
+      list.push(sp);
+      sumMapBySlot.set(slot, list);
+    }
     // Constrói todas as análises suportadas
     const strategyEngines = [
       { key: "A2", label: "A2 · Rep. Simples", fn: buildA2, isTop1: true },
@@ -414,12 +463,23 @@ export default function SignalPercentageValidator() {
         matchedTime = fmtTime(hit.created_at);
       }
 
+      const matchingSums = sumMapBySlot.get(slotTime) || [];
+      const sumLabels = matchingSums.map((s) => s.code).join(", ");
+      const displayLabel =
+        matchingSums.length > 0
+          ? `${primary.strategyLabel} + Gatilho ${sumLabels}`
+          : primary.strategyLabel;
+      const displayKey =
+        matchingSums.length > 0
+          ? `${matchingSums[0].code} (${matchingSums[0].sumType})`
+          : primary.strategyKey;
+
       signals.push({
         id: `audit-${slotTime}-${primary.strategyKey}`,
         timeStr: fmtTime(slotDate),
         timestamp: slotTime,
-        strategyKey: primary.strategyKey,
-        strategyLabel: primary.strategyLabel,
+        strategyKey: displayKey,
+        strategyLabel: displayLabel,
         sourceValue: primary.value,
         predictedMinute: slotDate.getMinutes(),
         projectedPct: avgPct,
