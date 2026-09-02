@@ -382,6 +382,20 @@ function SinaisSectionContent() {
               return s;
             }
 
+            const sigTime =
+              s.entryDate instanceof Date
+                ? s.entryDate.getTime()
+                : parseUtcDate(s.entryDate as any).getTime();
+
+            // Se for sinal pendente antigo (> 5 minutos no passado) ou excessivamente futuro (> 65 min), descarta
+            if (
+              s.outcome === "pending" &&
+              !Number.isNaN(sigTime) &&
+              (now - sigTime > 300_000 || sigTime > now + 65 * 60_000)
+            ) {
+              return null;
+            }
+
             // Executa a conferência matemática estrita das 6 rodadas
             const auditResult = auditSignalWithRounds(s, resultsForValidation || []);
             const cat =

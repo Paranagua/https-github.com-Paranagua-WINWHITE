@@ -211,6 +211,13 @@ export function auditSignalWithRounds(
   let winningResultColor: string | null = null;
   let winningResultCreatedAt: string | null = null;
 
+  const windowEndTime = minuteMPlus1Start + 60_000;
+  const isTimePastWindow = now >= windowEndTime + 30_000;
+  const hasSpinsAfterWindow = uniqueResults.some((r) => {
+    const t = parseUtcDate(r.createdAt).getTime();
+    return !Number.isNaN(t) && t >= windowEndTime;
+  });
+
   if (winningSpin) {
     // WIN: Qualquer branco ocorrido na janela (mesmo antes das 6 rodadas)
     outcome = "green";
@@ -219,8 +226,8 @@ export function auditSignalWithRounds(
     winningResultRoll = Number(winningSpin.roll);
     winningResultColor = winningSpin.color;
     winningResultCreatedAt = winningSpin.createdAt;
-  } else if (isComplete6Rounds) {
-    // LOSS: Somente quando todas as 6 rodadas forem confirmadas e NENHUM branco ocorreu
+  } else if (isComplete6Rounds || isTimePastWindow || hasSpinsAfterWindow) {
+    // LOSS: Somente quando todas as rodadas forem confirmadas OU a janela de tempo já passou sem nenhum branco
     outcome = "red";
   } else {
     // PENDING: Faltam rodadas para completar as 6 e nenhum branco saiu até o momento

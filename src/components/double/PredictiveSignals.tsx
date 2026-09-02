@@ -18,9 +18,12 @@ import {
   hasWhiteInPreviousMinute,
   mergeSignalsLifecycle,
   buildSignalConfluences,
+  buildStrategyTriggeredSignals,
   type RawCandidate,
   SignalRank,
 } from "@/lib/signalHierarchy";
+import { computeSum19TriggerProjections } from "@/lib/sum19Strategies";
+import { computeConfirmationProjections } from "@/lib/confirmationStrategies";
 import {
   buildA2,
   buildA3,
@@ -648,7 +651,7 @@ export function PredictiveSignals() {
           const at = addMinutes(item.open.triggerAt, targetMinutes);
           const t = at.getTime();
 
-          if (t >= now.getTime()) {
+          if (t >= now.getTime() && t <= now.getTime() + 60 * 60_000) {
             const isTendency = checkHighTendency(engine[item.analysis] || [], item.value);
             const isPossibleRec = activeAlerts.some((alert) => {
               const signalTime = at.getTime();
@@ -681,7 +684,7 @@ export function PredictiveSignals() {
           const at = addMinutes(item.open.triggerAt, m);
           const t = at.getTime();
 
-          if (t >= now.getTime()) {
+          if (t >= now.getTime() && t <= now.getTime() + 60 * 60_000) {
             const isTendency = checkHighTendency(engine[item.analysis] || [], item.value);
             const isPossibleRec = activeAlerts.some((alert) => {
               const signalTime = at.getTime();
@@ -706,74 +709,9 @@ export function PredictiveSignals() {
         });
       }
 
-      // 2. Agrupamento por Confluência Proporcional (janela de ±1 minuto) e Avaliação de Nível Pós-Consolidação
-      const confluenceSignals = buildSignalConfluences(rawCandidates);
-
-      // Constrói listas m1 (Top 1) e m2 (Top 3 only)
-      const m1: Mode1Signal[] = confluenceSignals
-        .filter((s) => s.isTop1)
-        .map((s) => {
-          const dt = s.entryDate instanceof Date ? s.entryDate : new Date(s.entryDate);
-          const top1Vals = (s.sources || []).filter((src) => !src.top3).map((src) => src.value);
-          const values = Array.from(new Set(top1Vals)).sort((a, b) => a - b);
-          const analysisCount = new Set((s.sources || []).map((src) => src.analysis)).size;
-
-          return {
-            key: s.key,
-            title: `Análise ${values.length > 0 ? values.join(" + ") : s.label}`,
-            at: dt,
-            pct: s.pct,
-            label: s.label,
-            analysisCount,
-            sources: (s.sources || []).map((src) => ({
-              analysis: src.analysis,
-              value: src.value,
-              pct: src.pct,
-              top3: !!src.top3,
-              rank: src.rank,
-              cycleKey: src.cycleKey,
-            })),
-            isHighTendency: !!s.isHighTendency,
-            isVerified: !!s.isVerified,
-            isRare: s.isRare,
-            isSupreme: s.isSupreme,
-            isAlavancagem: s.isAlavancagem,
-            strategyKey: s.strategyKey,
-            isConsecutive: s.isConsecutive,
-            levelOffset: s.levelOffset,
-          };
-        });
-
-      const m2: Mode2Signal[] = confluenceSignals
-        .filter((s) => !s.isTop1)
-        .map((s) => {
-          const dt = s.entryDate instanceof Date ? s.entryDate : new Date(s.entryDate);
-          const distinctAnalyses = Array.from(
-            new Set((s.sources || []).map((src) => src.analysis)),
-          ).sort();
-          return {
-            key: s.key,
-            title: distinctAnalyses.map((a) => `Análise ${a}`).join(" + "),
-            times: [dt],
-            pct: s.pct,
-            sources: (s.sources || []).map((src) => ({
-              analysis: src.analysis,
-              value: src.value,
-              pct: src.pct || 0,
-              top3: true,
-              rank: src.rank,
-              cycleKey: src.cycleKey,
-            })),
-            confluence: s.confluence,
-            analysisCount: distinctAnalyses.length,
-            isHighTendency: !!s.isHighTendency,
-            isVerified: !!s.isVerified,
-            strategyKey: s.strategyKey,
-          };
-        });
-
-      setMode1(m1);
-      setMode2(m2);
+      // 2. Extração dos Gatilhos Exclusivos das Estratégias de Soma 19 e Confirmações
+      const sum19Projections = computeSum19TriggerProjections(rows);
+      const confProjections = computeConfirmationProjections(rows);
 
       const alertWindow = activeAlerts.map((a) => ({
         type: a.type,
@@ -781,6 +719,50 @@ export function PredictiveSignals() {
         end: a.triggerAt.getTime() + a.duration * 60000,
       }));
       setActiveRecAlerts(alertWindow);
+
+      // 3. Geração de Sinais: Somente Estratégias de Soma 19 disparam sinais,
+      // exigindo confluência com Análises ou com Outra Estratégia.
+      const strategySignals = buildStrategyTriggeredSignals(
+        sum19Projections,
+        rawCandidates,
+        confProjections,
+        alertWindow,
+        now.getTime(),
+      );
+
+      // Constrói lista m1 (sinais elegíveis)
+      const m1: Mode1Signal[] = strategySignals.map((s) => {
+        const dt = s.entryDate instanceof Date ? s.entryDate : new Date(s.entryDate || 0);
+        const analysisCount = new Set((s.sources || []).map((src) => src.analysis)).size;
+
+        return {
+          key: s.key,
+          title: s.label || `Sinal ${s.time}`,
+          at: dt,
+          pct: s.pct,
+          label: s.label,
+          analysisCount,
+          sources: (s.sources || []).map((src) => ({
+            analysis: src.analysis,
+            value: src.value,
+            pct: src.pct,
+            top3: !!src.top3,
+            rank: src.rank,
+            cycleKey: src.cycleKey,
+          })),
+          isHighTendency: !!s.isHighTendency,
+          isVerified: !!s.isVerified,
+          isRare: s.isRare,
+          isSupreme: s.isSupreme,
+          isAlavancagem: s.isAlavancagem,
+          strategyKey: s.strategyKey,
+          isConsecutive: s.isConsecutive,
+          levelOffset: s.levelOffset,
+        };
+      });
+
+      setMode1(m1);
+      setMode2([]);
     } catch (err) {
       console.error("[PredictiveSignals] Signal generation error:", err);
     }
@@ -963,28 +945,52 @@ export function PredictiveSignals() {
             forcedRare: s.isRare,
           });
 
-          // Se não atingir critério de confluência (ex: Top 1 isolado), não gera sinal
-          if (!evalLevel) return null;
+          const category = s.isAlavancagem
+            ? "alavancagem"
+            : s.isSupreme
+              ? "supreme"
+              : s.isRare
+                ? "rare"
+                : evalLevel?.category || "top1_top3";
+
+          const groupName = s.isAlavancagem
+            ? "Alavancagem"
+            : s.isSupreme
+              ? "Supremo"
+              : s.isRare
+                ? "Raro"
+                : evalLevel?.groupName || "Top 1 & Top 3";
+
+          const medal =
+            evalLevel?.medal ||
+            (s.isAlavancagem
+              ? "🚀 ALAVANCAGEM"
+              : s.isSupreme
+                ? "👑 SUPREMO"
+                : s.isRare
+                  ? "💎 RARO"
+                  : "⚡ TOP 1 & TOP 3");
 
           return {
             key: canonicalKey,
             time: fmtClock(s.at),
             pct: Number.isFinite(s.pct) ? s.pct : 0,
-            label: s.label || evalLevel.label,
-            confluence: s.sources
-              ? s.sources.map((src) => `A${src.analysis}·${src.value}`).join(", ")
-              : "",
-            medal: evalLevel.medal,
+            label: s.label || groupName,
+            confluence:
+              s.sources && s.sources.length > 0
+                ? s.sources.map((src) => `A${src.analysis}·${src.value}`).join(", ")
+                : s.label,
+            medal,
             entryDate: s.at,
             outcome: "pending" as const,
             isHighTendency: !!s.isHighTendency,
             isVerified: !!s.isVerified,
-            category: evalLevel.category,
-            groupName: evalLevel.groupName,
-            isTop1: evalLevel.isTop1,
-            isAlavancagem: evalLevel.isAlavancagem,
-            isRare: evalLevel.isRare,
-            isSupreme: evalLevel.isSupreme,
+            category,
+            groupName,
+            isTop1: true,
+            isAlavancagem: s.isAlavancagem,
+            isRare: s.isRare,
+            isSupreme: s.isSupreme,
             strategyKey: s.strategyKey,
             sources: s.sources,
             isRecAlert: activeRecAlerts.some(

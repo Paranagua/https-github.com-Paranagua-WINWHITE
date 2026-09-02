@@ -5,7 +5,9 @@ import type { AuditResultItem } from "@/lib/signalAuditEngine";
 import {
   mergeConfirmedStrategies,
   applyConfirmationStrategies,
+  type StrategyProjection,
 } from "@/lib/confirmationStrategies";
+import type { Sum19TriggerProjection } from "@/lib/sum19Strategies";
 
 /**
  * Hierarquia estrita e monotônica dos sinais (do mais forte ao mais fraco):
@@ -742,6 +744,314 @@ export function buildSignalConfluences(rawCandidates: RawCandidate[]): Predictiv
 }
 
 /**
+ * MOTOR DE SINAIS: GATILHOS EXCLUSIVOS POR ESTRATÉGIAS DE SOMA 19 COM CONFLUÊNCIA
+ *
+ * Regras:
+ * 1. As Análises NÃO geram sinais por si sós, apenas fornecem confluência.
+ * 2. O sinal SÓ é disparado a partir de um gatilho de Estratégia de Soma 19 (10-9, 11-8, 8-11, 12-7, 6-13, 14-5).
+ * 3. O gatilho da estratégia SÓ segue para o card se houver:
+ *    - Confluência com as Análises (Top 1 / Top 2/3 projetando no mesmo minuto ou janela +/- 1m)
+ *    OU
+ *    - Confluência com Outra Estratégia (outra estratégia de Soma 19 ou estratégia de confirmação E1-E15 na mesma janela +/- 1m).
+ * 4. Toda a hierarquia de grupos (Alavancagem, Supremo, Raro, Top 1 & Top 3) é mantida e ponderada pelas confluências.
+ */
+export function buildStrategyTriggeredSignals(
+  sum19Projections: Sum19TriggerProjection[],
+  analysisCandidates: RawCandidate[],
+  confirmationProjections: StrategyProjection[] = [],
+  activeRecAlerts: Array<{ type: string; start: number; end: number }> = [],
+  now: number = Date.now(),
+): PredictiveSignal[] {
+  if (!sum19Projections || sum19Projections.length === 0) return [];
+
+  // Filtra projeções futuras das estratégias de soma 19 (janela segura: entre now - 60s e now + 60 min)
+  const validTriggers = sum19Projections.filter((p) => {
+    const t = p.targetDate.getTime();
+    return !Number.isNaN(t) && t >= now - 60_000 && t <= now + 60 * 60_000;
+  });
+
+  if (validTriggers.length === 0) return [];
+
+  // Agrupa gatilhos de Soma 19 normalizando para o início do minuto
+  const normalizedTriggers = validTriggers.map((trig) => {
+    const dt = new Date(trig.targetDate.getTime());
+    dt.setSeconds(0, 0);
+    dt.setMilliseconds(0);
+    return { ...trig, normalizedDate: dt, normalizedTime: dt.getTime() };
+  });
+
+  // Agrupa por minuto exato
+  const triggerMinuteMap = new Map<number, typeof normalizedTriggers>();
+  for (const trig of normalizedTriggers) {
+    const list = triggerMinuteMap.get(trig.normalizedTime) || [];
+    list.push(trig);
+    triggerMinuteMap.set(trig.normalizedTime, list);
+  }
+
+  const sortedMinutes = Array.from(triggerMinuteMap.keys()).sort((a, b) => a - b);
+
+  // Clusters de proximidade temporal de até 2 min (janela primária de 3 min)
+  const clusters: number[][] = [];
+  let currentCluster: number[] = [];
+
+  for (const m of sortedMinutes) {
+    if (currentCluster.length === 0) {
+      currentCluster.push(m);
+    } else {
+      const first = currentCluster[0];
+      if (m - first <= 120_000) {
+        currentCluster.push(m);
+      } else {
+        clusters.push(currentCluster);
+        currentCluster = [m];
+      }
+    }
+  }
+  if (currentCluster.length > 0) {
+    clusters.push(currentCluster);
+  }
+
+  const signals: PredictiveSignal[] = [];
+
+  for (const cluster of clusters) {
+    const clusterTriggers: typeof normalizedTriggers = [];
+    for (const m of cluster) {
+      const list = triggerMinuteMap.get(m) || [];
+      clusterTriggers.push(...list);
+    }
+    if (clusterTriggers.length === 0) continue;
+
+    // Determina horário representativo
+    const repTimestamp = cluster.length >= 2 ? cluster[0] : cluster[0];
+    const repDate = new Date(repTimestamp);
+    const clusterWindowStart = cluster[0] - 60_000;
+    const clusterWindowEnd = cluster[cluster.length - 1] + 60_000;
+
+    // 1. Busca análises confluentes na janela temporal do cluster
+    const matchingAnalyses = (analysisCandidates || []).filter((ac) => {
+      if (!ac || !ac.targetDate) return false;
+      const t = ac.targetDate.getTime();
+      return t >= clusterWindowStart && t <= clusterWindowEnd;
+    });
+
+    const top1Analyses = matchingAnalyses.filter((ac) => ac.isTop1);
+    const top3Analyses = matchingAnalyses.filter((ac) => !ac.isTop1);
+
+    // 2. Busca outras estratégias confluentes:
+    // a) Múltiplos gatilhos de Soma 19 no cluster
+    const distinctTriggerCodes = Array.from(new Set(clusterTriggers.map((t) => t.code)));
+    const hasMultipleSum19 = clusterTriggers.length >= 2 || distinctTriggerCodes.length >= 2;
+
+    // b) Estratégias de confirmação E1-E15 confluentes
+    const matchingConfirmations = (confirmationProjections || []).filter((cp) => {
+      if (!cp || !cp.targetDate) return false;
+      const t = cp.targetDate.getTime();
+      return t >= clusterWindowStart && t <= clusterWindowEnd;
+    });
+
+    const hasConfirmationStrategies = matchingConfirmations.length > 0;
+    const hasOtherStrategyConfluence = hasMultipleSum19 || hasConfirmationStrategies;
+    const hasAnalysisConfluence = matchingAnalyses.length > 0;
+
+    // 🛑 REGRA CRÍTICA: Se NÃO houver confluência com análises NEM com outra estratégia, DESCARTA!
+    if (!hasAnalysisConfluence && !hasOtherStrategyConfluence) {
+      continue;
+    }
+
+    // Avaliação da hierarquia e nível do sinal:
+    let evaluation: SignalLevelEvaluation;
+
+    const distinctTop1Analyses = Array.from(new Set(top1Analyses.map((s) => s.analysis)));
+    const distinctTop3Analyses = Array.from(new Set(top3Analyses.map((s) => s.analysis)));
+    const top1Count = distinctTop1Analyses.length;
+    const top3Count = distinctTop3Analyses.length;
+
+    if (top1Count >= 4) {
+      evaluation = {
+        rank: SignalRank.ALAVANCAGEM,
+        category: "alavancagem",
+        groupName: "Alavancagem",
+        label: `Alavancagem (${distinctTriggerCodes.join("/")})`,
+        medal: `🚀 ALAVANCAGEM (${top1Count}x Top 1 + Gatilho ${distinctTriggerCodes.join("/")})`,
+        isAlavancagem: true,
+        isSupreme: false,
+        isRare: false,
+        isTop1: true,
+      };
+    } else if ((top1Count === 2 || top1Count === 3) && top3Count >= 2) {
+      evaluation = {
+        rank: SignalRank.SUPREME,
+        category: "supreme",
+        groupName: "Supremo",
+        label: `Supremo (${distinctTriggerCodes.join("/")})`,
+        medal: `👑 Supremo (${top1Count}x Top 1 + Gatilho ${distinctTriggerCodes.join("/")})`,
+        isAlavancagem: false,
+        isSupreme: true,
+        isRare: false,
+        isTop1: true,
+      };
+    } else if (top1Count === 2 || top1Count === 3) {
+      evaluation = {
+        rank: SignalRank.RARE,
+        category: "rare",
+        groupName: "Raro",
+        label: `Raro (${distinctTriggerCodes.join("/")})`,
+        medal: `💎 Raro (${top1Count}x Top 1 + Gatilho ${distinctTriggerCodes.join("/")})`,
+        isAlavancagem: false,
+        isSupreme: false,
+        isRare: true,
+        isTop1: true,
+      };
+    } else if (top1Count === 1 && top3Count >= 1) {
+      evaluation = {
+        rank: SignalRank.TOP1_TOP3,
+        category: "top1_top3",
+        groupName: "Top 1 & Top 3",
+        label: `Top 1 & Top 3 (${distinctTriggerCodes.join("/")})`,
+        medal: `⚡ Top 1 & Top 3 (Gatilho ${distinctTriggerCodes.join("/")})`,
+        isAlavancagem: false,
+        isSupreme: false,
+        isRare: false,
+        isTop1: true,
+      };
+    } else if (top1Count === 1) {
+      // 1 Top 1 + Gatilho da Estratégia
+      evaluation = {
+        rank: SignalRank.TOP1_TOP3,
+        category: "top1_top3",
+        groupName: "Top 1 & Estratégia",
+        label: `Gatilho ${distinctTriggerCodes.join("/")} + A${distinctTop1Analyses[0]}`,
+        medal: `🥇 Ouro (Gatilho ${distinctTriggerCodes.join("/")} + A${distinctTop1Analyses[0]})`,
+        isAlavancagem: false,
+        isSupreme: false,
+        isRare: false,
+        isTop1: true,
+      };
+    } else if (top3Count >= 1) {
+      // Top 2/3 + Gatilho da Estratégia
+      evaluation = {
+        rank: SignalRank.TOP1_TOP3,
+        category: "top1_top3",
+        groupName: "Estratégia & Análises",
+        label: `Gatilho ${distinctTriggerCodes.join("/")} + A${distinctTop3Analyses.join(",")}`,
+        medal: `🥈 Prata (Gatilho ${distinctTriggerCodes.join("/")} + A${distinctTop3Analyses.join(",")})`,
+        isAlavancagem: false,
+        isSupreme: false,
+        isRare: false,
+        isTop1: false,
+      };
+    } else if (hasMultipleSum19) {
+      // Dupla confluência de estratégias de Soma 19
+      evaluation = {
+        rank: SignalRank.RARE,
+        category: "rare",
+        groupName: "Confluência de Estratégias",
+        label: `Gatilhos ${distinctTriggerCodes.join(" + ")}`,
+        medal: `💎 Dupla Estratégia (${distinctTriggerCodes.join(" + ")})`,
+        isAlavancagem: false,
+        isSupreme: false,
+        isRare: true,
+        isTop1: true,
+      };
+    } else {
+      // Confluência de Soma 19 com Estratégia de Confirmação E1-E15
+      const confCodes = Array.from(new Set(matchingConfirmations.map((c) => c.strategyCode)));
+      evaluation = {
+        rank: SignalRank.TOP1_TOP3,
+        category: "top1_top3",
+        groupName: "Estratégia Confirmada",
+        label: `Gatilho ${distinctTriggerCodes.join("/")} + ${confCodes.join(",")}`,
+        medal: `⚡ Estratégia ${distinctTriggerCodes.join("/")} + ${confCodes.join(",")}`,
+        isAlavancagem: false,
+        isSupreme: false,
+        isRare: false,
+        isTop1: true,
+      };
+    }
+
+    // Calcula percentual de assertividade proporcional
+    const analysisPcts = matchingAnalyses
+      .map((a) => a.pct)
+      .filter((p) => typeof p === "number" && p > 0);
+    const avgPct =
+      analysisPcts.length > 0
+        ? Math.round((analysisPcts.reduce((a, b) => a + b, 0) / analysisPcts.length) * 10) / 10
+        : hasMultipleSum19
+          ? 88.0
+          : 80.0;
+
+    // Constrói fontes consolidadas
+    const allSources = matchingAnalyses.map((a) => ({
+      analysis: a.analysis,
+      value: a.value,
+      pct: a.pct,
+      top3: !a.isTop1,
+      rank: a.rank,
+      cycleKey: a.cycleKey,
+    }));
+
+    // Constrói texto de confluência
+    const parts: string[] = [`Gatilho ${distinctTriggerCodes.join("/")}`];
+    if (matchingAnalyses.length > 0) {
+      const distinctA = Array.from(
+        new Set(matchingAnalyses.map((a) => `A${a.analysis}·${a.value}`)),
+      );
+      parts.push(distinctA.join(", "));
+    }
+    if (matchingConfirmations.length > 0) {
+      const confCodes = Array.from(new Set(matchingConfirmations.map((c) => c.strategyCode)));
+      parts.push(`Conf: ${confCodes.join(", ")}`);
+    }
+
+    const confluenceText = parts.join(" · ");
+    const isHighTendency = matchingAnalyses.some((a) => a.isHighTendency);
+    const isPossibleRec = activeRecAlerts.some((alert) => {
+      const signalTime = repDate.getTime();
+      return signalTime >= alert.start && signalTime <= alert.end;
+    });
+
+    const canonicalKey = getCanonicalSignalKey(repDate);
+
+    signals.push({
+      key: canonicalKey,
+      time: fmtClock(repDate),
+      pct: avgPct,
+      label: evaluation.label,
+      confluence: confluenceText,
+      medal: evaluation.medal,
+      entryDate: repDate,
+      outcome: "pending" as const,
+      isHighTendency,
+      isRecAlert: isPossibleRec,
+      category: evaluation.category,
+      groupName: evaluation.groupName,
+      isTop1: evaluation.isTop1,
+      isAlavancagem: evaluation.isAlavancagem,
+      isRare: evaluation.isRare,
+      isSupreme: evaluation.isSupreme,
+      strategyKey: `S19_${distinctTriggerCodes[0]}`,
+      sources: allSources,
+      clusterTimestamps: cluster,
+      allowsOscillation: cluster.length === 2,
+      isConsecutive: cluster.length >= 3,
+      levelOffset: 0,
+    });
+  }
+
+  // Aplica os selos de estratégias de confirmação E1-E15
+  const verifiedSignals = applyConfirmationStrategies(signals, confirmationProjections);
+
+  // Ordena cronologicamente
+  return verifiedSignals.sort((a, b) => {
+    const tA =
+      a.entryDate instanceof Date ? a.entryDate.getTime() : new Date(a.entryDate || 0).getTime();
+    const tB =
+      b.entryDate instanceof Date ? b.entryDate.getTime() : new Date(b.entryDate || 0).getTime();
+    return tA - tB;
+  });
+}
+
+/**
  * Mescla sinais existentes com novos candidatos gerados garantindo:
  * 1. Congelamento estrito em (sinal - 1 minuto): ao atingir targetTime - 1 min, o sinal não pode mais ser atualizado por novas análises/gerações.
  * 2. Aguarda a verificação de win/loss acontecer.
@@ -775,6 +1085,15 @@ export function mergeSignalsLifecycle(
       sig.outcome !== "pending" &&
       sig.completedAt &&
       now - sig.completedAt > 180_000
+    ) {
+      continue;
+    }
+
+    // Sinais pendentes com horário no passado (> 5 minutos após o minuto alvo) ou excessivamente futuros (> 60 min) são descartados
+    if (
+      sig.outcome === "pending" &&
+      !Number.isNaN(sigTime) &&
+      (now - sigTime > 300_000 || sigTime > now + 65 * 60_000)
     ) {
       continue;
     }

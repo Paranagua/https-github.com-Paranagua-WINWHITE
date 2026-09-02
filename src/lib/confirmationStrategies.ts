@@ -385,25 +385,27 @@ export function computeConfirmationProjections(
       if (whiteDate2) {
         const mB1 = mB;
         const mB2 = whiteDate2.getMinutes();
-        const baseHour = new Date(
-          whiteDate2.getFullYear(),
-          whiteDate2.getMonth(),
-          whiteDate2.getDate(),
-          whiteDate2.getHours(),
-          0,
-          0,
-          0,
-        );
+
+        // Helper seguro de fuso-horário para projetar o próximo minuto do relógio (0..59)
+        const computeUpcomingDateForMinute = (triggerDate: Date, minuteCalc: number): Date => {
+          const normMin = ((minuteCalc % 60) + 60) % 60;
+          const currentMin = triggerDate.getMinutes();
+          let diffMin = normMin - currentMin;
+          if (diffMin <= 0) {
+            diffMin += 60;
+          }
+          const res = new Date(triggerDate.getTime() + diffMin * 60_000);
+          res.setSeconds(0, 0);
+          res.setMilliseconds(0);
+          return res;
+        };
 
         const postConsec1 = rows[i + 2]?.roll;
         const postConsec2 = rows[i + 3]?.roll;
 
         // E11: somar os minutos dos dois brancos e diminuir 1 minuto
         const e11Minute = mB1 + mB2 - 1;
-        let e11Date = new Date(baseHour.getTime() + e11Minute * 60_000);
-        if (e11Date.getTime() < whiteDate2.getTime() - 60_000) {
-          e11Date = new Date(e11Date.getTime() + 60 * 60_000);
-        }
+        const e11Date = computeUpcomingDateForMinute(whiteDate2, e11Minute);
         projections.push({
           strategyId: 11,
           strategyCode: "E11",
@@ -419,10 +421,7 @@ export function computeConfirmationProjections(
         // E12: soma dos minutos dos dois brancos + o minuto do segundo branco + o valor da pedra posterior
         if (postConsec1 !== undefined) {
           const e12Minute = mB1 + mB2 + mB2 + postConsec1;
-          let e12Date = new Date(baseHour.getTime() + e12Minute * 60_000);
-          if (e12Date.getTime() < whiteDate2.getTime() - 60_000) {
-            e12Date = new Date(e12Date.getTime() + 60 * 60_000);
-          }
+          const e12Date = computeUpcomingDateForMinute(whiteDate2, e12Minute);
           projections.push({
             strategyId: 12,
             strategyCode: "E12",
@@ -438,10 +437,7 @@ export function computeConfirmationProjections(
 
         // E13: soma + 37
         const e13Minute = mB1 + mB2 + 37;
-        let e13Date = new Date(baseHour.getTime() + e13Minute * 60_000);
-        if (e13Date.getTime() < whiteDate2.getTime() - 60_000) {
-          e13Date = new Date(e13Date.getTime() + 60 * 60_000);
-        }
+        const e13Date = computeUpcomingDateForMinute(whiteDate2, e13Minute);
         projections.push({
           strategyId: 13,
           strategyCode: "E13",
@@ -456,10 +452,7 @@ export function computeConfirmationProjections(
 
         // E14: soma dos minutos dos dois brancos
         const e14Minute = mB1 + mB2;
-        let e14Date = new Date(baseHour.getTime() + e14Minute * 60_000);
-        if (e14Date.getTime() < whiteDate2.getTime() - 60_000) {
-          e14Date = new Date(e14Date.getTime() + 60 * 60_000);
-        }
+        const e14Date = computeUpcomingDateForMinute(whiteDate2, e14Minute);
         projections.push({
           strategyId: 14,
           strategyCode: "E14",
@@ -480,10 +473,7 @@ export function computeConfirmationProjections(
           postConsec2 !== undefined
         ) {
           const e15Minute = mB1 + mB2 + prev1 + prev2 + postConsec1 + postConsec2;
-          let e15Date = new Date(baseHour.getTime() + e15Minute * 60_000);
-          if (e15Date.getTime() < whiteDate2.getTime() - 60_000) {
-            e15Date = new Date(e15Date.getTime() + 60 * 60_000);
-          }
+          const e15Date = computeUpcomingDateForMinute(whiteDate2, e15Minute);
           projections.push({
             strategyId: 15,
             strategyCode: "E15",
