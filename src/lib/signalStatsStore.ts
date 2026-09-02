@@ -11,6 +11,8 @@ export interface SignalHistoryEntry {
   resultTime?: string;
   timestamp: number;
   targetTime?: string;
+  strategyKey?: string;
+  confirmedStrategies?: Array<{ code: string; name?: string; id?: number }>;
   windowLabel?: string;
   checkedResults?: number;
   winningResultId?: string | null;
@@ -42,6 +44,7 @@ interface SignalStatsStore {
     confluence?: string;
     resultTime?: string;
     strategyKey?: string;
+    confirmedStrategies?: Array<{ code: string; name?: string; id?: number }>;
     targetTime?: string;
     windowLabel?: string;
     checkedResults?: number;
@@ -122,6 +125,8 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             resultTime: signal.resultTime,
             timestamp: Date.now(),
             targetTime: signal.targetTime || signal.time,
+            strategyKey: signal.strategyKey,
+            confirmedStrategies: signal.confirmedStrategies,
             windowLabel: signal.windowLabel,
             checkedResults: signal.checkedResults,
             winningResultId: signal.winningResultId,
@@ -137,12 +142,36 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
 
           const updatedRecent = [newEntry, ...state.recentSignals].slice(0, 50);
 
-          // Atualiza estatísticas por análise individual apenas 1 única vez
+          // Atualiza estatísticas por estratégia e confluência
           const newStats = { ...state.stats };
           const keysToUpdate = new Set<string>();
 
           if (signal.strategyKey) {
             keysToUpdate.add(signal.strategyKey);
+            const clean = signal.strategyKey.replace(/^(S19_|S17_)/, "");
+            keysToUpdate.add(clean);
+            if (clean === "9-10" || clean === "10-9") keysToUpdate.add("S19_10-9");
+            if (clean === "7-12" || clean === "12-7") keysToUpdate.add("S19_12-7");
+            if (clean === "13-6" || clean === "6-13") keysToUpdate.add("S19_6-13");
+            if (clean === "5-14" || clean === "14-5") keysToUpdate.add("S19_14-5");
+            if (clean === "11-8") keysToUpdate.add("S19_11-8");
+            if (clean === "8-11") keysToUpdate.add("S19_8-11");
+            if (clean === "10-7") keysToUpdate.add("S17_10-7");
+            if (clean === "7-10") keysToUpdate.add("S17_7-10");
+            if (clean === "9-8" || clean === "8-9") keysToUpdate.add("S17_8-9");
+            if (clean === "6-11" || clean === "11-6") keysToUpdate.add("S17_11-6");
+            if (clean === "5-12") keysToUpdate.add("S17_5-12");
+            if (clean === "12-5") keysToUpdate.add("S17_12-5");
+            if (clean === "13-4") keysToUpdate.add("S17_13-4");
+            if (clean === "4-13") keysToUpdate.add("S17_4-13");
+            if (clean === "3-14" || clean === "14-3") keysToUpdate.add("S17_14-3");
+          }
+          if (Array.isArray(signal.confirmedStrategies)) {
+            signal.confirmedStrategies.forEach((cs) => {
+              if (cs && cs.code) {
+                keysToUpdate.add(cs.code);
+              }
+            });
           }
           if (Array.isArray(signal.sources)) {
             signal.sources.forEach((src) => {

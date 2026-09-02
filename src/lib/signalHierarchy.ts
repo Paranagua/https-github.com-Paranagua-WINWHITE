@@ -1013,6 +1013,35 @@ export function buildStrategyTriggeredSignals(
 
     const canonicalKey = getCanonicalSignalKey(repDate);
 
+    const firstTrig = clusterTriggers[0];
+    const rawCode = distinctTriggerCodes[0] || "10-9";
+    const isSum17 =
+      firstTrig?.sumType === "Soma 17" ||
+      [
+        "10-7",
+        "7-10",
+        "8-9",
+        "9-8",
+        "11-6",
+        "6-11",
+        "5-12",
+        "12-5",
+        "13-4",
+        "4-13",
+        "14-3",
+        "3-14",
+      ].includes(rawCode);
+    const prefix = isSum17 ? "S17" : "S19";
+    let normCode = rawCode;
+    if (rawCode === "9-10") normCode = "10-9";
+    else if (rawCode === "7-12") normCode = "12-7";
+    else if (rawCode === "13-6") normCode = "6-13";
+    else if (rawCode === "5-14") normCode = "14-5";
+    else if (rawCode === "9-8") normCode = "8-9";
+    else if (rawCode === "6-11") normCode = "11-6";
+    else if (rawCode === "3-14") normCode = "14-3";
+    const computedStrategyKey = `${prefix}_${normCode}`;
+
     signals.push({
       key: canonicalKey,
       time: fmtClock(repDate),
@@ -1030,7 +1059,7 @@ export function buildStrategyTriggeredSignals(
       isAlavancagem: evaluation.isAlavancagem,
       isRare: evaluation.isRare,
       isSupreme: evaluation.isSupreme,
-      strategyKey: `S19_${distinctTriggerCodes[0]}`,
+      strategyKey: computedStrategyKey,
       sources: allSources,
       clusterTimestamps: cluster,
       allowsOscillation: cluster.length === 2,
@@ -1453,6 +1482,8 @@ export function mergeSignalsLifecycle(
             label: sig.label,
             confluence: sig.confluence,
             resultTime: sig.resultTime,
+            strategyKey: sig.strategyKey,
+            confirmedStrategies: sig.confirmedStrategies,
             targetTime: sig.time,
             checkedResults: auditRes.audit?.checkedResults,
             winningResultId: sig.winningResultId,

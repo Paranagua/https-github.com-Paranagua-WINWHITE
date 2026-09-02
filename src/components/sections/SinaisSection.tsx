@@ -23,38 +23,294 @@ import { colorOf, fmtTime, type Color } from "@/components/double/types";
 import { parseUtcDate } from "@/lib/utils";
 import { PredictiveSignals } from "@/components/double/PredictiveSignals";
 
-const ALL_ANALYSES_METADATA = [
-  { key: "A2", label: "A2 · Rep. Simples" },
-  { key: "A3", label: "A3 · 2ª Pedra (Min 9)" },
-  { key: "A4", label: "A4 · 1ª Dezena (Min 0)" },
-  { key: "A5", label: "A5 · 2ª Dezena (Min 0)" },
-  { key: "A10", label: "A10 · Gatilho 8→11" },
-  { key: "A11", label: "A11 · Gatilho 11→11" },
-  { key: "A12", label: "A12 · Gatilho 4→11" },
-  { key: "A13", label: "A13 · Gatilho 4↔14" },
-  { key: "A14", label: "A14 · Soma 17" },
-  { key: "A15", label: "A15 · Soma 19" },
-  { key: "A16", label: "A16 · Soma 21" },
-  { key: "A17", label: "A17 · 1ª Pedra (Min 5)" },
-  { key: "A18", label: "A18 · 2ª Pedra (Min 5)" },
-  { key: "A19", label: "A19 · Sanduíche (Pontas)" },
-  { key: "A20", label: "A20 · Sanduíche (Meio)" },
-  { key: "A21", label: "A21 · Gatilho 7↔11" },
-  { key: "A22", label: "A22 · 1ª Pedra (Min 1)" },
-  { key: "A23", label: "A23 · 2ª Pedra (Min 1)" },
-  { key: "A24", label: "A24 · 1ª Pedra (Min 2)" },
-  { key: "A25", label: "A25 · 2ª Pedra (Min 2)" },
-  { key: "A26", label: "A26 · 1ª Pedra (Min 3)" },
-  { key: "A27", label: "A27 · 2ª Pedra (Min 3)" },
-  { key: "A28", label: "A28 · 1ª Pedra (Min 4)" },
-  { key: "A29", label: "A29 · 2ª Pedra (Min 4)" },
-  { key: "A30", label: "A30 · 1ª Pedra (Min 6)" },
-  { key: "A31", label: "A31 · 2ª Pedra (Min 6)" },
-  { key: "A32", label: "A32 · 1ª Pedra (Min 7)" },
-  { key: "A33", label: "A33 · 2ª Pedra (Min 7)" },
-  { key: "A34", label: "A34 · 1ª Pedra (Min 8)" },
-  { key: "A35", label: "A35 · 2ª Pedra (Min 8)" },
-  { key: "A36", label: "A36 · 1ª Pedra (Min 9)" },
+interface StrategyMetadataItem {
+  key: string;
+  name: string;
+  shortLabel: string;
+  category: "soma19" | "soma17" | "confirmacao";
+  categoryLabel: string;
+  badge: string;
+  description: string;
+}
+
+const ALL_STRATEGIES_METADATA: StrategyMetadataItem[] = [
+  // Gatilhos de Soma 19 (Disparo)
+  {
+    key: "S19_10-9",
+    name: "Soma 19 · 10-9 / 9-10",
+    shortLabel: "10-9 / 9-10",
+    category: "soma19",
+    categoryLabel: "Gatilho Soma 19",
+    badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    description: "2 pedras seguintes + minuto de p1",
+  },
+  {
+    key: "S19_11-8",
+    name: "Soma 19 · 11-8",
+    shortLabel: "11-8",
+    category: "soma19",
+    categoryLabel: "Gatilho Soma 19",
+    badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    description: "4 pedras seguintes + minuto do gatilho",
+  },
+  {
+    key: "S19_8-11",
+    name: "Soma 19 · 8-11",
+    shortLabel: "8-11",
+    category: "soma19",
+    categoryLabel: "Gatilho Soma 19",
+    badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    description: "2 pedras seguintes + minuto do gatilho",
+  },
+  {
+    key: "S19_12-7",
+    name: "Soma 19 · 12-7 / 7-12",
+    shortLabel: "12-7 / 7-12",
+    category: "soma19",
+    categoryLabel: "Gatilho Soma 19",
+    badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    description: "4 pedras seguintes + minuto do gatilho",
+  },
+  {
+    key: "S19_6-13",
+    name: "Soma 19 · 6-13 / 13-6",
+    shortLabel: "6-13 / 13-6",
+    category: "soma19",
+    categoryLabel: "Gatilho Soma 19",
+    badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    description: "2 pedras seguintes + minuto anterior",
+  },
+  {
+    key: "S19_14-5",
+    name: "Soma 19 · 14-5 / 5-14",
+    shortLabel: "14-5 / 5-14",
+    category: "soma19",
+    categoryLabel: "Gatilho Soma 19",
+    badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    description: "2 pedras seguintes + minuto do gatilho",
+  },
+
+  // Gatilhos de Soma 17 (Disparo)
+  {
+    key: "S17_10-7",
+    name: "Soma 17 · 10-7",
+    shortLabel: "10-7 (+15m)",
+    category: "soma17",
+    categoryLabel: "Gatilho Soma 17",
+    badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
+    description: "Minuto do gatilho + 15 minutos",
+  },
+  {
+    key: "S17_7-10",
+    name: "Soma 17 · 7-10",
+    shortLabel: "7-10 (+7m)",
+    category: "soma17",
+    categoryLabel: "Gatilho Soma 17",
+    badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
+    description: "Minuto do gatilho + 7 minutos",
+  },
+  {
+    key: "S17_8-9",
+    name: "Soma 17 · 8-9 / 9-8",
+    shortLabel: "8-9 / 9-8",
+    category: "soma17",
+    categoryLabel: "Gatilho Soma 17",
+    badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
+    description: "4 pedras anteriores + minuto do gatilho",
+  },
+  {
+    key: "S17_11-6",
+    name: "Soma 17 · 11-6 / 6-11",
+    shortLabel: "11-6 / 6-11",
+    category: "soma17",
+    categoryLabel: "Gatilho Soma 17",
+    badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
+    description: "3 pedras seguintes + minuto do gatilho",
+  },
+  {
+    key: "S17_5-12",
+    name: "Soma 17 · 5-12",
+    shortLabel: "5-12",
+    category: "soma17",
+    categoryLabel: "Gatilho Soma 17",
+    badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
+    description: "1 pedra seguinte + minuto anterior ao gatilho",
+  },
+  {
+    key: "S17_12-5",
+    name: "Soma 17 · 12-5",
+    shortLabel: "12-5 (+1m)",
+    category: "soma17",
+    categoryLabel: "Gatilho Soma 17",
+    badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
+    description: "3 pedras seguintes + minuto do gatilho + 1",
+  },
+  {
+    key: "S17_13-4",
+    name: "Soma 17 · 13-4",
+    shortLabel: "13-4",
+    category: "soma17",
+    categoryLabel: "Gatilho Soma 17",
+    badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
+    description: "2 seguintes e 1 anterior + horário do gatilho",
+  },
+  {
+    key: "S17_4-13",
+    name: "Soma 17 · 4-13",
+    shortLabel: "4-13",
+    category: "soma17",
+    categoryLabel: "Gatilho Soma 17",
+    badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
+    description: "2 anteriores ao minuto do gatilho",
+  },
+  {
+    key: "S17_14-3",
+    name: "Soma 17 · 14-3 / 3-14",
+    shortLabel: "14-3 / 3-14 (+37m)",
+    category: "soma17",
+    categoryLabel: "Gatilho Soma 17",
+    badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
+    description: "Minuto do gatilho + 37 minutos",
+  },
+
+  // Estratégias de Confirmação (Selo Amarelo: E1 a E10)
+  {
+    key: "E1",
+    name: "E1 · Minuto + Anterior",
+    shortLabel: "E1",
+    category: "confirmacao",
+    categoryLabel: "Confirmação (Amarelo)",
+    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    description: "Minuto do branco + pedra anterior",
+  },
+  {
+    key: "E2",
+    name: "E2 · Minuto + Posterior",
+    shortLabel: "E2",
+    category: "confirmacao",
+    categoryLabel: "Confirmação (Amarelo)",
+    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    description: "Minuto do branco + pedra posterior",
+  },
+  {
+    key: "E3",
+    name: "E3 · Min + Ant + Post",
+    shortLabel: "E3",
+    category: "confirmacao",
+    categoryLabel: "Confirmação (Amarelo)",
+    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    description: "Minuto do branco + pedra anterior + posterior",
+  },
+  {
+    key: "E4",
+    name: "E4 · Min + 2 Anteriores",
+    shortLabel: "E4",
+    category: "confirmacao",
+    categoryLabel: "Confirmação (Amarelo)",
+    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    description: "Minuto do branco + 2 pedras anteriores",
+  },
+  {
+    key: "E5",
+    name: "E5 · Min + 2 Posteriores",
+    shortLabel: "E5",
+    category: "confirmacao",
+    categoryLabel: "Confirmação (Amarelo)",
+    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    description: "Minuto do branco + 2 pedras posteriores",
+  },
+  {
+    key: "E6",
+    name: "E6 · Min + 1 Ant + 1 Post",
+    shortLabel: "E6",
+    category: "confirmacao",
+    categoryLabel: "Confirmação (Amarelo)",
+    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    description: "Minuto do branco + 1 anterior + 1 posterior",
+  },
+  {
+    key: "E7",
+    name: "E7 · Min + 2 Ant + 1 Post",
+    shortLabel: "E7",
+    category: "confirmacao",
+    categoryLabel: "Confirmação (Amarelo)",
+    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    description: "Minuto do branco + 2 anteriores + 1 posterior",
+  },
+  {
+    key: "E8",
+    name: "E8 · Min + 1 Ant + 2 Post",
+    shortLabel: "E8",
+    category: "confirmacao",
+    categoryLabel: "Confirmação (Amarelo)",
+    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    description: "Minuto do branco + 1 anterior + 2 posteriores",
+  },
+  {
+    key: "E9",
+    name: "E9 · Min + 2 Ant + 2 Post",
+    shortLabel: "E9",
+    category: "confirmacao",
+    categoryLabel: "Confirmação (Amarelo)",
+    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    description: "Minuto do branco + 2 anteriores + 2 posteriores",
+  },
+  {
+    key: "E10",
+    name: "E10 · Min + 4 Pedras + 15m",
+    shortLabel: "E10",
+    category: "confirmacao",
+    categoryLabel: "Confirmação (Amarelo)",
+    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    description: "Minuto do branco + 2 ant. + 2 post. + 15 min",
+  },
+
+  // Estratégias de Confirmação (Selo Azul: E11 a E15)
+  {
+    key: "E11",
+    name: "E11 · 1ª Pedra + 15m",
+    shortLabel: "E11",
+    category: "confirmacao",
+    categoryLabel: "Confirmação (Azul)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "1ª pedra da hora + 15 min",
+  },
+  {
+    key: "E12",
+    name: "E12 · 1ª + 2ª Pd + Minuto",
+    shortLabel: "E12",
+    category: "confirmacao",
+    categoryLabel: "Confirmação (Azul)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "1ª pedra + 2ª pedra da hora + minuto",
+  },
+  {
+    key: "E13",
+    name: "E13 · 2 Pedras Anteriores",
+    shortLabel: "E13",
+    category: "confirmacao",
+    categoryLabel: "Confirmação (Azul)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "2 pedras anteriores ao branco",
+  },
+  {
+    key: "E14",
+    name: "E14 · 2 Pedras Posteriores",
+    shortLabel: "E14",
+    category: "confirmacao",
+    categoryLabel: "Confirmação (Azul)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "2 pedras posteriores ao branco",
+  },
+  {
+    key: "E15",
+    name: "E15 · Soma 2 Brancos",
+    shortLabel: "E15",
+    category: "confirmacao",
+    categoryLabel: "Confirmação (Azul)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "Soma dos minutos de 2 brancos consecutivos",
+  },
 ];
 
 type Result = {
@@ -235,6 +491,9 @@ function SinaisSectionContent() {
   const [resultsForValidation, setResultsForValidation] = useState<Result[]>([]);
   const [predictiveList, setPredictiveList] = useState<PredictiveSignal[]>(getPredictiveSignals());
   const [auditFilter, setAuditFilter] = useState<"geral" | "hoje">("geral");
+  const [strategyTabFilter, setStrategyTabFilter] = useState<
+    "todas" | "soma19" | "soma17" | "confirmacao"
+  >("todas");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const stats = useSignalStatsStore((state) => state.stats);
@@ -344,24 +603,134 @@ function SinaisSectionContent() {
     };
   }, []);
 
-  // Estatísticas de Visão Geral: alimentadas em tempo real a partir dos sinais auditados
+  // Estatísticas de Visão Geral: alimentadas em tempo real agrupadas por ESTRATÉGIA
   const strategyStats = useMemo(() => {
-    return ALL_ANALYSES_METADATA.map((a) => {
-      const s = stats[a.key];
-      const wins = s?.green || 0;
-      const losses = s?.red || 0;
+    // Agrega a partir de recentSignals para contagem exata e detalhada por estratégia
+    const countsByKey: Record<string, { wins: number; losses: number }> = {};
+
+    ALL_STRATEGIES_METADATA.forEach((m) => {
+      countsByKey[m.key] = { wins: 0, losses: 0 };
+    });
+
+    // 1. Percorre recentSignals (histórico auditado com metadados de estratégia)
+    recentSignals.forEach((sig) => {
+      if (sig.outcome !== "green" && sig.outcome !== "red") return;
+      const isWin = sig.outcome === "green";
+
+      // Mapeamento para Gatilho de Soma 19 ou Soma 17
+      if (sig.strategyKey) {
+        let matchedKey: string | undefined = undefined;
+        if (countsByKey[sig.strategyKey]) {
+          matchedKey = sig.strategyKey;
+        } else {
+          const clean = sig.strategyKey.replace(/^(S19_|S17_)/, "");
+          // 1. Procura correspondência exata de código
+          const exact = ALL_STRATEGIES_METADATA.find(
+            (m) => m.key === sig.strategyKey || m.key.replace(/^(S19_|S17_)/, "") === clean,
+          );
+          if (exact) {
+            matchedKey = exact.key;
+          } else {
+            // 2. Procura reversão apenas para estratégias que são de fato reversíveis
+            const rev = clean.split("-").reverse().join("-");
+            const foundRev = ALL_STRATEGIES_METADATA.find(
+              (m) =>
+                m.key.replace(/^(S19_|S17_)/, "") === rev &&
+                ["10-9", "12-7", "6-13", "14-5", "8-9", "11-6", "14-3"].includes(rev),
+            );
+            if (foundRev) {
+              matchedKey = foundRev.key;
+            } else {
+              const found = ALL_STRATEGIES_METADATA.find(
+                (m) => m.key.endsWith(clean) || m.shortLabel.includes(clean),
+              );
+              if (found) matchedKey = found.key;
+            }
+          }
+        }
+
+        if (matchedKey && countsByKey[matchedKey]) {
+          if (isWin) countsByKey[matchedKey].wins += 1;
+          else countsByKey[matchedKey].losses += 1;
+        }
+      }
+
+      // Mapeamento para Estratégias de Confirmação (E1-E15)
+      if (Array.isArray(sig.confirmedStrategies) && sig.confirmedStrategies.length > 0) {
+        sig.confirmedStrategies.forEach((cs) => {
+          if (cs && cs.code && countsByKey[cs.code]) {
+            if (isWin) countsByKey[cs.code].wins += 1;
+            else countsByKey[cs.code].losses += 1;
+          }
+        });
+      } else if (sig.confluence) {
+        // Fallback inteligente pelo texto de confluência
+        for (let i = 1; i <= 15; i++) {
+          const code = `E${i}`;
+          // Evita match incorreto de E1 em E10-E15 usando regex com limites de palavra
+          const re = new RegExp(`\\b${code}\\b`);
+          if (re.test(sig.confluence) && countsByKey[code]) {
+            if (isWin) countsByKey[code].wins += 1;
+            else countsByKey[code].losses += 1;
+          }
+        }
+      }
+    });
+
+    // 2. Mescla com o store stats para assegurar persistência mesmo em recargas
+    return ALL_STRATEGIES_METADATA.map((m) => {
+      const fromRecent = countsByKey[m.key] || { wins: 0, losses: 0 };
+      const s = stats[m.key];
+      const sClean = stats[m.key.replace(/^(S19_|S17_)/, "")];
+
+      const storeWins = (s?.green || 0) + (sClean?.green || 0);
+      const storeLosses = (s?.red || 0) + (sClean?.red || 0);
+
+      const wins = Math.max(fromRecent.wins, storeWins);
+      const losses = Math.max(fromRecent.losses, storeLosses);
       const total = wins + losses;
       const assertividade = total > 0 ? (wins / total) * 100 : null;
+
       return {
-        key: a.key,
-        analise: a.label,
+        key: m.key,
+        name: m.name,
+        shortLabel: m.shortLabel,
+        category: m.category,
+        categoryLabel: m.categoryLabel,
+        badge: m.badge,
+        description: m.description,
         assertividade,
         wins,
         losses,
         total,
       };
     });
-  }, [stats]);
+  }, [stats, recentSignals]);
+
+  const displayedStrategies = useMemo(() => {
+    if (strategyTabFilter === "todas") return strategyStats;
+    return strategyStats.filter((s) => s.category === strategyTabFilter);
+  }, [strategyStats, strategyTabFilter]);
+
+  const strategyOverallSummary = useMemo(() => {
+    let totalWins = 0;
+    let totalLosses = 0;
+    let activeStrategies = 0;
+    strategyStats.forEach((s) => {
+      totalWins += s.wins;
+      totalLosses += s.losses;
+      if (s.total > 0) activeStrategies += 1;
+    });
+    const totalOps = totalWins + totalLosses;
+    const avgAssertivity = totalOps > 0 ? (totalWins / totalOps) * 100 : null;
+    return {
+      totalWins,
+      totalLosses,
+      totalOps,
+      activeStrategies,
+      avgAssertivity,
+    };
+  }, [strategyStats]);
 
   // Auditoria dos sinais preditivos contra os resultados reais (Regra rigorosa de 6 rodadas: M-1, M, M+1)
   useEffect(() => {
@@ -421,6 +790,7 @@ function SinaisSectionContent() {
                   confluence: s.confluence,
                   resultTime: auditResult.resultTime,
                   strategyKey: s.strategyKey,
+                  confirmedStrategies: s.confirmedStrategies,
                   targetTime: s.time,
                   windowLabel: auditResult.audit.windowLabel,
                   checkedResults: auditResult.audit.checkedResults,
@@ -456,6 +826,7 @@ function SinaisSectionContent() {
                   label: s.label,
                   confluence: s.confluence,
                   strategyKey: s.strategyKey,
+                  confirmedStrategies: s.confirmedStrategies,
                   targetTime: s.time,
                   windowLabel: auditResult.audit.windowLabel,
                   checkedResults: auditResult.audit.checkedResults,
@@ -558,7 +929,7 @@ function SinaisSectionContent() {
                 </h3>
                 <p className="text-[10px] text-muted-foreground">
                   {auditFilter === "geral"
-                    ? "Alimentação em tempo real das análises ativas"
+                    ? "Auditoria por Estratégia em tempo real (Soma 19, Soma 17 e E1-E15)"
                     : `Assertividade dos últimos ${last10Stats.total} de 10 sinais`}
                 </p>
               </div>
@@ -627,40 +998,206 @@ function SinaisSectionContent() {
 
           <div className="p-6">
             {auditFilter === "geral" ? (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-9 gap-2.5">
-                  {strategyStats.map((s, i) => (
-                    <div
-                      key={i}
-                      className="flex flex-col gap-1 p-3 rounded-xl bg-white/[0.02] border border-white/5 hover:border-white/10 transition-colors"
+              <div className="space-y-5">
+                {/* Barra de Filtros por Categoria de Estratégia e KPIs Rápidos */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/5">
+                  <div className="flex flex-wrap items-center gap-1.5 bg-black/40 p-1 rounded-xl border border-white/5">
+                    <button
+                      type="button"
+                      onClick={() => setStrategyTabFilter("todas")}
+                      className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                        strategyTabFilter === "todas"
+                          ? "bg-white/15 text-white shadow-sm"
+                          : "text-white/40 hover:text-white/70"
+                      }`}
                     >
-                      <span className="text-[9px] font-black text-white/50 uppercase tracking-tighter truncate">
-                        {s.analise}
-                      </span>
-                      <span
-                        className={`text-xl font-black font-outfit ${s.total > 0 ? "text-white" : "text-zinc-600 font-normal"}`}
-                      >
-                        {s.assertividade !== null ? `${s.assertividade.toFixed(0)}%` : "--"}
-                      </span>
-                      <div className="flex items-center justify-between text-[9px] font-bold pt-1 border-t border-white/5">
-                        <span
-                          className={s.wins > 0 ? "text-emerald-400 font-black" : "text-zinc-600"}
-                        >
-                          {s.wins}W
-                        </span>
-                        <span
-                          className={s.losses > 0 ? "text-red-400 font-black" : "text-zinc-600"}
-                        >
-                          {s.losses}L
-                        </span>
-                      </div>
+                      Todas ({strategyStats.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStrategyTabFilter("soma19")}
+                      className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                        strategyTabFilter === "soma19"
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                          : "text-emerald-400/50 hover:text-emerald-300"
+                      }`}
+                    >
+                      Soma 19 ({strategyStats.filter((s) => s.category === "soma19").length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStrategyTabFilter("soma17")}
+                      className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                        strategyTabFilter === "soma17"
+                          ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
+                          : "text-cyan-400/50 hover:text-cyan-300"
+                      }`}
+                    >
+                      Soma 17 ({strategyStats.filter((s) => s.category === "soma17").length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStrategyTabFilter("confirmacao")}
+                      className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                        strategyTabFilter === "confirmacao"
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                          : "text-amber-400/50 hover:text-amber-300"
+                      }`}
+                    >
+                      Confirmação E1–E15 (
+                      {strategyStats.filter((s) => s.category === "confirmacao").length})
+                    </button>
+                  </div>
+
+                  {/* Resumo consolidado de todas as estratégias */}
+                  <div className="flex items-center gap-4 text-[11px]">
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <span>Ativas:</span>
+                      <strong className="text-white font-mono">
+                        {strategyOverallSummary.activeStrategies}/{strategyStats.length}
+                      </strong>
                     </div>
-                  ))}
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <span>Operações:</span>
+                      <strong className="text-white font-mono">
+                        {strategyOverallSummary.totalOps}
+                      </strong>
+                      <span className="text-[10px] text-emerald-400 font-bold">
+                        ({strategyOverallSummary.totalWins}W
+                      </span>
+                      <span className="text-[10px] text-red-400 font-bold">
+                        {strategyOverallSummary.totalLosses}L)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <span>Assertividade Média:</span>
+                      <strong
+                        className={`font-mono font-bold ${
+                          strategyOverallSummary.avgAssertivity !== null &&
+                          strategyOverallSummary.avgAssertivity >= 70
+                            ? "text-emerald-400"
+                            : strategyOverallSummary.avgAssertivity !== null
+                              ? "text-amber-400"
+                              : "text-white/40"
+                        }`}
+                      >
+                        {strategyOverallSummary.avgAssertivity !== null
+                          ? `${strategyOverallSummary.avgAssertivity.toFixed(1)}%`
+                          : "--"}
+                      </strong>
+                    </div>
+                  </div>
                 </div>
+
+                {/* Grid de Estratégias */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {displayedStrategies.map((s) => {
+                    const hasData = s.total > 0;
+                    const winRate = s.assertividade !== null ? s.assertividade : 0;
+                    return (
+                      <div
+                        key={s.key}
+                        className="flex flex-col justify-between p-3.5 rounded-xl bg-white/[0.02] border border-white/5 hover:border-white/15 transition-all group"
+                      >
+                        <div>
+                          {/* Cabeçalho do Card */}
+                          <div className="flex items-center justify-between gap-1 mb-2">
+                            <span
+                              className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${s.badge}`}
+                            >
+                              {s.category === "soma19"
+                                ? "Soma 19"
+                                : s.category === "soma17"
+                                  ? "Soma 17"
+                                  : "Confirmação"}
+                            </span>
+                            <span className="text-[10px] font-mono font-black text-white/60">
+                              {s.shortLabel}
+                            </span>
+                          </div>
+
+                          {/* Nome da Estratégia */}
+                          <h4
+                            className="text-xs font-bold text-white tracking-tight line-clamp-1 mb-1 group-hover:text-primary transition-colors"
+                            title={s.name}
+                          >
+                            {s.name}
+                          </h4>
+
+                          {/* Descrição resumida da regra */}
+                          <p
+                            className="text-[9px] text-muted-foreground/70 line-clamp-1 mb-3"
+                            title={s.description}
+                          >
+                            {s.description}
+                          </p>
+
+                          {/* Assertividade em destaque */}
+                          <div className="flex items-baseline gap-1.5 mb-2">
+                            <span
+                              className={`text-2xl font-black font-outfit ${
+                                hasData
+                                  ? winRate >= 70
+                                    ? "text-emerald-400"
+                                    : winRate >= 50
+                                      ? "text-amber-400"
+                                      : "text-red-400"
+                                  : "text-zinc-600 font-normal"
+                              }`}
+                            >
+                              {s.assertividade !== null ? `${s.assertividade.toFixed(0)}%` : "--"}
+                            </span>
+                            {hasData && (
+                              <span className="text-[9px] text-muted-foreground">
+                                assertividade
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Barra de Progresso visual */}
+                          {hasData && (
+                            <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden mb-2.5 flex">
+                              <div
+                                style={{ width: `${winRate}%` }}
+                                className="h-full bg-emerald-500 rounded-full"
+                              />
+                              <div
+                                style={{ width: `${100 - winRate}%` }}
+                                className="h-full bg-red-500/80 rounded-full"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Rodapé: Vitórias, Derrotas e Total de Operações */}
+                        <div className="flex items-center justify-between text-[10px] font-bold pt-2 border-t border-white/5 mt-auto">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={
+                                s.wins > 0 ? "text-emerald-400 font-black" : "text-zinc-600"
+                              }
+                            >
+                              {s.wins}W
+                            </span>
+                            <span
+                              className={s.losses > 0 ? "text-red-400 font-black" : "text-zinc-600"}
+                            >
+                              {s.losses}L
+                            </span>
+                          </div>
+                          <span className="text-[9px] text-white/40 font-mono">
+                            {s.total} {s.total === 1 ? "op." : "ops."}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
                 {strategyStats.every((s) => s.total === 0) && (
-                  <p className="text-center text-[11px] text-muted-foreground/60 py-1">
-                    ✨ Painel zerado. Os dados serão alimentados automaticamente conforme novos
-                    sinais forem auditados em tempo real.
+                  <p className="text-center text-[11px] text-muted-foreground/60 py-2">
+                    ✨ Painel de estratégias pronto. Os dados são auditados e contabilizados
+                    automaticamente conforme as rodadas reais da Blaze forem acontecendo.
                   </p>
                 )}
               </div>
