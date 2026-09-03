@@ -93,6 +93,32 @@ export default function SignalPercentageValidator() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [maxSignalsToEvaluate, setMaxSignalsToEvaluate] = useState<number>(300);
+  const syncWithServerData = useSignalStatsStore((state) => state.syncWithServerData);
+
+  const [autonomousStatus, setAutonomousStatus] = useState<{
+    status: string;
+    totalAudited: number;
+    lastRoundId: number | null;
+  } | null>(null);
+
+  const syncAutonomous = useCallback(async () => {
+    try {
+      const res = await fetch("/api/public/autonomous-audit");
+      if (res.ok) {
+        const data = await res.json();
+        if (data) {
+          syncWithServerData(data);
+          setAutonomousStatus({
+            status: data.status,
+            totalAudited: data.totalAudited,
+            lastRoundId: data.lastRoundId,
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [syncWithServerData]);
 
   // Modo de alimentação: "from_now" (alimentar a partir de agora / base limpa) ou "all" (histórico completo)
   const [feedMode, setFeedMode] = useState<"from_now" | "all">(() => {
@@ -152,6 +178,11 @@ export default function SignalPercentageValidator() {
 
   useEffect(() => {
     loadHistory();
+    syncAutonomous();
+
+    const autonomousInterval = setInterval(() => {
+      syncAutonomous();
+    }, 4000);
 
     // Polling contínuo de alta frequência a cada 3.5s para garantia de dados
     const pollInterval = setInterval(async () => {
@@ -218,13 +249,14 @@ export default function SignalPercentageValidator() {
     window.addEventListener("focus", onVisible);
 
     return () => {
+      clearInterval(autonomousInterval);
       clearInterval(pollInterval);
       supabase.removeChannel(channel);
       clearInterval(tickInterval);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
     };
-  }, [loadHistory]);
+  }, [loadHistory, syncAutonomous]);
 
   // Executa o Backtesting / Auditoria de todos os sinais gerados pelo motor no histórico
   const auditResults = useMemo(() => {
@@ -650,6 +682,23 @@ export default function SignalPercentageValidator() {
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             Atualizar
           </button>
+
+          {/* Badge Motor Autônomo 24/7 */}
+          <div
+            className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-400 shadow-sm"
+            title={`Motor Autônomo 24/7 ativo no servidor. Auditoria contínua e captura de WIN/LOSS automática. Total auditado: ${autonomousStatus?.totalAudited ?? 0} sinais.`}
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="hidden sm:inline">Motor Autônomo 24/7</span>
+            {autonomousStatus?.lastRoundId && (
+              <span className="text-[10px] text-emerald-400/80 font-mono bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                #{autonomousStatus.lastRoundId}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

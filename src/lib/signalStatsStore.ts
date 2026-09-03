@@ -60,6 +60,10 @@ interface SignalStatsStore {
   }) => void;
   clearStats: () => void;
   getAssertivity: (key: string) => number;
+  syncWithServerData: (data: {
+    recentSignals?: SignalHistoryEntry[];
+    stats?: Record<string, AnalysisStat>;
+  }) => void;
 }
 
 export const useSignalStatsStore = create<SignalStatsStore>()(
@@ -194,6 +198,65 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
           return {
             recentSignals: updatedRecent,
             stats: newStats,
+          };
+        }),
+
+      syncWithServerData: (data) =>
+        set((state) => {
+          if (!data) return state;
+          const incomingSignals = Array.isArray(data.recentSignals) ? data.recentSignals : [];
+          if (
+            incomingSignals.length === 0 &&
+            (!data.stats || Object.keys(data.stats).length === 0)
+          ) {
+            return state;
+          }
+
+          // Mescla os sinais com base na chave única
+          const signalMap = new Map<string, SignalHistoryEntry>();
+          // Primeiro adiciona os locais
+          state.recentSignals.forEach((s) => signalMap.set(s.key, s));
+          // Depois mescla com os do servidor autônomo (priorizando dados de auditoria confirmados)
+          incomingSignals.forEach((incoming) => {
+            const existing = signalMap.get(incoming.key);
+            if (!existing) {
+              signalMap.set(incoming.key, incoming);
+            } else {
+              // Se o existente já tem WIN/LOSS, mantém outcome mas aceita auditorias completas
+              signalMap.set(incoming.key, {
+                ...incoming,
+                outcome:
+                  existing.outcome === "green" || existing.outcome === "red"
+                    ? existing.outcome
+                    : incoming.outcome,
+                winningResultId: existing.winningResultId || incoming.winningResultId,
+                audit: incoming.audit || existing.audit,
+                checkedResults: incoming.checkedResults ?? existing.checkedResults,
+                windowLabel: incoming.windowLabel || existing.windowLabel,
+              });
+            }
+          });
+
+          const mergedRecent = Array.from(signalMap.values())
+            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+            .slice(0, 100);
+
+          // Mescla estatísticas por chave
+          const mergedStats: Record<string, AnalysisStat> = { ...state.stats };
+          if (data.stats) {
+            Object.entries(data.stats).forEach(([k, servStat]) => {
+              const cur = mergedStats[k] || { green: 0, red: 0, lastUpdated: 0 };
+              mergedStats[k] = {
+                green: Math.max(cur.green, servStat.green),
+                red: Math.max(cur.red, servStat.red),
+                lastUpdated: Math.max(cur.lastUpdated || 0, servStat.lastUpdated || 0),
+              };
+            });
+          }
+
+          return {
+            recentSignals: mergedRecent,
+            stats: mergedStats,
           };
         }),
 

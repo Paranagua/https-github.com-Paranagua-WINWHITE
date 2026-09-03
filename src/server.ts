@@ -2,12 +2,20 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { autonomousEngine } from "./server/autonomousEngine";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
 };
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;
+
+// Garantia de inicialização autônoma do motor em segundo plano no servidor
+try {
+  autonomousEngine.start();
+} catch (e) {
+  console.error("[Server] Failed to auto-start autonomous engine:", e);
+}
 
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
@@ -40,6 +48,22 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const url = new URL(request.url);
+      if (url.pathname === "/api/public/autonomous-audit") {
+        if (request.method === "POST") {
+          await autonomousEngine.runCycle();
+        }
+        const state = autonomousEngine.getState();
+        return new Response(JSON.stringify(state), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

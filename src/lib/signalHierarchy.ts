@@ -762,13 +762,20 @@ export function buildStrategyTriggeredSignals(
   confirmationProjections: StrategyProjection[] = [],
   activeRecAlerts: Array<{ type: string; start: number; end: number }> = [],
   now: number = Date.now(),
+  options?: { allowHistorical?: boolean; minTargetTime?: number; maxTargetTime?: number },
 ): PredictiveSignal[] {
   if (!sumProjections || sumProjections.length === 0) return [];
 
-  // Filtra projeções futuras das estratégias de soma (janela segura: entre now - 60s e now + 60 min)
+  // Filtra projeções das estratégias de soma
   const validTriggers = sumProjections.filter((p) => {
     const t = p.targetDate.getTime();
-    return !Number.isNaN(t) && t >= now - 60_000 && t <= now + 60 * 60_000;
+    if (Number.isNaN(t)) return false;
+    if (options?.allowHistorical) {
+      const min = options.minTargetTime ?? 0;
+      const max = options.maxTargetTime ?? now + 60 * 60_000;
+      return t >= min && t <= max;
+    }
+    return t >= now - 60_000 && t <= now + 60 * 60_000;
   });
 
   if (validTriggers.length === 0) return [];
@@ -1097,8 +1104,13 @@ export function mergeSignalsLifecycle(
   newCandidates: PredictiveSignal[],
   results: ResultItemInput[],
   now: number = Date.now(),
+  options?: {
+    allowHistorical?: boolean;
+    maxPastWindowMs?: number;
+  },
 ): PredictiveSignal[] {
   const resultMap = new Map<string, PredictiveSignal>();
+  const maxPastMs = options?.maxPastWindowMs ?? 5 * 3600_000;
 
   // 1. Carrega todos os sinais existentes
   for (const sig of existingSignals || []) {
@@ -1111,6 +1123,7 @@ export function mergeSignalsLifecycle(
 
     // Sinais concluídos que já passaram da janela de 5 minutos de exibição são descartados da tela ao vivo
     if (
+      !options?.allowHistorical &&
       sig.outcome &&
       sig.outcome !== "pending" &&
       sig.completedAt &&
@@ -1120,10 +1133,11 @@ export function mergeSignalsLifecycle(
     }
 
     // Sinais pendentes com horário no passado (> 5 minutos após o minuto alvo) ou excessivamente futuros (> 60 min) são descartados
+    const pastLimit = options?.allowHistorical ? maxPastMs : 300_000;
     if (
       sig.outcome === "pending" &&
       !Number.isNaN(sigTime) &&
-      (now - sigTime > 300_000 || sigTime > now + 65 * 60_000)
+      (now - sigTime > pastLimit || sigTime > now + 65 * 60_000)
     ) {
       continue;
     }
@@ -1192,7 +1206,8 @@ export function mergeSignalsLifecycle(
     if (!existing) {
       // Novo candidato:
       // Se o horário (sinal - 1) já passou para esse novo candidato, não publica novo sinal de última hora
-      if (!Number.isNaN(candTime) && now >= candTime - 60_000) {
+      // (a menos que seja o motor autônomo auditando sinais históricos recentes)
+      if (!options?.allowHistorical && !Number.isNaN(candTime) && now >= candTime - 60_000) {
         continue;
       }
 
@@ -1205,7 +1220,7 @@ export function mergeSignalsLifecycle(
         ...cand,
         key: canonicalKey,
         outcome: "pending",
-        isLocked: false,
+        isLocked: options?.allowHistorical ? true : false,
       });
     } else {
       // Sinal já existente:
