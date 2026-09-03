@@ -94,11 +94,16 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
           const alreadyExists = existingIndex >= 0;
           const prevEntry = alreadyExists ? state.recentSignals[existingIndex] : null;
 
-          // Se o sinal já foi registrado no histórico, seu resultado é definitivo (imutabilidade WIN/LOSS)
+          const isCorrectionFromRedToGreen =
+            alreadyExists && prevEntry && prevEntry.outcome === "red" && signal.outcome === "green";
+
+          // Se o sinal já foi registrado no histórico como WIN ("green"), ele é imutável
+          // Se foi registrado como LOSS ("red"), só pode ser alterado se a nova auditoria comprovou WIN ("green")
           if (
             alreadyExists &&
             prevEntry &&
-            (prevEntry.outcome === "green" || prevEntry.outcome === "red")
+            (prevEntry.outcome === "green" ||
+              (prevEntry.outcome === "red" && !isCorrectionFromRedToGreen))
           ) {
             const updatedRecent = state.recentSignals.map((s, idx) =>
               idx === existingIndex
@@ -144,7 +149,14 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             isTop1: signal.isTop1,
           };
 
-          const updatedRecent = [newEntry, ...state.recentSignals].slice(0, 50);
+          let updatedRecent: SignalHistoryEntry[];
+          if (isCorrectionFromRedToGreen && existingIndex >= 0) {
+            updatedRecent = state.recentSignals.map((s, idx) =>
+              idx === existingIndex ? newEntry : s,
+            );
+          } else {
+            updatedRecent = [newEntry, ...state.recentSignals].slice(0, 50);
+          }
 
           // Atualiza estatísticas por estratégia e confluência
           const newStats = { ...state.stats };
@@ -187,12 +199,21 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
 
           keysToUpdate.forEach((k) => {
             const cur = newStats[k] || { green: 0, red: 0, lastUpdated: Date.now() };
-            newStats[k] = {
-              ...cur,
-              green: signal.outcome === "green" ? cur.green + 1 : cur.green,
-              red: signal.outcome === "red" ? cur.red + 1 : cur.red,
-              lastUpdated: Date.now(),
-            };
+            if (isCorrectionFromRedToGreen) {
+              newStats[k] = {
+                ...cur,
+                green: cur.green + 1,
+                red: Math.max(0, cur.red - 1),
+                lastUpdated: Date.now(),
+              };
+            } else {
+              newStats[k] = {
+                ...cur,
+                green: signal.outcome === "green" ? cur.green + 1 : cur.green,
+                red: signal.outcome === "red" ? cur.red + 1 : cur.red,
+                lastUpdated: Date.now(),
+              };
+            }
           });
 
           return {
@@ -222,14 +243,29 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             if (!existing) {
               signalMap.set(incoming.key, incoming);
             } else {
-              // Se o existente já tem WIN/LOSS, mantém outcome mas aceita auditorias completas
+              // Se qualquer um dos dois (local ou servidor) comprovou WIN ("green"), prevalece "green" (WIN)!
+              const resolvedOutcome =
+                existing.outcome === "green" || incoming.outcome === "green"
+                  ? "green"
+                  : existing.outcome === "red" || incoming.outcome === "red"
+                    ? "red"
+                    : "pending";
+              const resolvedLabel =
+                resolvedOutcome === "green"
+                  ? "WIN"
+                  : resolvedOutcome === "red"
+                    ? "LOSS"
+                    : "PENDING";
+
               signalMap.set(incoming.key, {
                 ...incoming,
-                outcome:
-                  existing.outcome === "green" || existing.outcome === "red"
-                    ? existing.outcome
-                    : incoming.outcome,
+                ...existing,
+                outcome: resolvedOutcome,
+                label: resolvedLabel,
+                resultTime: existing.resultTime || incoming.resultTime,
                 winningResultId: existing.winningResultId || incoming.winningResultId,
+                winningResultCreatedAt:
+                  existing.winningResultCreatedAt || incoming.winningResultCreatedAt,
                 audit: incoming.audit || existing.audit,
                 checkedResults: incoming.checkedResults ?? existing.checkedResults,
                 windowLabel: incoming.windowLabel || existing.windowLabel,

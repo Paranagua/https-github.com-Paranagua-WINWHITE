@@ -4,10 +4,30 @@ import type { PredictiveSignal } from "@/lib/signalsStore";
 
 export type AuditResultItem = {
   id: string | number;
-  roll: number;
-  color: Color;
-  createdAt: string;
+  roll: number | string;
+  color?: Color | string;
+  createdAt?: string;
+  created_at?: string;
+  inserted_at?: string;
 };
+
+export function getResultIso(r: any): string {
+  if (!r) return "";
+  return String(r.createdAt || r.created_at || r.inserted_at || "").trim();
+}
+
+export function isResultWhite(r: any): boolean {
+  if (!r) return false;
+  if (r.roll !== undefined && r.roll !== null) {
+    const rollNum = Number(r.roll);
+    if (!Number.isNaN(rollNum) && rollNum === 0) return true;
+  }
+  if (r.color !== undefined && r.color !== null) {
+    const colStr = String(r.color).trim().toLowerCase();
+    if (colStr === "white" || colStr === "0") return true;
+  }
+  return false;
+}
 
 export interface SignalAuditInfo {
   signalKey: string;
@@ -70,9 +90,10 @@ export function deduplicateResults<T extends { id: string | number }>(items: T[]
  */
 export function auditSignalWithRounds(
   signal: PredictiveSignal,
-  rawResults: AuditResultItem[],
+  rawResults: any[],
+  auditNow?: number,
 ): ValidationOutcome {
-  const now = Date.now();
+  const now = typeof auditNow === "number" && !Number.isNaN(auditNow) ? auditNow : Date.now();
 
   // Se o sinal já está concluído como WIN ou LOSS, respeita a imutabilidade absoluta
   if (signal.outcome === "green" || signal.outcome === "red") {
@@ -162,13 +183,15 @@ export function auditSignalWithRounds(
   const uniqueResults = deduplicateResults(rawResults);
 
   // 4. Classificar cada rodada estritamente no seu minuto real (sem tolerância de segundos)
-  const spinsMMinus1: AuditResultItem[] = [];
-  const spinsM: AuditResultItem[] = [];
-  const spinsMPlus1: AuditResultItem[] = [];
+  const spinsMMinus1: any[] = [];
+  const spinsM: any[] = [];
+  const spinsMPlus1: any[] = [];
 
   for (const r of uniqueResults) {
-    if (!r || !r.createdAt) continue;
-    const rDate = parseUtcDate(r.createdAt);
+    if (!r) continue;
+    const iso = getResultIso(r);
+    if (!iso) continue;
+    const rDate = parseUtcDate(iso);
     const rTime = rDate.getTime();
     if (Number.isNaN(rTime)) continue;
 
@@ -185,8 +208,8 @@ export function auditSignalWithRounds(
   }
 
   // Ordenar cada minuto cronologicamente crescente
-  const sortByTimeAsc = (a: AuditResultItem, b: AuditResultItem) =>
-    parseUtcDate(a.createdAt).getTime() - parseUtcDate(b.createdAt).getTime();
+  const sortByTimeAsc = (a: any, b: any) =>
+    parseUtcDate(getResultIso(a)).getTime() - parseUtcDate(getResultIso(b)).getTime();
 
   spinsMMinus1.sort(sortByTimeAsc);
   spinsM.sort(sortByTimeAsc);
@@ -196,8 +219,7 @@ export function auditSignalWithRounds(
   const totalChecked = allWindowSpins.length;
 
   // 5. Verificar se algum dos resultados é branco/0
-  const isWhite = (r: AuditResultItem) => Number(r.roll) === 0 || r.color === "white";
-  const winningSpin = allWindowSpins.find(isWhite);
+  const winningSpin = allWindowSpins.find(isResultWhite);
 
   const has2RoundsMMinus1 = spinsMMinus1.length >= 2;
   const has2RoundsM = spinsM.length >= 2;
@@ -214,18 +236,22 @@ export function auditSignalWithRounds(
   const windowEndTime = minuteMPlus1Start + 60_000;
   const isTimePastWindow = now >= windowEndTime + 30_000;
   const hasSpinsAfterWindow = uniqueResults.some((r) => {
-    const t = parseUtcDate(r.createdAt).getTime();
+    const iso = getResultIso(r);
+    if (!iso) return false;
+    const t = parseUtcDate(iso).getTime();
     return !Number.isNaN(t) && t >= windowEndTime;
   });
 
   if (winningSpin) {
     // WIN: Qualquer branco ocorrido na janela (mesmo antes das 6 rodadas)
+    const winIso = getResultIso(winningSpin);
     outcome = "green";
-    resultTime = fmtTime(winningSpin.createdAt);
-    winningResultId = String(winningSpin.id);
-    winningResultRoll = Number(winningSpin.roll);
-    winningResultColor = winningSpin.color;
-    winningResultCreatedAt = winningSpin.createdAt;
+    resultTime = winIso ? fmtTime(winIso) : undefined;
+    winningResultId =
+      winningSpin.id !== undefined && winningSpin.id !== null ? String(winningSpin.id) : null;
+    winningResultRoll = Number(winningSpin.roll ?? 0);
+    winningResultColor = "white";
+    winningResultCreatedAt = winIso || null;
   } else if (isComplete6Rounds || isTimePastWindow || hasSpinsAfterWindow) {
     // LOSS: Somente quando todas as rodadas forem confirmadas OU a janela de tempo já passou sem nenhum branco
     outcome = "red";
@@ -244,9 +270,9 @@ export function auditSignalWithRounds(
     roundsMMinus1: spinsMMinus1.length,
     roundsM: spinsM.length,
     roundsMPlus1: spinsMPlus1.length,
-    spinsMMinus1Ids: spinsMMinus1.map((s) => String(s.id)),
-    spinsMIds: spinsM.map((s) => String(s.id)),
-    spinsMPlus1Ids: spinsMPlus1.map((s) => String(s.id)),
+    spinsMMinus1Ids: spinsMMinus1.map((s) => String(s.id ?? "")),
+    spinsMIds: spinsM.map((s) => String(s.id ?? "")),
+    spinsMPlus1Ids: spinsMPlus1.map((s) => String(s.id ?? "")),
     winningResultId,
     winningResultRoll,
     winningResultColor,

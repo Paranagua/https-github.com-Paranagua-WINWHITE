@@ -10,6 +10,7 @@ import {
 } from "@/lib/signalsStore";
 import { getSignalRank, SignalRank } from "@/lib/signalHierarchy";
 import { PredictiveSignals } from "@/components/double/PredictiveSignals";
+import { useSignalStatsStore } from "@/lib/signalStatsStore";
 import { Zap, Sparkles } from "lucide-react";
 
 function getGroupDisplayName(sig: Partial<PredictiveSignal>): string {
@@ -232,12 +233,42 @@ export function SignalNotificationWatcher() {
     };
   }, [section, mounted]);
 
+  const syncWithServerData = useSignalStatsStore((s) => s.syncWithServerData);
+
+  // Sincronização contínua com o motor autônomo em segundo plano (independente da aba ativa)
+  useEffect(() => {
+    if (!mounted) return;
+
+    let isSubscribed = true;
+    const syncAutonomous = async () => {
+      try {
+        const res = await fetch("/api/public/autonomous-audit");
+        if (res.ok && isSubscribed) {
+          const data = await res.json();
+          if (data && isSubscribed) {
+            syncWithServerData(data);
+          }
+        }
+      } catch {
+        // ignora erros de rede transitórios
+      }
+    };
+
+    syncAutonomous();
+    const interval = setInterval(syncAutonomous, 4000);
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+    };
+  }, [mounted, syncWithServerData]);
+
   if (!mounted) return null;
 
-  // Se o usuário não estiver na aba de sinais e os sinais estiverem ativados, mantém o PredictiveSignals rodando em segundo plano
+  // Se o usuário não estiver na aba de sinais, mantém o PredictiveSignals rodando em segundo plano
+  // garantindo que o ciclo de vida e a auditoria de resultados continuem em tempo real
   return (
     <>
-      {section !== "sinais" && robotEnabled && (
+      {section !== "sinais" && (
         <div className="hidden pointer-events-none" aria-hidden="true" tabIndex={-1}>
           <PredictiveSignals />
         </div>

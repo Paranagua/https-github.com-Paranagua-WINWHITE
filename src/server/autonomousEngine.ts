@@ -485,11 +485,15 @@ class AutonomousAuditEngine {
     const alreadyExists = existingIndex >= 0;
     const prevEntry = alreadyExists ? this.state.recentSignals[existingIndex] : null;
 
-    // Imutabilidade WIN / LOSS
+    const isCorrectionFromRedToGreen =
+      alreadyExists && prevEntry && prevEntry.outcome === "red" && signal.outcome === "green";
+
+    // Imutabilidade WIN / LOSS (WIN nunca vira LOSS; LOSS só corrige se comprovou WIN)
     if (
       alreadyExists &&
       prevEntry &&
-      (prevEntry.outcome === "green" || prevEntry.outcome === "red")
+      (prevEntry.outcome === "green" ||
+        (prevEntry.outcome === "red" && !isCorrectionFromRedToGreen))
     ) {
       return;
     }
@@ -518,8 +522,14 @@ class AutonomousAuditEngine {
       isTop1: signal.isTop1,
     };
 
-    this.state.recentSignals = [newEntry, ...this.state.recentSignals].slice(0, 150);
-    this.state.totalAudited += 1;
+    if (isCorrectionFromRedToGreen && existingIndex >= 0) {
+      this.state.recentSignals = this.state.recentSignals.map((s, idx) =>
+        idx === existingIndex ? newEntry : s,
+      );
+    } else {
+      this.state.recentSignals = [newEntry, ...this.state.recentSignals].slice(0, 150);
+      this.state.totalAudited += 1;
+    }
 
     // Atualiza estatísticas autônomas por estratégia e confluência
     const newStats = { ...this.state.stats };
@@ -560,12 +570,21 @@ class AutonomousAuditEngine {
 
     keysToUpdate.forEach((k) => {
       const cur = newStats[k] || { green: 0, red: 0, lastUpdated: Date.now() };
-      newStats[k] = {
-        ...cur,
-        green: signal.outcome === "green" ? cur.green + 1 : cur.green,
-        red: signal.outcome === "red" ? cur.red + 1 : cur.red,
-        lastUpdated: Date.now(),
-      };
+      if (isCorrectionFromRedToGreen) {
+        newStats[k] = {
+          ...cur,
+          green: cur.green + 1,
+          red: Math.max(0, cur.red - 1),
+          lastUpdated: Date.now(),
+        };
+      } else {
+        newStats[k] = {
+          ...cur,
+          green: signal.outcome === "green" ? cur.green + 1 : cur.green,
+          red: signal.outcome === "red" ? cur.red + 1 : cur.red,
+          lastUpdated: Date.now(),
+        };
+      }
     });
 
     this.state.stats = newStats;
