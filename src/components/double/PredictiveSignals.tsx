@@ -21,6 +21,9 @@ import {
   buildStrategyTriggeredSignals,
   type RawCandidate,
   SignalRank,
+  extractSignalStrategies,
+  extractSignalAnalyses,
+  formatStrategyCode,
 } from "@/lib/signalHierarchy";
 import { computeAllSumTriggerProjections } from "@/lib/sum19Strategies";
 import { computeConfirmationProjections } from "@/lib/confirmationStrategies";
@@ -77,6 +80,8 @@ type Mode1Signal = {
   at: Date;
   pct: number;
   label: string;
+  confluence?: string;
+  strategies?: string[];
   analysisCount: number;
   sources: Array<{ analysis: number; value: number; pct?: number; top3?: boolean; rank?: number }>;
   isHighTendency: boolean;
@@ -200,6 +205,9 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
     displayTime = s.times.map((t: any) => fmtClock(t)).join(" / ");
   }
 
+  const cardStrategies = extractSignalStrategies(s);
+  const cardAnalyses = extractSignalAnalyses(s);
+
   return (
     <div
       key={s.key}
@@ -220,13 +228,17 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
           >
             {s.title || "Sinal"}
             <span
-              className={`text-[9px] px-1.5 py-0.5 rounded border ${
+              className={`text-[9px] px-1.5 py-0.5 rounded border font-bold ${
                 isAlavancagem
-                  ? "bg-slate-100 border-slate-300 text-slate-800 font-bold"
-                  : "bg-white/5 border-white/10 text-white/40"
+                  ? "bg-slate-100 border-slate-300 text-slate-800"
+                  : "bg-white/5 border-white/10 text-white/70"
               }`}
             >
-              {s.sources?.[0]?.analysis ? `A${s.sources[0].analysis}` : "AUTO"}
+              {cardStrategies.length > 0
+                ? cardStrategies.join(", ")
+                : s.sources?.[0]?.analysis
+                  ? `A${s.sources[0].analysis}`
+                  : "AUTO"}
             </span>
           </div>
           {s.hasYellowSeal && (
@@ -351,33 +363,60 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
         <span>{safeAssertivity}%</span>
         <span className="opacity-50 text-[10px]">·</span>
         <span className={isAlavancagem ? "text-slate-600 font-semibold" : "text-white/60"}>
-          {isAlavancagem ? "Confluência Máxima (4+ Top 1)" : s.label || "Entrada"}
+          {isAlavancagem
+            ? "Confluência Máxima (4+ Top 1)"
+            : formatStrategyCode(s.label || "Entrada")}
         </span>
       </div>
-      <div className="mt-2 flex flex-wrap gap-1">
-        {Array.isArray(s.sources) &&
-          s.sources.map((src: any, idx: number) => {
-            if (!src) return null;
-            const pctStr = src.pct ? `${Math.round(src.pct)}%` : "";
-            const isTop3Secondary = !!src.top3;
-            return (
-              <span
-                key={idx}
-                className={`rounded-full border px-1.5 py-0.5 text-[9px] font-black ${
-                  isAlavancagem
-                    ? "border-slate-300 bg-slate-100 text-slate-900 font-bold"
-                    : isTop3Secondary
-                      ? "border-indigo-500/30 bg-indigo-500/10 text-indigo-300"
-                      : "border-white/10 bg-white/[0.05] text-white/80"
-                }`}
-                title={`Análise ${src.analysis} (Pedra ${src.value}) - ${pctStr} ${isTop3Secondary ? "Top 3" : "Top 1"}`}
-              >
-                A{src.analysis}
-                {"·"}
-                {src.value} {pctStr && <span className="opacity-75 font-normal">({pctStr})</span>}
-              </span>
-            );
-          })}
+
+      {/* Badges do card: Estratégias ANTES das Análises e sem percentual */}
+      <div className="mt-2.5 flex flex-wrap gap-1.5 items-center">
+        {/* 1. Estratégias (ex: E1, 145 sem o '-' e sem percentual) */}
+        {cardStrategies.map((stratCode, idx) => {
+          const isE = /^E\d+$/i.test(stratCode);
+          const eNum = isE ? parseInt(stratCode.substring(1), 10) : 0;
+          const isYellowE = isE && eNum <= 10;
+          const isBlueE = isE && eNum > 10;
+
+          return (
+            <span
+              key={`strat-${idx}-${stratCode}`}
+              className={`rounded-md border px-2 py-0.5 text-[9.5px] font-black tracking-wide shadow-xs flex items-center gap-1 ${
+                isAlavancagem
+                  ? "border-slate-800 bg-slate-900 text-white"
+                  : isYellowE
+                    ? "border-amber-500/40 bg-amber-500/20 text-amber-300"
+                    : isBlueE
+                      ? "border-blue-500/40 bg-blue-500/20 text-blue-300"
+                      : "border-emerald-500/40 bg-emerald-500/20 text-emerald-300"
+              }`}
+              title={`Estratégia ${stratCode}`}
+            >
+              {stratCode}
+            </span>
+          );
+        })}
+
+        {/* 2. Análises (ex: A1-5 88%) */}
+        {cardAnalyses.map((ana, idx) => {
+          const isTop3Secondary = !!ana.top3;
+          return (
+            <span
+              key={`ana-${idx}`}
+              className={`rounded-md border px-2 py-0.5 text-[9.5px] font-black tabular-nums shadow-xs flex items-center gap-1 ${
+                isAlavancagem
+                  ? "border-slate-300 bg-slate-100 text-slate-900 font-bold"
+                  : isTop3Secondary
+                    ? "border-indigo-500/30 bg-indigo-500/10 text-indigo-300"
+                    : "border-white/15 bg-white/[0.07] text-white/90"
+              }`}
+              title={`Análise ${ana.text} ${ana.pct ? `(${ana.pct})` : ""}`}
+            >
+              <span>{ana.text}</span>
+              {ana.pct && <span className="opacity-80 font-bold text-[9px]">{ana.pct}</span>}
+            </span>
+          );
+        })}
       </div>
     </div>
   );
@@ -743,6 +782,8 @@ export function PredictiveSignals() {
           at: dt,
           pct: s.pct,
           label: s.label,
+          confluence: s.confluence,
+          strategies: s.strategies || extractSignalStrategies(s),
           analysisCount,
           sources: (s.sources || []).map((src) => ({
             analysis: src.analysis,
@@ -754,6 +795,9 @@ export function PredictiveSignals() {
           })),
           isHighTendency: !!s.isHighTendency,
           isVerified: !!s.isVerified,
+          hasYellowSeal: !!s.hasYellowSeal,
+          hasBlueSeal: !!s.hasBlueSeal,
+          confirmedStrategies: s.confirmedStrategies || [],
           isRare: s.isRare,
           isSupreme: s.isSupreme,
           isAlavancagem: s.isAlavancagem,

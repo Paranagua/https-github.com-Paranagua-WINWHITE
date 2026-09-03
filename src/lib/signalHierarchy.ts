@@ -41,6 +41,148 @@ export interface SignalLevelEvaluation {
 }
 
 /**
+ * Formata o código da estratégia conforme a especificação:
+ * - Estratégias de confirmação E1-E15 permanecem E1, E2... E15.
+ * - Estratégias de soma (ex: 14-5, 10-9, 11-8) são exibidas sem o hífen: 145, 109, 118, etc.
+ * - Sem percentual.
+ */
+export function formatStrategyCode(raw?: string | null): string {
+  if (!raw) return "";
+  let clean = raw.trim();
+  clean = clean.replace(/^(S19_|S17_|Gatilho\s*:?\s*)/i, "");
+  // Remove hífen entre números, ex: "14-5" -> "145", "10-9" -> "109"
+  clean = clean.replace(/(\d+)-(\d+)/g, "$1$2");
+  return clean.trim();
+}
+
+/**
+ * Extrai e deduplica todas as estratégias de um sinal, ordenando E1-E15 primeiro e depois somas numéricas.
+ * Retorna códigos formatados (ex: ["E1", "145"]).
+ */
+export function extractSignalStrategies(sig: any): string[] {
+  if (!sig) return [];
+  const list: string[] = [];
+
+  // 1. Array strategies explícito
+  if (Array.isArray(sig.strategies) && sig.strategies.length > 0) {
+    sig.strategies.forEach((s: any) => {
+      if (typeof s === "string") list.push(formatStrategyCode(s));
+    });
+  }
+
+  // 2. Array triggerStrategies
+  if (Array.isArray(sig.triggerStrategies)) {
+    sig.triggerStrategies.forEach((s: any) => {
+      if (typeof s === "string") list.push(formatStrategyCode(s));
+    });
+  }
+
+  // 3. Estratégias confirmadas
+  if (Array.isArray(sig.confirmedStrategies)) {
+    sig.confirmedStrategies.forEach((c: any) => {
+      if (c && c.code) list.push(formatStrategyCode(c.code));
+    });
+  }
+
+  // 4. strategyKey (se não for análise pura tipo A1)
+  if (sig.strategyKey && typeof sig.strategyKey === "string") {
+    if (!/^A\d+$/i.test(sig.strategyKey)) {
+      list.push(formatStrategyCode(sig.strategyKey));
+    }
+  }
+
+  // 5. Escaneia confluence e label para capturar E1-E15 e pares de soma (14-5, etc.)
+  const textToScan = `${sig.confluence || ""} ${sig.label || ""}`;
+  if (textToScan) {
+    const eMatches = textToScan.match(/\bE(1[0-5]|[1-9])\b/gi);
+    if (eMatches) {
+      eMatches.forEach((m) => list.push(m.toUpperCase()));
+    }
+    // Procura por pares de soma como 14-5, 10-9, 11-8, 12-7, 6-13, 8-11, 10-7, 8-9, 11-6, 5-12, 13-4, 14-3
+    const sumMatches = textToScan.match(/\b\d+-\d+\b/g);
+    if (sumMatches) {
+      sumMatches.forEach((m) => list.push(formatStrategyCode(m)));
+    }
+  }
+
+  // Deduplica mantendo valores únicos
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of list) {
+    const formatted = formatStrategyCode(item);
+    if (formatted && !seen.has(formatted)) {
+      seen.add(formatted);
+      result.push(formatted);
+    }
+  }
+
+  // Ordena: E1-E15 primeiro (ex: E1, E2...), depois somas numéricas (ex: 145, 109...)
+  result.sort((a, b) => {
+    const aIsE = /^E\d+$/i.test(a);
+    const bIsE = /^E\d+$/i.test(b);
+    if (aIsE && !bIsE) return -1;
+    if (!aIsE && bIsE) return 1;
+    if (aIsE && bIsE) {
+      const numA = parseInt(a.substring(1), 10);
+      const numB = parseInt(b.substring(1), 10);
+      return numA - numB;
+    }
+    return a.localeCompare(b);
+  });
+
+  return result;
+}
+
+export interface SignalAnalysisItem {
+  text: string;
+  pct?: string;
+  analysis?: number;
+  value?: number;
+  top3?: boolean;
+}
+
+/**
+ * Extrai e formata análises de um sinal (ex: "A1-5 88%").
+ */
+export function extractSignalAnalyses(sig: any): SignalAnalysisItem[] {
+  if (!sig) return [];
+  const results: SignalAnalysisItem[] = [];
+
+  if (Array.isArray(sig.sources) && sig.sources.length > 0) {
+    sig.sources.forEach((src: any) => {
+      if (!src) return;
+      const pctStr = typeof src.pct === "number" && src.pct > 0 ? `${Math.round(src.pct)}%` : "";
+      results.push({
+        text: `A${src.analysis}-${src.value}`,
+        pct: pctStr,
+        analysis: src.analysis,
+        value: src.value,
+        top3: !!src.top3,
+      });
+    });
+    return results;
+  }
+
+  // Fallback escaneando confluence
+  const text = sig.confluence || "";
+  const regex = /A(\d+)[-·](\d+)(?:\s*\(?(\d+)%?\)?)?/gi;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    const aNum = parseInt(match[1], 10);
+    const val = parseInt(match[2], 10);
+    const pct = match[3] ? `${match[3]}%` : "";
+    results.push({
+      text: `A${aNum}-${val}`,
+      pct,
+      analysis: aNum,
+      value: val,
+    });
+  }
+
+  return results;
+}
+
+/**
  * Retorna a chave canônica e estável para um horário alvo de sinal.
  * Ex: 12:12:00 -> "sig-1772194320000"
  */
@@ -714,7 +856,9 @@ export function buildSignalConfluences(rawCandidates: RawCandidate[]): Predictiv
 
   return groups.map((g) => {
     const canonicalKey = getCanonicalSignalKey(g.representativeDate);
-    const confluenceText = g.allSources.map((s) => `A${s.analysis}·${s.value}`).join(", ");
+    const confluenceText = g.allSources
+      .map((s) => `A${s.analysis}-${s.value}${s.pct ? ` ${Math.round(s.pct)}%` : ""}`)
+      .join(", ");
     const displayPct = Number.isFinite(g.avgPct) && g.avgPct > 0 ? g.avgPct : g.maxPct;
 
     return {
@@ -918,6 +1062,17 @@ export function buildStrategyTriggeredSignals(
     // Avaliação da hierarquia e nível do sinal:
     let evaluation: SignalLevelEvaluation;
 
+    const formattedTriggerCodes = distinctTriggerCodes.map((c) => formatStrategyCode(c));
+    formattedTriggerCodes.sort((a, b) => {
+      const aIsE = /^E\d+$/i.test(a);
+      const bIsE = /^E\d+$/i.test(b);
+      if (aIsE && !bIsE) return -1;
+      if (!aIsE && bIsE) return 1;
+      if (aIsE && bIsE) return parseInt(a.substring(1), 10) - parseInt(b.substring(1), 10);
+      return a.localeCompare(b);
+    });
+    const triggerCodesLabel = formattedTriggerCodes.join("/");
+
     const distinctTop1Analyses = Array.from(new Set(top1Analyses.map((s) => s.analysis)));
     const distinctTop3Analyses = Array.from(new Set(top3Analyses.map((s) => s.analysis)));
     const top1Count = distinctTop1Analyses.length;
@@ -928,8 +1083,8 @@ export function buildStrategyTriggeredSignals(
         rank: SignalRank.ALAVANCAGEM,
         category: "alavancagem",
         groupName: "Alavancagem",
-        label: `Alavancagem (${distinctTriggerCodes.join("/")})`,
-        medal: `🚀 ALAVANCAGEM (${top1Count}x Top 1 + Gatilho ${distinctTriggerCodes.join("/")})`,
+        label: `Alavancagem (${triggerCodesLabel})`,
+        medal: `🚀 ALAVANCAGEM (${top1Count}x Top 1 + Gatilho ${triggerCodesLabel})`,
         isAlavancagem: true,
         isSupreme: false,
         isRare: false,
@@ -940,8 +1095,8 @@ export function buildStrategyTriggeredSignals(
         rank: SignalRank.SUPREME,
         category: "supreme",
         groupName: "Supremo",
-        label: `Supremo (${distinctTriggerCodes.join("/")})`,
-        medal: `👑 Supremo (${top1Count}x Top 1 + Gatilho ${distinctTriggerCodes.join("/")})`,
+        label: `Supremo (${triggerCodesLabel})`,
+        medal: `👑 Supremo (${top1Count}x Top 1 + Gatilho ${triggerCodesLabel})`,
         isAlavancagem: false,
         isSupreme: true,
         isRare: false,
@@ -952,8 +1107,8 @@ export function buildStrategyTriggeredSignals(
         rank: SignalRank.RARE,
         category: "rare",
         groupName: "Raro",
-        label: `Raro (${distinctTriggerCodes.join("/")})`,
-        medal: `💎 Raro (${top1Count}x Top 1 + Gatilho ${distinctTriggerCodes.join("/")})`,
+        label: `Raro (${triggerCodesLabel})`,
+        medal: `💎 Raro (${top1Count}x Top 1 + Gatilho ${triggerCodesLabel})`,
         isAlavancagem: false,
         isSupreme: false,
         isRare: true,
@@ -964,8 +1119,8 @@ export function buildStrategyTriggeredSignals(
         rank: SignalRank.TOP1_TOP3,
         category: "top1_top3",
         groupName: "Top 1 & Top 3",
-        label: `Top 1 & Top 3 (${distinctTriggerCodes.join("/")})`,
-        medal: `⚡ Top 1 & Top 3 (Gatilho ${distinctTriggerCodes.join("/")})`,
+        label: `Top 1 & Top 3 (${triggerCodesLabel})`,
+        medal: `⚡ Top 1 & Top 3 (Gatilho ${triggerCodesLabel})`,
         isAlavancagem: false,
         isSupreme: false,
         isRare: false,
@@ -977,8 +1132,8 @@ export function buildStrategyTriggeredSignals(
         rank: SignalRank.TOP1_TOP3,
         category: "top1_top3",
         groupName: "Top 1 & Estratégia",
-        label: `Gatilho ${distinctTriggerCodes.join("/")} + A${distinctTop1Analyses[0]}`,
-        medal: `🥇 Ouro (Gatilho ${distinctTriggerCodes.join("/")} + A${distinctTop1Analyses[0]})`,
+        label: `Gatilho ${triggerCodesLabel} + A${distinctTop1Analyses[0]}`,
+        medal: `🥇 Ouro (Gatilho ${triggerCodesLabel} + A${distinctTop1Analyses[0]})`,
         isAlavancagem: false,
         isSupreme: false,
         isRare: false,
@@ -990,21 +1145,21 @@ export function buildStrategyTriggeredSignals(
         rank: SignalRank.TOP1_TOP3,
         category: "top1_top3",
         groupName: "Estratégia & Análises",
-        label: `Gatilho ${distinctTriggerCodes.join("/")} + A${distinctTop3Analyses.join(",")}`,
-        medal: `🥈 Prata (Gatilho ${distinctTriggerCodes.join("/")} + A${distinctTop3Analyses.join(",")})`,
+        label: `Gatilho ${triggerCodesLabel} + A${distinctTop3Analyses.join(",")}`,
+        medal: `🥈 Prata (Gatilho ${triggerCodesLabel} + A${distinctTop3Analyses.join(",")})`,
         isAlavancagem: false,
         isSupreme: false,
         isRare: false,
         isTop1: false,
       };
     } else if (hasMultipleStrategies) {
-      // Confluência entre múltiplas estratégias (ex: E1 + E5, E1 + 10-9, 10-9 + 11-8)
+      // Confluência entre múltiplas estratégias (ex: E1 + E5, E1 + 109, 109 + 118)
       evaluation = {
         rank: SignalRank.RARE,
         category: "rare",
         groupName: "Confluência de Estratégias",
-        label: `Gatilhos ${distinctTriggerCodes.join(" + ")}`,
-        medal: `💎 Dupla Estratégia (${distinctTriggerCodes.join(" + ")})`,
+        label: `Gatilhos ${formattedTriggerCodes.join(" + ")}`,
+        medal: `💎 Dupla Estratégia (${formattedTriggerCodes.join(" + ")})`,
         isAlavancagem: false,
         isSupreme: false,
         isRare: true,
@@ -1015,8 +1170,8 @@ export function buildStrategyTriggeredSignals(
         rank: SignalRank.TOP1_TOP3,
         category: "top1_top3",
         groupName: "Estratégia Confirmada",
-        label: `Gatilho ${distinctTriggerCodes.join("/")}`,
-        medal: `⚡ Estratégia ${distinctTriggerCodes.join("/")}`,
+        label: `Gatilho ${triggerCodesLabel}`,
+        medal: `⚡ Estratégia ${triggerCodesLabel}`,
         isAlavancagem: false,
         isSupreme: false,
         isRare: false,
@@ -1045,28 +1200,6 @@ export function buildStrategyTriggeredSignals(
       cycleKey: a.cycleKey,
     }));
 
-    // Constrói texto de confluência
-    const parts: string[] = [`Gatilho ${distinctTriggerCodes.join("/")}`];
-    if (matchingAnalyses.length > 0) {
-      const distinctA = Array.from(
-        new Set(matchingAnalyses.map((a) => `A${a.analysis}·${a.value}`)),
-      );
-      parts.push(distinctA.join(", "));
-    }
-
-    const confluenceText = parts.join(" · ");
-    const isHighTendency = matchingAnalyses.some((a) => a.isHighTendency);
-    const isPossibleRec = activeRecAlerts.some((alert) => {
-      const signalTime = repDate.getTime();
-      return signalTime >= alert.start && signalTime <= alert.end;
-    });
-
-    const canonicalKey = getCanonicalSignalKey(repDate);
-
-    // Estratégia principal do sinal
-    const firstTrig = clusterTriggers[0];
-    const computedStrategyKey = firstTrig?.strategyKey || distinctTriggerCodes[0] || "E1";
-
     // Extrai e unifica selos e confirmações de E1-E15 presentes no cluster
     const clusterConfirmed: ConfirmedStrategyInfo[] = [];
     clusterTriggers.forEach((trig) => {
@@ -1083,6 +1216,88 @@ export function buildStrategyTriggeredSignals(
       }
     });
 
+    (confirmationProjections || []).forEach((cp) => {
+      if (!cp || !cp.targetDate) return;
+      const t = cp.targetDate.getTime();
+      if (t >= clusterWindowStart && t <= clusterWindowEnd) {
+        if (!clusterConfirmed.some((c) => c.code === cp.strategyCode)) {
+          clusterConfirmed.push({
+            id: cp.strategyId,
+            code: cp.strategyCode,
+            name: cp.name,
+            type: cp.type,
+            description: cp.description,
+            calculatedTime: cp.targetDate.toISOString().substring(11, 16),
+            calculatedMinute: cp.targetMinute,
+          });
+        }
+      }
+    });
+
+    // 1. Coleta e formata todas as estratégias (gatilho + confirmadas)
+    // Sem percentual e com hífen removido de pares de soma (ex: 14-5 vira 145)
+    const rawStrategies: string[] = [...distinctTriggerCodes];
+    clusterTriggers.forEach((t) => {
+      if (t.code) rawStrategies.push(t.code);
+    });
+    clusterConfirmed.forEach((c) => {
+      if (c.code) rawStrategies.push(c.code);
+    });
+
+    const distinctStrategies: string[] = [];
+    const seenStrat = new Set<string>();
+    rawStrategies.forEach((st) => {
+      const formatted = formatStrategyCode(st);
+      if (formatted && !seenStrat.has(formatted)) {
+        seenStrat.add(formatted);
+        distinctStrategies.push(formatted);
+      }
+    });
+
+    // Ordena: E1-E15 primeiro (ex: E1), depois somas numéricas (ex: 145)
+    distinctStrategies.sort((a, b) => {
+      const aIsE = /^E\d+$/i.test(a);
+      const bIsE = /^E\d+$/i.test(b);
+      if (aIsE && !bIsE) return -1;
+      if (!aIsE && bIsE) return 1;
+      if (aIsE && bIsE) return parseInt(a.substring(1), 10) - parseInt(b.substring(1), 10);
+      return a.localeCompare(b);
+    });
+
+    // 2. Coleta e formata análises (ex: A1-5 88%)
+    const formattedAnalyses: string[] = [];
+    const seenAnalyses = new Set<string>();
+    matchingAnalyses.forEach((a) => {
+      const key = `${a.analysis}-${a.value}`;
+      if (!seenAnalyses.has(key)) {
+        seenAnalyses.add(key);
+        const pctStr = typeof a.pct === "number" && a.pct > 0 ? ` ${Math.round(a.pct)}%` : "";
+        formattedAnalyses.push(`A${a.analysis}-${a.value}${pctStr}`);
+      }
+    });
+
+    // 3. Constrói texto de confluência: Estratégias ANTES das análises e SEM percentual
+    const confluenceParts: string[] = [];
+    if (distinctStrategies.length > 0) {
+      confluenceParts.push(distinctStrategies.join(", "));
+    }
+    if (formattedAnalyses.length > 0) {
+      confluenceParts.push(formattedAnalyses.join(", "));
+    }
+    const confluenceText = confluenceParts.join(" · ");
+
+    const isHighTendency = matchingAnalyses.some((a) => a.isHighTendency);
+    const isPossibleRec = activeRecAlerts.some((alert) => {
+      const signalTime = repDate.getTime();
+      return signalTime >= alert.start && signalTime <= alert.end;
+    });
+
+    const canonicalKey = getCanonicalSignalKey(repDate);
+
+    // Estratégia principal do sinal
+    const firstTrig = clusterTriggers[0];
+    const computedStrategyKey = firstTrig?.strategyKey || distinctTriggerCodes[0] || "E1";
+
     const hasYellowSeal = clusterConfirmed.some((c) => c.type === "yellow");
     const hasBlueSeal = clusterConfirmed.some((c) => c.type === "blue");
     const isVerified = hasYellowSeal || hasBlueSeal || clusterConfirmed.length > 0;
@@ -1093,6 +1308,7 @@ export function buildStrategyTriggeredSignals(
       pct: avgPct,
       label: evaluation.label,
       confluence: confluenceText,
+      strategies: distinctStrategies,
       medal: evaluation.medal,
       entryDate: repDate,
       outcome: "pending" as const,
@@ -1257,6 +1473,7 @@ export function mergeSignalsLifecycle(
       resultMap.set(canonicalKey, {
         ...cand,
         key: canonicalKey,
+        strategies: cand.strategies || extractSignalStrategies(cand),
         outcome: "pending",
         isLocked: options?.allowHistorical ? true : false,
       });
@@ -1338,6 +1555,21 @@ export function mergeSignalsLifecycle(
         cand.hasBlueSeal || existing.hasBlueSeal || mergedConfirmed.some((c) => c.type === "blue");
       const isVerified = hasYellow || hasBlue || cand.isVerified || existing.isVerified;
 
+      const mergedStrategies = Array.from(
+        new Set([
+          ...(existing.strategies || extractSignalStrategies(existing)),
+          ...(cand.strategies || extractSignalStrategies(cand)),
+        ]),
+      );
+      mergedStrategies.sort((a, b) => {
+        const aIsE = /^E\d+$/i.test(a);
+        const bIsE = /^E\d+$/i.test(b);
+        if (aIsE && !bIsE) return -1;
+        if (!aIsE && bIsE) return 1;
+        if (aIsE && bIsE) return parseInt(a.substring(1), 10) - parseInt(b.substring(1), 10);
+        return a.localeCompare(b);
+      });
+
       // Promoção de nível se o novo rank for superior E não houver branco em M-1 (antes do lock)
       if (candRank > existingRank && !whiteInM1) {
         resultMap.set(targetKey, {
@@ -1349,6 +1581,7 @@ export function mergeSignalsLifecycle(
           label: cand.label || existing.label,
           medal: cand.medal || existing.medal,
           confluence: cand.confluence || existing.confluence,
+          strategies: mergedStrategies,
           category: cand.category || existing.category,
           groupName: cand.groupName || existing.groupName,
           isAlavancagem: cand.isAlavancagem || existing.isAlavancagem,
@@ -1377,6 +1610,7 @@ export function mergeSignalsLifecycle(
           time: allowsOscillation ? targetTime : existing.time || targetTime,
           entryDate: allowsOscillation ? targetEntryDate : existing.entryDate || targetEntryDate,
           pct: Math.max(existing.pct, cand.pct),
+          strategies: mergedStrategies,
           sources: combinedSources.length > 0 ? combinedSources : existing.sources,
           clusterTimestamps: cand.clusterTimestamps || existing.clusterTimestamps,
           allowsOscillation: cand.allowsOscillation ?? existing.allowsOscillation,

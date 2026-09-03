@@ -20,6 +20,7 @@ export type StoredSignal = {
   isLocked?: boolean;
   label?: string;
   confluence?: string;
+  strategies?: string[];
   isVerified?: boolean;
   hasYellowSeal?: boolean;
   hasBlueSeal?: boolean;
@@ -134,6 +135,7 @@ export type PredictiveSignal = {
   pct: number;
   label: string;
   confluence: string;
+  strategies?: string[];
   medal?: string;
   outcome?: "pending" | "green" | "red";
   resultTime?: string;
@@ -195,6 +197,7 @@ export function setPredictiveSignals(signals: PredictiveSignal[]) {
       pct: s.pct,
       label: s.label,
       confluence: s.confluence,
+      strategies: s.strategies,
       outcome: s.outcome,
       resultTime: s.resultTime,
       strategyKey: s.strategyKey,

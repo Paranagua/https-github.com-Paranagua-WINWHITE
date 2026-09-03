@@ -22,6 +22,11 @@ import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client"
 import { colorOf, fmtTime, type Color } from "@/components/double/types";
 import { parseUtcDate } from "@/lib/utils";
 import { PredictiveSignals } from "@/components/double/PredictiveSignals";
+import {
+  extractSignalStrategies,
+  extractSignalAnalyses,
+  formatStrategyCode,
+} from "@/lib/signalHierarchy";
 
 interface StrategyMetadataItem {
   key: string;
@@ -1378,10 +1383,26 @@ function SinaisSectionContent() {
                             )}
                           </div>
 
-                          {/* Base: Confluência ou Rótulo */}
-                          <span className="text-[7.5px] font-mono opacity-70 truncate max-w-full text-zinc-400">
-                            {sig.confluence || sig.label || "Top 1"}
-                          </span>
+                          {/* Base: Estratégias ANTES das análises e sem percentual */}
+                          <div className="flex flex-wrap items-center gap-1 mt-1 max-w-full">
+                            {extractSignalStrategies(sig).map((st, sIdx) => (
+                              <span
+                                key={`st-${sIdx}`}
+                                className="text-[7.5px] font-mono font-bold text-amber-300 bg-amber-500/15 px-1 py-0.2 rounded border border-amber-500/30"
+                              >
+                                {st}
+                              </span>
+                            ))}
+                            {extractSignalAnalyses(sig).map((ana, aIdx) => (
+                              <span
+                                key={`an-${aIdx}`}
+                                className="text-[7.5px] font-mono opacity-80 text-zinc-300 bg-white/5 px-1 py-0.2 rounded"
+                              >
+                                {ana.text}
+                                {ana.pct ? ` ${ana.pct}` : ""}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       );
                     })}
