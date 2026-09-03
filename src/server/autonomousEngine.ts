@@ -244,7 +244,7 @@ class AutonomousAuditEngine {
         {
           allowHistorical: true,
           minTargetTime: now.getTime() - 5 * 3600_000,
-          maxTargetTime: now.getTime() + 60 * 60_000,
+          maxTargetTime: undefined, // Sem limite de 60 minutos
         },
       );
 
@@ -679,7 +679,8 @@ class AutonomousAuditEngine {
         const at = addMinutes(item.open.triggerAt, targetMinutes);
         const t = at.getTime();
 
-        if (t >= now.getTime() - 5 * 3600_000 && t <= now.getTime() + 60 * 60_000) {
+        // Sem limite superior de 60 minutos
+        if (t >= now.getTime() - 5 * 3600_000) {
           const isTendency = checkHighTendency(engine[item.analysis] || [], item.value);
           const isPossibleRec = recAlerts.some((alert) => {
             const sigTime = at.getTime();
@@ -711,7 +712,8 @@ class AutonomousAuditEngine {
         const at = addMinutes(item.open.triggerAt, m);
         const t = at.getTime();
 
-        if (t >= now.getTime() - 5 * 3600_000 && t <= now.getTime() + 60 * 60_000) {
+        // Sem limite superior de 60 minutos
+        if (t >= now.getTime() - 5 * 3600_000) {
           const isTendency = checkHighTendency(engine[item.analysis] || [], item.value);
           const isPossibleRec = recAlerts.some((alert) => {
             const sigTime = at.getTime();

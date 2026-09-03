@@ -173,13 +173,13 @@ const ALL_STRATEGIES_METADATA: StrategyMetadataItem[] = [
     description: "Minuto do gatilho + 37 minutos",
   },
 
-  // Estratégias de Confirmação (Selo Amarelo: E1 a E10)
+  // Estratégias de Envio E1 a E10 (Selo Amarelo)
   {
     key: "E1",
     name: "E1 · Minuto + Anterior",
     shortLabel: "E1",
     category: "confirmacao",
-    categoryLabel: "Confirmação (Amarelo)",
+    categoryLabel: "Gatilho E1-E10",
     badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
     description: "Minuto do branco + pedra anterior",
   },
@@ -188,7 +188,7 @@ const ALL_STRATEGIES_METADATA: StrategyMetadataItem[] = [
     name: "E2 · Minuto + Posterior",
     shortLabel: "E2",
     category: "confirmacao",
-    categoryLabel: "Confirmação (Amarelo)",
+    categoryLabel: "Gatilho E1-E10",
     badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
     description: "Minuto do branco + pedra posterior",
   },
@@ -197,7 +197,7 @@ const ALL_STRATEGIES_METADATA: StrategyMetadataItem[] = [
     name: "E3 · Min + Ant + Post",
     shortLabel: "E3",
     category: "confirmacao",
-    categoryLabel: "Confirmação (Amarelo)",
+    categoryLabel: "Gatilho E1-E10",
     badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
     description: "Minuto do branco + pedra anterior + posterior",
   },
@@ -206,7 +206,7 @@ const ALL_STRATEGIES_METADATA: StrategyMetadataItem[] = [
     name: "E4 · Min + 2 Anteriores",
     shortLabel: "E4",
     category: "confirmacao",
-    categoryLabel: "Confirmação (Amarelo)",
+    categoryLabel: "Gatilho E1-E10",
     badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
     description: "Minuto do branco + 2 pedras anteriores",
   },
@@ -215,7 +215,7 @@ const ALL_STRATEGIES_METADATA: StrategyMetadataItem[] = [
     name: "E5 · Min + 2 Posteriores",
     shortLabel: "E5",
     category: "confirmacao",
-    categoryLabel: "Confirmação (Amarelo)",
+    categoryLabel: "Gatilho E1-E10",
     badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
     description: "Minuto do branco + 2 pedras posteriores",
   },
@@ -224,7 +224,7 @@ const ALL_STRATEGIES_METADATA: StrategyMetadataItem[] = [
     name: "E6 · Min + 1 Ant + 1 Post",
     shortLabel: "E6",
     category: "confirmacao",
-    categoryLabel: "Confirmação (Amarelo)",
+    categoryLabel: "Gatilho E1-E10",
     badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
     description: "Minuto do branco + 1 anterior + 1 posterior",
   },
@@ -233,7 +233,7 @@ const ALL_STRATEGIES_METADATA: StrategyMetadataItem[] = [
     name: "E7 · Min + 2 Ant + 1 Post",
     shortLabel: "E7",
     category: "confirmacao",
-    categoryLabel: "Confirmação (Amarelo)",
+    categoryLabel: "Gatilho E1-E10",
     badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
     description: "Minuto do branco + 2 anteriores + 1 posterior",
   },
@@ -242,7 +242,7 @@ const ALL_STRATEGIES_METADATA: StrategyMetadataItem[] = [
     name: "E8 · Min + 1 Ant + 2 Post",
     shortLabel: "E8",
     category: "confirmacao",
-    categoryLabel: "Confirmação (Amarelo)",
+    categoryLabel: "Gatilho E1-E10",
     badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
     description: "Minuto do branco + 1 anterior + 2 posteriores",
   },
@@ -251,7 +251,7 @@ const ALL_STRATEGIES_METADATA: StrategyMetadataItem[] = [
     name: "E9 · Min + 2 Ant + 2 Post",
     shortLabel: "E9",
     category: "confirmacao",
-    categoryLabel: "Confirmação (Amarelo)",
+    categoryLabel: "Gatilho E1-E10",
     badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
     description: "Minuto do branco + 2 anteriores + 2 posteriores",
   },
@@ -260,18 +260,18 @@ const ALL_STRATEGIES_METADATA: StrategyMetadataItem[] = [
     name: "E10 · Min + 4 Pedras + 15m",
     shortLabel: "E10",
     category: "confirmacao",
-    categoryLabel: "Confirmação (Amarelo)",
+    categoryLabel: "Gatilho E1-E10",
     badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
     description: "Minuto do branco + 2 ant. + 2 post. + 15 min",
   },
 
-  // Estratégias de Confirmação (Selo Azul: E11 a E15)
+  // Estratégias de Envio E11 a E15 (Selo Azul)
   {
     key: "E11",
     name: "E11 · 1ª Pedra + 15m",
     shortLabel: "E11",
     category: "confirmacao",
-    categoryLabel: "Confirmação (Azul)",
+    categoryLabel: "Gatilho E11-E15",
     badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
     description: "1ª pedra da hora + 15 min",
   },
@@ -280,7 +280,7 @@ const ALL_STRATEGIES_METADATA: StrategyMetadataItem[] = [
     name: "E12 · 1ª + 2ª Pd + Minuto",
     shortLabel: "E12",
     category: "confirmacao",
-    categoryLabel: "Confirmação (Azul)",
+    categoryLabel: "Gatilho E11-E15",
     badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
     description: "1ª pedra + 2ª pedra da hora + minuto",
   },
@@ -289,7 +289,7 @@ const ALL_STRATEGIES_METADATA: StrategyMetadataItem[] = [
     name: "E13 · 2 Pedras Anteriores",
     shortLabel: "E13",
     category: "confirmacao",
-    categoryLabel: "Confirmação (Azul)",
+    categoryLabel: "Gatilho E11-E15",
     badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
     description: "2 pedras anteriores ao branco",
   },
@@ -298,7 +298,7 @@ const ALL_STRATEGIES_METADATA: StrategyMetadataItem[] = [
     name: "E14 · 2 Pedras Posteriores",
     shortLabel: "E14",
     category: "confirmacao",
-    categoryLabel: "Confirmação (Azul)",
+    categoryLabel: "Gatilho E11-E15",
     badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
     description: "2 pedras posteriores ao branco",
   },
@@ -307,7 +307,7 @@ const ALL_STRATEGIES_METADATA: StrategyMetadataItem[] = [
     name: "E15 · Soma 2 Brancos",
     shortLabel: "E15",
     category: "confirmacao",
-    categoryLabel: "Confirmação (Azul)",
+    categoryLabel: "Gatilho E11-E15",
     badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
     description: "Soma dos minutos de 2 brancos consecutivos",
   },
@@ -790,12 +790,8 @@ function SinaisSectionContent() {
                 ? s.entryDate.getTime()
                 : parseUtcDate(s.entryDate as any).getTime();
 
-            // Se for sinal pendente antigo (> 5 minutos no passado) ou excessivamente futuro (> 65 min), descarta
-            if (
-              s.outcome === "pending" &&
-              !Number.isNaN(sigTime) &&
-              (now - sigTime > 300_000 || sigTime > now + 65 * 60_000)
-            ) {
+            // Se for sinal pendente antigo (> 5 minutos no passado), descarta (sem limite futuro de 60/65 min)
+            if (s.outcome === "pending" && !Number.isNaN(sigTime) && now - sigTime > 300_000) {
               return null;
             }
 
@@ -1096,7 +1092,7 @@ function SinaisSectionContent() {
                           : "text-amber-400/50 hover:text-amber-300"
                       }`}
                     >
-                      Confirmação E1–E15 (
+                      Estratégias E1–E15 (
                       {strategyStats.filter((s) => s.category === "confirmacao").length})
                     </button>
                   </div>

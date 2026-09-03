@@ -745,16 +745,17 @@ export function buildSignalConfluences(rawCandidates: RawCandidate[]): Predictiv
 }
 
 /**
- * MOTOR DE SINAIS: GATILHOS EXCLUSIVOS POR ESTRATÉGIAS DE SOMA 19 COM CONFLUÊNCIA
+ * MOTOR DE SINAIS: GATILHOS POR ESTRATÉGIAS (SOMA 19, SOMA 17 E E1-E15) COM CONFLUÊNCIA
  *
  * Regras:
  * 1. As Análises NÃO geram sinais por si sós, apenas fornecem confluência.
- * 2. O sinal SÓ é disparado a partir de um gatilho de Estratégia de Soma 19 (10-9, 11-8, 8-11, 12-7, 6-13, 14-5).
+ * 2. O sinal é disparado a partir de um gatilho de Estratégia de Soma (19 ou 17) ou Estratégia E1-E15.
  * 3. O gatilho da estratégia SÓ segue para o card se houver:
  *    - Confluência com as Análises (Top 1 / Top 2/3 projetando no mesmo minuto ou janela +/- 1m)
  *    OU
- *    - Confluência com Outra Estratégia (outra estratégia de Soma 19 ou estratégia de confirmação E1-E15 na mesma janela +/- 1m).
+ *    - Confluência com Outra Estratégia (outra estratégia de Soma ou E1-E15 na mesma janela +/- 1m).
  * 4. Toda a hierarquia de grupos (Alavancagem, Supremo, Raro, Top 1 & Top 3) é mantida e ponderada pelas confluências.
+ * 5. Sem limite de 60 minutos: projeções futuras são aceitas e monitoradas em qualquer horizonte temporal.
  */
 export function buildStrategyTriggeredSignals(
   sumProjections: SumTriggerProjection[],
@@ -764,23 +765,81 @@ export function buildStrategyTriggeredSignals(
   now: number = Date.now(),
   options?: { allowHistorical?: boolean; minTargetTime?: number; maxTargetTime?: number },
 ): PredictiveSignal[] {
-  if (!sumProjections || sumProjections.length === 0) return [];
+  // Consolida gatilhos de estratégias de Soma (19 e 17) e de Estratégias E1-E15
+  const allRawTriggers: Array<{
+    code: string;
+    name: string;
+    strategyType: "Soma 19" | "Soma 17" | "E1-E15";
+    strategyKey: string;
+    description: string;
+    targetDate: Date;
+    targetTimestamp: number;
+    targetMinute: number;
+    sealType?: "yellow" | "blue";
+    strategyId?: number;
+  }> = [];
 
-  // Filtra projeções das estratégias de soma
-  const validTriggers = sumProjections.filter((p) => {
+  for (const sp of sumProjections || []) {
+    if (!sp || !sp.targetDate) continue;
+    const rawCode = sp.code;
+    const isSum17 = sp.sumType === "Soma 17";
+    const prefix = isSum17 ? "S17" : "S19";
+    let normCode = rawCode;
+    if (rawCode === "9-10") normCode = "10-9";
+    else if (rawCode === "7-12") normCode = "12-7";
+    else if (rawCode === "13-6") normCode = "6-13";
+    else if (rawCode === "5-14") normCode = "14-5";
+    else if (rawCode === "9-8") normCode = "8-9";
+    else if (rawCode === "6-11") normCode = "11-6";
+    else if (rawCode === "3-14") normCode = "14-3";
+    const stratKey = `${prefix}_${normCode}`;
+
+    allRawTriggers.push({
+      code: sp.code,
+      name: sp.name,
+      strategyType: sp.sumType,
+      strategyKey: stratKey,
+      description: sp.description,
+      targetDate: sp.targetDate,
+      targetTimestamp: sp.targetTimestamp,
+      targetMinute: sp.targetMinute,
+    });
+  }
+
+  for (const cp of confirmationProjections || []) {
+    if (!cp || !cp.targetDate) continue;
+    allRawTriggers.push({
+      code: cp.strategyCode,
+      name: cp.name,
+      strategyType: "E1-E15",
+      strategyKey: cp.strategyCode,
+      description: cp.description,
+      targetDate: cp.targetDate,
+      targetTimestamp: cp.targetTimestamp,
+      targetMinute: cp.targetMinute,
+      sealType: cp.type,
+      strategyId: cp.strategyId,
+    });
+  }
+
+  if (allRawTriggers.length === 0) return [];
+
+  // Filtra projeções das estratégias (SEM LIMITE DE 60 MINUTOS)
+  const validTriggers = allRawTriggers.filter((p) => {
     const t = p.targetDate.getTime();
     if (Number.isNaN(t)) return false;
     if (options?.allowHistorical) {
       const min = options.minTargetTime ?? 0;
-      const max = options.maxTargetTime ?? now + 60 * 60_000;
+      const max = options.maxTargetTime ?? Infinity;
       return t >= min && t <= max;
     }
-    return t >= now - 60_000 && t <= now + 60 * 60_000;
+    // Sem limite superior de 60 minutos! Tolerância de até 1 minuto no passado para não perder a virada de minuto
+    return t >= now - 60_000;
   });
 
   if (validTriggers.length === 0) return [];
 
-  // Agrupa gatilhos de Soma normalizando para o início do minuto
+  // Agrupa gatilhos normalizando para o início do minuto
   const normalizedTriggers = validTriggers.map((trig) => {
     const dt = new Date(trig.targetDate.getTime());
     dt.setSeconds(0, 0);
@@ -830,7 +889,7 @@ export function buildStrategyTriggeredSignals(
     if (clusterTriggers.length === 0) continue;
 
     // Determina horário representativo
-    const repTimestamp = cluster.length >= 2 ? cluster[0] : cluster[0];
+    const repTimestamp = cluster[0];
     const repDate = new Date(repTimestamp);
     const clusterWindowStart = cluster[0] - 60_000;
     const clusterWindowEnd = cluster[cluster.length - 1] + 60_000;
@@ -846,23 +905,13 @@ export function buildStrategyTriggeredSignals(
     const top3Analyses = matchingAnalyses.filter((ac) => !ac.isTop1);
 
     // 2. Busca outras estratégias confluentes:
-    // a) Múltiplos gatilhos de Soma 19 no cluster
     const distinctTriggerCodes = Array.from(new Set(clusterTriggers.map((t) => t.code)));
-    const hasMultipleSum19 = clusterTriggers.length >= 2 || distinctTriggerCodes.length >= 2;
+    const hasMultipleStrategies = clusterTriggers.length >= 2 || distinctTriggerCodes.length >= 2;
 
-    // b) Estratégias de confirmação E1-E15 confluentes
-    const matchingConfirmations = (confirmationProjections || []).filter((cp) => {
-      if (!cp || !cp.targetDate) return false;
-      const t = cp.targetDate.getTime();
-      return t >= clusterWindowStart && t <= clusterWindowEnd;
-    });
-
-    const hasConfirmationStrategies = matchingConfirmations.length > 0;
-    const hasOtherStrategyConfluence = hasMultipleSum19 || hasConfirmationStrategies;
     const hasAnalysisConfluence = matchingAnalyses.length > 0;
 
     // 🛑 REGRA CRÍTICA: Se NÃO houver confluência com análises NEM com outra estratégia, DESCARTA!
-    if (!hasAnalysisConfluence && !hasOtherStrategyConfluence) {
+    if (!hasAnalysisConfluence && !hasMultipleStrategies) {
       continue;
     }
 
@@ -948,8 +997,8 @@ export function buildStrategyTriggeredSignals(
         isRare: false,
         isTop1: false,
       };
-    } else if (hasMultipleSum19) {
-      // Dupla confluência de estratégias de Soma 19
+    } else if (hasMultipleStrategies) {
+      // Confluência entre múltiplas estratégias (ex: E1 + E5, E1 + 10-9, 10-9 + 11-8)
       evaluation = {
         rank: SignalRank.RARE,
         category: "rare",
@@ -962,14 +1011,12 @@ export function buildStrategyTriggeredSignals(
         isTop1: true,
       };
     } else {
-      // Confluência de Soma 19 com Estratégia de Confirmação E1-E15
-      const confCodes = Array.from(new Set(matchingConfirmations.map((c) => c.strategyCode)));
       evaluation = {
         rank: SignalRank.TOP1_TOP3,
         category: "top1_top3",
         groupName: "Estratégia Confirmada",
-        label: `Gatilho ${distinctTriggerCodes.join("/")} + ${confCodes.join(",")}`,
-        medal: `⚡ Estratégia ${distinctTriggerCodes.join("/")} + ${confCodes.join(",")}`,
+        label: `Gatilho ${distinctTriggerCodes.join("/")}`,
+        medal: `⚡ Estratégia ${distinctTriggerCodes.join("/")}`,
         isAlavancagem: false,
         isSupreme: false,
         isRare: false,
@@ -984,7 +1031,7 @@ export function buildStrategyTriggeredSignals(
     const avgPct =
       analysisPcts.length > 0
         ? Math.round((analysisPcts.reduce((a, b) => a + b, 0) / analysisPcts.length) * 10) / 10
-        : hasMultipleSum19
+        : hasMultipleStrategies
           ? 88.0
           : 80.0;
 
@@ -1006,10 +1053,6 @@ export function buildStrategyTriggeredSignals(
       );
       parts.push(distinctA.join(", "));
     }
-    if (matchingConfirmations.length > 0) {
-      const confCodes = Array.from(new Set(matchingConfirmations.map((c) => c.strategyCode)));
-      parts.push(`Conf: ${confCodes.join(", ")}`);
-    }
 
     const confluenceText = parts.join(" · ");
     const isHighTendency = matchingAnalyses.some((a) => a.isHighTendency);
@@ -1020,34 +1063,29 @@ export function buildStrategyTriggeredSignals(
 
     const canonicalKey = getCanonicalSignalKey(repDate);
 
+    // Estratégia principal do sinal
     const firstTrig = clusterTriggers[0];
-    const rawCode = distinctTriggerCodes[0] || "10-9";
-    const isSum17 =
-      firstTrig?.sumType === "Soma 17" ||
-      [
-        "10-7",
-        "7-10",
-        "8-9",
-        "9-8",
-        "11-6",
-        "6-11",
-        "5-12",
-        "12-5",
-        "13-4",
-        "4-13",
-        "14-3",
-        "3-14",
-      ].includes(rawCode);
-    const prefix = isSum17 ? "S17" : "S19";
-    let normCode = rawCode;
-    if (rawCode === "9-10") normCode = "10-9";
-    else if (rawCode === "7-12") normCode = "12-7";
-    else if (rawCode === "13-6") normCode = "6-13";
-    else if (rawCode === "5-14") normCode = "14-5";
-    else if (rawCode === "9-8") normCode = "8-9";
-    else if (rawCode === "6-11") normCode = "11-6";
-    else if (rawCode === "3-14") normCode = "14-3";
-    const computedStrategyKey = `${prefix}_${normCode}`;
+    const computedStrategyKey = firstTrig?.strategyKey || distinctTriggerCodes[0] || "E1";
+
+    // Extrai e unifica selos e confirmações de E1-E15 presentes no cluster
+    const clusterConfirmed: ConfirmedStrategyInfo[] = [];
+    clusterTriggers.forEach((trig) => {
+      if (trig.strategyType === "E1-E15" && trig.strategyId) {
+        clusterConfirmed.push({
+          id: trig.strategyId,
+          code: trig.code,
+          name: trig.name,
+          type: trig.sealType || (trig.strategyId <= 10 ? "yellow" : "blue"),
+          description: trig.description,
+          calculatedTime: trig.targetDate.toISOString().substring(11, 16),
+          calculatedMinute: trig.targetMinute,
+        });
+      }
+    });
+
+    const hasYellowSeal = clusterConfirmed.some((c) => c.type === "yellow");
+    const hasBlueSeal = clusterConfirmed.some((c) => c.type === "blue");
+    const isVerified = hasYellowSeal || hasBlueSeal || clusterConfirmed.length > 0;
 
     signals.push({
       key: canonicalKey,
@@ -1072,10 +1110,14 @@ export function buildStrategyTriggeredSignals(
       allowsOscillation: cluster.length === 2,
       isConsecutive: cluster.length >= 3,
       levelOffset: 0,
+      confirmedStrategies: clusterConfirmed,
+      hasYellowSeal,
+      hasBlueSeal,
+      isVerified,
     });
   }
 
-  // Aplica os selos de estratégias de confirmação E1-E15
+  // Aplica e complementa estratégias de confirmação adicionais se confluentes
   const verifiedSignals = applyConfirmationStrategies(signals, confirmationProjections);
 
   // Ordena cronologicamente
@@ -1132,13 +1174,9 @@ export function mergeSignalsLifecycle(
       continue;
     }
 
-    // Sinais pendentes com horário no passado (> 5 minutos após o minuto alvo) ou excessivamente futuros (> 60 min) são descartados
+    // Sinais pendentes com horário no passado (> 5 minutos após o minuto alvo) são descartados (sem limite futuro de 60 min)
     const pastLimit = options?.allowHistorical ? maxPastMs : 300_000;
-    if (
-      sig.outcome === "pending" &&
-      !Number.isNaN(sigTime) &&
-      (now - sigTime > pastLimit || sigTime > now + 65 * 60_000)
-    ) {
+    if (sig.outcome === "pending" && !Number.isNaN(sigTime) && now - sigTime > pastLimit) {
       continue;
     }
 

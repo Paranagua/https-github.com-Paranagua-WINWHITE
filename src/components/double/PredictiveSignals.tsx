@@ -651,7 +651,8 @@ export function PredictiveSignals() {
           const at = addMinutes(item.open.triggerAt, targetMinutes);
           const t = at.getTime();
 
-          if (t >= now.getTime() && t <= now.getTime() + 60 * 60_000) {
+          // Sem limite superior de 60 minutos: captura projeções futuras em qualquer horizonte
+          if (t >= now.getTime() - 60_000) {
             const isTendency = checkHighTendency(engine[item.analysis] || [], item.value);
             const isPossibleRec = activeAlerts.some((alert) => {
               const signalTime = at.getTime();
@@ -684,7 +685,8 @@ export function PredictiveSignals() {
           const at = addMinutes(item.open.triggerAt, m);
           const t = at.getTime();
 
-          if (t >= now.getTime() && t <= now.getTime() + 60 * 60_000) {
+          // Sem limite superior de 60 minutos: captura projeções futuras em qualquer horizonte
+          if (t >= now.getTime() - 60_000) {
             const isTendency = checkHighTendency(engine[item.analysis] || [], item.value);
             const isPossibleRec = activeAlerts.some((alert) => {
               const signalTime = at.getTime();
@@ -709,7 +711,7 @@ export function PredictiveSignals() {
         });
       }
 
-      // 2. Extração dos Gatilhos Exclusivos das Estratégias de Soma (Soma 19 + Soma 17) e Confirmações
+      // 2. Extração dos Gatilhos das Estratégias de Soma (Soma 19 + Soma 17) e Estratégias E1-E15
       const sumProjections = computeAllSumTriggerProjections(rows);
       const confProjections = computeConfirmationProjections(rows);
 
@@ -720,7 +722,7 @@ export function PredictiveSignals() {
       }));
       setActiveRecAlerts(alertWindow);
 
-      // 3. Geração de Sinais: Estratégias de Soma 19 e Soma 17 disparam sinais,
+      // 3. Geração de Sinais: Estratégias de Soma 19, Soma 17 e E1-E15 disparam sinais,
       // exigindo confluência com Análises ou com Outra Estratégia.
       const strategySignals = buildStrategyTriggeredSignals(
         sumProjections,
