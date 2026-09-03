@@ -1,0 +1,397 @@
+{
+  "savedAt": "2026-09-03T02:11:19.916Z",
+  "totalAudited": 6,
+  "lastRoundId": 182594,
+  "recentSignals": [
+    {
+      "key": "sig-1788399900000",
+      "time": "22:45",
+      "outcome": "green",
+      "label": "WIN",
+      "confluence": "Gatilho 6-13/4-13 · A14·17",
+      "resultTime": "22:44",
+      "timestamp": 1788399895909,
+      "targetTime": "22:45",
+      "strategyKey": "S19_6-13",
+      "windowLabel": "22:44-22:46",
+      "checkedResults": 1,
+      "winningResultId": "182542",
+      "winningResultCreatedAt": "2026-09-03T01:44:28.888",
+      "audit": {
+        "signalKey": "sig-1788399900000",
+        "targetTime": "22:45",
+        "targetIso": "2026-09-03T01:45:00.000Z",
+        "windowLabel": "22:44-22:46",
+        "windowMinutes": [
+          "22:44",
+          "22:45",
+          "22:46"
+        ],
+        "checkedResults": 1,
+        "roundsMMinus1": 1,
+        "roundsM": 0,
+        "roundsMPlus1": 0,
+        "spinsMMinus1Ids": [
+          "182542"
+        ],
+        "spinsMIds": [],
+        "spinsMPlus1Ids": [],
+        "winningResultId": "182542",
+        "winningResultRoll": 0,
+        "winningResultColor": "white",
+        "winningResultTime": "22:44",
+        "winningResultCreatedAt": "2026-09-03T01:44:28.888",
+        "outcome": "WIN",
+        "isComplete6Rounds": false,
+        "auditedAt": 1788399895908
+      },
+      "sources": [
+        {
+          "analysis": 14,
+          "value": 17,
+          "pct": 60,
+          "top3": true,
+          "rank": 3,
+          "cycleKey": "A14_V17_T1788399237540"
+        }
+      ],
+      "category": "top1_top3",
+      "isSupreme": false,
+      "isRare": false,
+      "isAlavancagem": false,
+      "isTop1": false
+    },
+    {
+      "key": "sig-1788399060000",
+      "time": "22:31",
+      "outcome": "green",
+      "label": "WIN",
+      "confluence": "Gatilho 6-13 · A2·2, A2·0, A34·13",
+      "resultTime": "22:31",
+      "timestamp": 1788399143261,
+      "targetTime": "22:31",
+      "strategyKey": "S19_6-13",
+      "windowLabel": "22:30-22:32",
+      "checkedResults": 4,
+      "winningResultId": "182517",
+      "winningResultCreatedAt": "2026-09-03T01:31:57.361",
+      "audit": {
+        "signalKey": "sig-1788399060000",
+        "targetTime": "22:31",
+        "targetIso": "2026-09-03T01:31:00.000Z",
+        "windowLabel": "22:30-22:32",
+        "windowMinutes": [
+          "22:30",
+          "22:31",
+          "22:32"
+        ],
+        "checkedResults": 4,
+        "roundsMMinus1": 2,
+        "roundsM": 2,
+        "roundsMPlus1": 0,
+        "spinsMMinus1Ids": [
+          "182514",
+          "182515"
+        ],
+        "spinsMIds": [
+          "182516",
+          "182517"
+        ],
+        "spinsMPlus1Ids": [],
+        "winningResultId": "182517",
+        "winningResultRoll": 0,
+        "winningResultColor": "white",
+        "winningResultTime": "22:31",
+        "winningResultCreatedAt": "2026-09-03T01:31:57.361",
+        "outcome": "WIN",
+        "isComplete6Rounds": false,
+        "auditedAt": 1788399143260
+      },
+      "sources": [
+        {
+          "analysis": 2,
+          "value": 2,
+          "pct": 100,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A2_V2_T1788397433483"
+        },
+        {
+          "analysis": 2,
+          "value": 0,
+          "pct": 100,
+          "top3": true,
+          "rank": 3,
+          "cycleKey": "A2_V0_T1788397493633"
+        },
+        {
+          "analysis": 34,
+          "value": 13,
+          "pct": 75,
+          "top3": true,
+          "rank": 3,
+          "cycleKey": "A34_V13_T1788397102847"
+        }
+      ],
+      "category": "top1_top3",
+      "isSupreme": false,
+      "isRare": false,
+      "isAlavancagem": false,
+      "isTop1": true
+    },
+    {
+      "key": "sig-1788395880000",
+      "time": "21:38",
+      "outcome": "red",
+      "label": "LOSS",
+      "confluence": "Gatilho 10-7 · A36·13, A36·4",
+      "timestamp": 1788397420370,
+      "targetTime": "21:38",
+      "strategyKey": "S17_10-7",
+      "windowLabel": "21:37-21:39",
+      "checkedResults": 6,
+      "audit": {
+        "signalKey": "sig-1788395880000",
+        "targetTime": "21:38",
+        "targetIso": "2026-09-03T00:38:00.000Z",
+        "windowLabel": "21:37-21:39",
+        "windowMinutes": [
+          "21:37",
+          "21:38",
+          "21:39"
+        ],
+        "checkedResults": 0,
+        "roundsMMinus1": 0,
+        "roundsM": 0,
+        "roundsMPlus1": 0,
+        "spinsMMinus1Ids": [],
+        "spinsMIds": [],
+        "spinsMPlus1Ids": [],
+        "winningResultId": null,
+        "winningResultRoll": null,
+        "winningResultColor": null,
+        "winningResultTime": null,
+        "winningResultCreatedAt": null,
+        "outcome": "LOSS",
+        "isComplete6Rounds": false,
+        "auditedAt": 1788397420369
+      },
+      "sources": [
+        {
+          "analysis": 36,
+          "value": 13,
+          "pct": 100,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A36_V13_T1788393554425"
+        },
+        {
+          "analysis": 36,
+          "value": 4,
+          "pct": 100,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "A36_V4_T1788392953110"
+        }
+      ],
+      "category": "top1_top3",
+      "isSupreme": false,
+      "isRare": false,
+      "isAlavancagem": false,
+      "isTop1": true
+    },
+    {
+      "key": "sig-1788393660000",
+      "time": "21:01",
+      "outcome": "red",
+      "label": "LOSS",
+      "confluence": "Gatilho 10-7/14-3 · A36·13",
+      "timestamp": 1788397420370,
+      "targetTime": "21:01",
+      "strategyKey": "S17_10-7",
+      "windowLabel": "21:00-21:02",
+      "checkedResults": 6,
+      "audit": {
+        "signalKey": "sig-1788393660000",
+        "targetTime": "21:01",
+        "targetIso": "2026-09-03T00:01:00.000Z",
+        "windowLabel": "21:00-21:02",
+        "windowMinutes": [
+          "21:00",
+          "21:01",
+          "21:02"
+        ],
+        "checkedResults": 0,
+        "roundsMMinus1": 0,
+        "roundsM": 0,
+        "roundsMPlus1": 0,
+        "spinsMMinus1Ids": [],
+        "spinsMIds": [],
+        "spinsMPlus1Ids": [],
+        "winningResultId": null,
+        "winningResultRoll": null,
+        "winningResultColor": null,
+        "winningResultTime": null,
+        "winningResultCreatedAt": null,
+        "outcome": "LOSS",
+        "isComplete6Rounds": false,
+        "auditedAt": 1788397420368
+      },
+      "sources": [
+        {
+          "analysis": 36,
+          "value": 13,
+          "pct": 75,
+          "top3": true,
+          "rank": 3,
+          "cycleKey": "A36_V13_T1788393554425"
+        }
+      ],
+      "category": "top1_top3",
+      "isSupreme": false,
+      "isRare": false,
+      "isAlavancagem": false,
+      "isTop1": false
+    },
+    {
+      "key": "sig-1788389160000",
+      "time": "19:46",
+      "outcome": "red",
+      "label": "LOSS",
+      "confluence": "Gatilho 8-11/11-6",
+      "timestamp": 1788397420370,
+      "targetTime": "19:46",
+      "strategyKey": "S19_8-11",
+      "windowLabel": "19:45-19:47",
+      "checkedResults": 6,
+      "audit": {
+        "signalKey": "sig-1788389160000",
+        "targetTime": "19:46",
+        "targetIso": "2026-09-02T22:46:00.000Z",
+        "windowLabel": "19:45-19:47",
+        "windowMinutes": [
+          "19:45",
+          "19:46",
+          "19:47"
+        ],
+        "checkedResults": 0,
+        "roundsMMinus1": 0,
+        "roundsM": 0,
+        "roundsMPlus1": 0,
+        "spinsMMinus1Ids": [],
+        "spinsMIds": [],
+        "spinsMPlus1Ids": [],
+        "winningResultId": null,
+        "winningResultRoll": null,
+        "winningResultColor": null,
+        "winningResultTime": null,
+        "winningResultCreatedAt": null,
+        "outcome": "LOSS",
+        "isComplete6Rounds": false,
+        "auditedAt": 1788397420368
+      },
+      "sources": [],
+      "category": "rare",
+      "isSupreme": false,
+      "isRare": true,
+      "isAlavancagem": false,
+      "isTop1": true
+    },
+    {
+      "key": "sig-1788387300000",
+      "time": "19:15",
+      "outcome": "red",
+      "label": "LOSS",
+      "confluence": "Gatilho 8-11/6-13",
+      "timestamp": 1788397420370,
+      "targetTime": "19:15",
+      "strategyKey": "S19_8-11",
+      "windowLabel": "19:14-19:16",
+      "checkedResults": 6,
+      "audit": {
+        "signalKey": "sig-1788387300000",
+        "targetTime": "19:15",
+        "targetIso": "2026-09-02T22:15:00.000Z",
+        "windowLabel": "19:14-19:16",
+        "windowMinutes": [
+          "19:14",
+          "19:15",
+          "19:16"
+        ],
+        "checkedResults": 0,
+        "roundsMMinus1": 0,
+        "roundsM": 0,
+        "roundsMPlus1": 0,
+        "spinsMMinus1Ids": [],
+        "spinsMIds": [],
+        "spinsMPlus1Ids": [],
+        "winningResultId": null,
+        "winningResultRoll": null,
+        "winningResultColor": null,
+        "winningResultTime": null,
+        "winningResultCreatedAt": null,
+        "outcome": "LOSS",
+        "isComplete6Rounds": false,
+        "auditedAt": 1788397420366
+      },
+      "sources": [],
+      "category": "rare",
+      "isSupreme": false,
+      "isRare": true,
+      "isAlavancagem": false,
+      "isTop1": true
+    }
+  ],
+  "stats": {
+    "S19_8-11": {
+      "green": 0,
+      "red": 2,
+      "lastUpdated": 1788397420370
+    },
+    "8-11": {
+      "green": 0,
+      "red": 2,
+      "lastUpdated": 1788397420370
+    },
+    "S17_10-7": {
+      "green": 0,
+      "red": 2,
+      "lastUpdated": 1788397420370
+    },
+    "10-7": {
+      "green": 0,
+      "red": 2,
+      "lastUpdated": 1788397420370
+    },
+    "A36": {
+      "green": 0,
+      "red": 2,
+      "lastUpdated": 1788397420370
+    },
+    "S19_6-13": {
+      "green": 2,
+      "red": 0,
+      "lastUpdated": 1788399895910
+    },
+    "6-13": {
+      "green": 2,
+      "red": 0,
+      "lastUpdated": 1788399895910
+    },
+    "A2": {
+      "green": 1,
+      "red": 0,
+      "lastUpdated": 1788399143261
+    },
+    "A34": {
+      "green": 1,
+      "red": 0,
+      "lastUpdated": 1788399143261
+    },
+    "A14": {
+      "green": 1,
+      "red": 0,
+      "lastUpdated": 1788399895910
+    }
+  }
+}
