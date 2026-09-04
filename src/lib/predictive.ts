@@ -151,118 +151,144 @@ export function buildA5(rows: Row[]): Cycle[] {
   return buildMinuteSecondStone(rows, 0, 5);
 }
 
-/** Análise 10 — Gatilho 8-11: [8 -> 11]. Coleta os próximos 14 brancos. */
+/** Análise 10 — Gatilho 8-11: [8 -> 11]. Analisa o número da pedra anterior ao gatilho. Coleta os próximos 14 brancos. */
 export function buildA8_11(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = 2; i < rows.length; i++) {
+    const prevStone = Number(rows[i - 2].roll);
     const p1 = Number(rows[i - 1].roll);
     const p2 = Number(rows[i].roll);
+    if (!Number.isFinite(prevStone) || prevStone < 0 || prevStone > 14) continue;
     if (p1 !== 8 || p2 !== 11) continue;
 
     const dt = parseUtcDate(rows[i].created_at);
     if (Number.isNaN(dt.getTime())) continue;
 
-    out.push({ value: 811, analysis: 10, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
+    out.push({ value: prevStone, analysis: 10, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
   }
   return out;
 }
 
-/** Análise 11 — Gatilho 11-11: [11 -> 11]. Coleta os próximos 14 brancos. */
+/** Análise 11 — Gatilho 11-11: [11 -> 11]. Analisa o número da pedra anterior ao gatilho. Coleta os próximos 14 brancos. */
 export function buildA11_11(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = 2; i < rows.length; i++) {
+    const prevStone = Number(rows[i - 2].roll);
     const p1 = Number(rows[i - 1].roll);
     const p2 = Number(rows[i].roll);
+    if (!Number.isFinite(prevStone) || prevStone < 0 || prevStone > 14) continue;
     if (p1 !== 11 || p2 !== 11) continue;
 
     const dt = parseUtcDate(rows[i].created_at);
     if (Number.isNaN(dt.getTime())) continue;
 
-    out.push({ value: 1111, analysis: 11, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
+    out.push({ value: prevStone, analysis: 11, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
   }
   return out;
 }
 
-/** Análise 12 — Gatilho 4-11: [4 -> 11]. Coleta os próximos 14 brancos. */
+/** Análise 12 — Gatilho 4-11: [4 -> 11]. Analisa o número da pedra anterior ao gatilho. Coleta os próximos 14 brancos. */
 export function buildA4_11(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = 2; i < rows.length; i++) {
+    const prevStone = Number(rows[i - 2].roll);
     const p1 = Number(rows[i - 1].roll);
     const p2 = Number(rows[i].roll);
+    if (!Number.isFinite(prevStone) || prevStone < 0 || prevStone > 14) continue;
     if (p1 !== 4 || p2 !== 11) continue;
 
     const dt = parseUtcDate(rows[i].created_at);
     if (Number.isNaN(dt.getTime())) continue;
 
-    out.push({ value: 411, analysis: 12, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
+    out.push({ value: prevStone, analysis: 12, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
   }
   return out;
 }
 
-/** Análise 13 — Gatilho 4-14 ou 14-4: [4 -> 14] ou [14 -> 4]. Coleta os próximos 14 brancos. */
+/** Análise 13 — Gatilho 4-14 ou 14-4: [4 -> 14] ou [14 -> 4]. Analisa o número da pedra anterior ao gatilho. Coleta os próximos 14 brancos. */
 export function buildA4_14(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = 2; i < rows.length; i++) {
+    const prevStone = Number(rows[i - 2].roll);
     const p1 = Number(rows[i - 1].roll);
     const p2 = Number(rows[i].roll);
+    if (!Number.isFinite(prevStone) || prevStone < 0 || prevStone > 14) continue;
     const isMatch = (p1 === 4 && p2 === 14) || (p1 === 14 && p2 === 4);
     if (!isMatch) continue;
 
     const dt = parseUtcDate(rows[i].created_at);
     if (Number.isNaN(dt.getTime())) continue;
 
-    out.push({ value: 414, analysis: 13, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
+    out.push({ value: prevStone, analysis: 13, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
   }
   return out;
 }
 
-/** Análise 14 — Soma de duas pedras consecutivas igual a 17. Coleta os próximos 14 brancos. */
+/** Análise 14 — Soma de duas pedras consecutivas igual a 17 no mesmo minuto. Analisa o número da pedra anterior ao gatilho. Coleta os próximos 14 brancos. */
 export function buildASoma17(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = 2; i < rows.length; i++) {
+    const prevStone = Number(rows[i - 2].roll);
     const p1 = Number(rows[i - 1].roll);
     const p2 = Number(rows[i].roll);
+    if (!Number.isFinite(prevStone) || prevStone < 0 || prevStone > 14) continue;
     if (!Number.isFinite(p1) || !Number.isFinite(p2) || p1 < 0 || p2 < 0) continue;
     if (p1 + p2 !== 17) continue;
 
-    const dt = parseUtcDate(rows[i].created_at);
-    if (Number.isNaN(dt.getTime())) continue;
+    const dt1 = parseUtcDate(rows[i - 1].created_at);
+    const dt2 = parseUtcDate(rows[i].created_at);
+    if (Number.isNaN(dt1.getTime()) || Number.isNaN(dt2.getTime())) continue;
 
-    out.push({ value: 17, analysis: 14, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
+    // Apenas acionado se as pedras do gatilho estiverem no mesmo minuto
+    if (Math.floor(dt1.getTime() / 60000) !== Math.floor(dt2.getTime() / 60000)) continue;
+
+    out.push({ value: prevStone, analysis: 14, triggerAt: dt2, gaps: collectGaps(rows, i, dt2) });
   }
   return out;
 }
 
-/** Análise 15 — Soma de duas pedras consecutivas igual a 19. Coleta os próximos 14 brancos. */
+/** Análise 15 — Soma de duas pedras consecutivas igual a 19 no mesmo minuto. Analisa o número da pedra anterior ao gatilho. Coleta os próximos 14 brancos. */
 export function buildASoma19(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = 2; i < rows.length; i++) {
+    const prevStone = Number(rows[i - 2].roll);
     const p1 = Number(rows[i - 1].roll);
     const p2 = Number(rows[i].roll);
+    if (!Number.isFinite(prevStone) || prevStone < 0 || prevStone > 14) continue;
     if (!Number.isFinite(p1) || !Number.isFinite(p2) || p1 < 0 || p2 < 0) continue;
     if (p1 + p2 !== 19) continue;
 
-    const dt = parseUtcDate(rows[i].created_at);
-    if (Number.isNaN(dt.getTime())) continue;
+    const dt1 = parseUtcDate(rows[i - 1].created_at);
+    const dt2 = parseUtcDate(rows[i].created_at);
+    if (Number.isNaN(dt1.getTime()) || Number.isNaN(dt2.getTime())) continue;
 
-    out.push({ value: 19, analysis: 15, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
+    // Apenas acionado se as pedras do gatilho estiverem no mesmo minuto
+    if (Math.floor(dt1.getTime() / 60000) !== Math.floor(dt2.getTime() / 60000)) continue;
+
+    out.push({ value: prevStone, analysis: 15, triggerAt: dt2, gaps: collectGaps(rows, i, dt2) });
   }
   return out;
 }
 
-/** Análise 16 — Soma de duas pedras consecutivas igual a 21. Coleta os próximos 14 brancos. */
+/** Análise 16 — Soma de duas pedras consecutivas igual a 21 no mesmo minuto. Analisa o número da pedra anterior ao gatilho. Coleta os próximos 14 brancos. */
 export function buildASoma21(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = 2; i < rows.length; i++) {
+    const prevStone = Number(rows[i - 2].roll);
     const p1 = Number(rows[i - 1].roll);
     const p2 = Number(rows[i].roll);
+    if (!Number.isFinite(prevStone) || prevStone < 0 || prevStone > 14) continue;
     if (!Number.isFinite(p1) || !Number.isFinite(p2) || p1 < 0 || p2 < 0) continue;
     if (p1 + p2 !== 21) continue;
 
-    const dt = parseUtcDate(rows[i].created_at);
-    if (Number.isNaN(dt.getTime())) continue;
+    const dt1 = parseUtcDate(rows[i - 1].created_at);
+    const dt2 = parseUtcDate(rows[i].created_at);
+    if (Number.isNaN(dt1.getTime()) || Number.isNaN(dt2.getTime())) continue;
 
-    out.push({ value: 21, analysis: 16, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
+    // Apenas acionado se as pedras do gatilho estiverem no mesmo minuto
+    if (Math.floor(dt1.getTime() / 60000) !== Math.floor(dt2.getTime() / 60000)) continue;
+
+    out.push({ value: prevStone, analysis: 16, triggerAt: dt2, gaps: collectGaps(rows, i, dt2) });
   }
   return out;
 }
@@ -398,19 +424,21 @@ export function buildASandwichMeio(rows: Row[]): Cycle[] {
   return out;
 }
 
-/** Análise 21 — Gatilho 7-11 ou 11-7: [7 -> 11] ou [11 -> 7]. Coleta os próximos 14 brancos. */
+/** Análise 21 — Gatilho 7-11 ou 11-7: [7 -> 11] ou [11 -> 7]. Analisa o número da pedra anterior ao gatilho. Coleta os próximos 14 brancos. */
 export function buildA7_11(rows: Row[]): Cycle[] {
   const out: Cycle[] = [];
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = 2; i < rows.length; i++) {
+    const prevStone = Number(rows[i - 2].roll);
     const p1 = Number(rows[i - 1].roll);
     const p2 = Number(rows[i].roll);
+    if (!Number.isFinite(prevStone) || prevStone < 0 || prevStone > 14) continue;
     const isMatch = (p1 === 7 && p2 === 11) || (p1 === 11 && p2 === 7);
     if (!isMatch) continue;
 
     const dt = parseUtcDate(rows[i].created_at);
     if (Number.isNaN(dt.getTime())) continue;
 
-    out.push({ value: 711, analysis: 21, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
+    out.push({ value: prevStone, analysis: 21, triggerAt: dt, gaps: collectGaps(rows, i, dt) });
   }
   return out;
 }

@@ -527,6 +527,14 @@ export default function AnaliseSection() {
       a2Cycles,
       aSandwichPontasCycles,
       aSandwichMeioCycles,
+      a8_11Cycles,
+      a11_11Cycles,
+      a4_11Cycles,
+      a4_14Cycles,
+      a7_11Cycles,
+      aSoma17Cycles,
+      aSoma19Cycles,
+      aSoma21Cycles,
     ];
 
     allStoneLists.forEach((list) => {
@@ -577,6 +585,14 @@ export default function AnaliseSection() {
     a2Cycles,
     aSandwichPontasCycles,
     aSandwichMeioCycles,
+    a8_11Cycles,
+    a11_11Cycles,
+    a4_11Cycles,
+    a4_14Cycles,
+    a7_11Cycles,
+    aSoma17Cycles,
+    aSoma19Cycles,
+    aSoma21Cycles,
   ]);
 
   const categories = [
@@ -1036,66 +1052,66 @@ export default function AnaliseSection() {
             key="gatilho-8-11"
             eyebrow="Análise 10 · Gatilho 8 → 11"
             title="GATILHO 8 → 11"
-            subtitle="Gatilho: sequência exata [8 -> 11]. Analisa até 14 tempos de Branco."
+            subtitle={`Gatilho: [8 -> 11]. Analisa os tempos de Branco indexados pela pedra anterior ${selected}.`}
             loading={loading}
             err={err}
-            emptyLabel="Nenhum gatilho 8→11 registrado recentemente."
+            emptyLabel={`Nenhum gatilho 8→11 com pedra anterior ${selected} registrado recentemente.`}
             cycles={a8_11Cycles}
-            pedra={811}
+            pedra={selected}
             now={now}
-            detailFormatter={(c) => `8→11 às ${fmtTime(c.triggerAt)}`}
+            detailFormatter={(c) => `8→11 (ant. ${c.value}) às ${fmtTime(c.triggerAt)}`}
           />
           <AnalysisPanel
             key="gatilho-11-11"
             eyebrow="Análise 11 · Gatilho 11 → 11"
             title="GATILHO 11 → 11"
-            subtitle="Gatilho: sequência exata [11 -> 11]. Analisa até 14 tempos de Branco."
+            subtitle={`Gatilho: [11 -> 11]. Analisa os tempos de Branco indexados pela pedra anterior ${selected}.`}
             loading={loading}
             err={err}
-            emptyLabel="Nenhum gatilho 11→11 registrado recentemente."
+            emptyLabel={`Nenhum gatilho 11→11 com pedra anterior ${selected} registrado recentemente.`}
             cycles={a11_11Cycles}
-            pedra={1111}
+            pedra={selected}
             now={now}
-            detailFormatter={(c) => `11→11 às ${fmtTime(c.triggerAt)}`}
+            detailFormatter={(c) => `11→11 (ant. ${c.value}) às ${fmtTime(c.triggerAt)}`}
           />
           <AnalysisPanel
             key="gatilho-4-11"
             eyebrow="Análise 12 · Gatilho 4 → 11"
             title="GATILHO 4 → 11"
-            subtitle="Gatilho: sequência exata [4 -> 11]. Analisa até 14 tempos de Branco."
+            subtitle={`Gatilho: [4 -> 11]. Analisa os tempos de Branco indexados pela pedra anterior ${selected}.`}
             loading={loading}
             err={err}
-            emptyLabel="Nenhum gatilho 4→11 registrado recentemente."
+            emptyLabel={`Nenhum gatilho 4→11 com pedra anterior ${selected} registrado recentemente.`}
             cycles={a4_11Cycles}
-            pedra={411}
+            pedra={selected}
             now={now}
-            detailFormatter={(c) => `4→11 às ${fmtTime(c.triggerAt)}`}
+            detailFormatter={(c) => `4→11 (ant. ${c.value}) às ${fmtTime(c.triggerAt)}`}
           />
           <AnalysisPanel
             key="gatilho-4-14"
             eyebrow="Análise 13 · Gatilho 4 ↔ 14"
             title="GATILHO 4 ↔ 14"
-            subtitle="Gatilho: sequências [4 -> 14] ou [14 -> 4]. Analisa até 14 tempos de Branco."
+            subtitle={`Gatilho: [4 -> 14] ou [14 -> 4]. Analisa os tempos de Branco indexados pela pedra anterior ${selected}.`}
             loading={loading}
             err={err}
-            emptyLabel="Nenhum gatilho 4↔14 registrado recentemente."
+            emptyLabel={`Nenhum gatilho 4↔14 com pedra anterior ${selected} registrado recentemente.`}
             cycles={a4_14Cycles}
-            pedra={414}
+            pedra={selected}
             now={now}
-            detailFormatter={(c) => `4↔14 às ${fmtTime(c.triggerAt)}`}
+            detailFormatter={(c) => `4↔14 (ant. ${c.value}) às ${fmtTime(c.triggerAt)}`}
           />
           <AnalysisPanel
             key="gatilho-7-11"
             eyebrow="Análise 21 · Gatilho 7 ↔ 11"
             title="GATILHO 7 ↔ 11"
-            subtitle="Gatilho: sequências [7 -> 11] ou [11 -> 7]. Analisa até 14 tempos de Branco."
+            subtitle={`Gatilho: [7 -> 11] ou [11 -> 7]. Analisa os tempos de Branco indexados pela pedra anterior ${selected}.`}
             loading={loading}
             err={err}
-            emptyLabel="Nenhum gatilho 7↔11 registrado recentemente."
+            emptyLabel={`Nenhum gatilho 7↔11 com pedra anterior ${selected} registrado recentemente.`}
             cycles={a7_11Cycles}
-            pedra={711}
+            pedra={selected}
             now={now}
-            detailFormatter={(c) => `7↔11 às ${fmtTime(c.triggerAt)}`}
+            detailFormatter={(c) => `7↔11 (ant. ${c.value}) às ${fmtTime(c.triggerAt)}`}
           />
         </>
       )}
@@ -1107,40 +1123,40 @@ export default function AnaliseSection() {
             key="soma-17"
             eyebrow="Análise 14 · Soma 17 Consecutiva"
             title="SOMA 17"
-            subtitle="Gatilho: duas pedras consecutivas somando 17. Analisa até 14 tempos de Branco."
+            subtitle={`Gatilho: pedras no mesmo minuto somando 17. Analisa os tempos de Branco indexados pela pedra anterior ${selected}.`}
             loading={loading}
             err={err}
-            emptyLabel="Nenhum gatilho de soma 17 registrado recentemente."
+            emptyLabel={`Nenhum gatilho de soma 17 no mesmo minuto com pedra anterior ${selected} registrado.`}
             cycles={aSoma17Cycles}
-            pedra={17}
+            pedra={selected}
             now={now}
-            detailFormatter={(c) => `Soma 17 às ${fmtTime(c.triggerAt)}`}
+            detailFormatter={(c) => `Soma 17 (ant. ${c.value}) às ${fmtTime(c.triggerAt)}`}
           />
           <AnalysisPanel
             key="soma-19"
             eyebrow="Análise 15 · Soma 19 Consecutiva"
             title="SOMA 19"
-            subtitle="Gatilho: duas pedras consecutivas somando 19. Analisa até 14 tempos de Branco."
+            subtitle={`Gatilho: pedras no mesmo minuto somando 19. Analisa os tempos de Branco indexados pela pedra anterior ${selected}.`}
             loading={loading}
             err={err}
-            emptyLabel="Nenhum gatilho de soma 19 registrado recentemente."
+            emptyLabel={`Nenhum gatilho de soma 19 no mesmo minuto com pedra anterior ${selected} registrado.`}
             cycles={aSoma19Cycles}
-            pedra={19}
+            pedra={selected}
             now={now}
-            detailFormatter={(c) => `Soma 19 às ${fmtTime(c.triggerAt)}`}
+            detailFormatter={(c) => `Soma 19 (ant. ${c.value}) às ${fmtTime(c.triggerAt)}`}
           />
           <AnalysisPanel
             key="soma-21"
             eyebrow="Análise 16 · Soma 21 Consecutiva"
             title="SOMA 21"
-            subtitle="Gatilho: duas pedras consecutivas somando 21. Analisa até 14 tempos de Branco."
+            subtitle={`Gatilho: pedras no mesmo minuto somando 21. Analisa os tempos de Branco indexados pela pedra anterior ${selected}.`}
             loading={loading}
             err={err}
-            emptyLabel="Nenhum gatilho de soma 21 registrado recentemente."
+            emptyLabel={`Nenhum gatilho de soma 21 no mesmo minuto com pedra anterior ${selected} registrado.`}
             cycles={aSoma21Cycles}
-            pedra={21}
+            pedra={selected}
             now={now}
-            detailFormatter={(c) => `Soma 21 às ${fmtTime(c.triggerAt)}`}
+            detailFormatter={(c) => `Soma 21 (ant. ${c.value}) às ${fmtTime(c.triggerAt)}`}
           />
         </>
       )}

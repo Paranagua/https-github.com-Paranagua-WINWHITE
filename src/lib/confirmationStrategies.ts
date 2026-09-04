@@ -160,6 +160,23 @@ function parseRowDate(row: any): Date | null {
   return null;
 }
 
+function isWhiteRow(row: any): boolean {
+  if (!row) return false;
+  const r = Number(row.roll);
+  if (!Number.isNaN(r) && r === 0) return true;
+  const c = String(row.color || "")
+    .toLowerCase()
+    .trim();
+  return c === "white" || c === "0";
+}
+
+function getRowRoll(row: any): number {
+  if (!row) return -1;
+  if (typeof row.roll === "number") return row.roll;
+  const n = Number.parseInt(String(row.roll), 10);
+  return Number.isNaN(n) ? -1 : n;
+}
+
 /**
  * Calcula todas as projeções válidas das Estratégias 1–15 com base no histórico de giros (rows).
  *
@@ -191,194 +208,207 @@ export function computeConfirmationProjections(
 
   for (let i = 0; i < rows.length; i++) {
     const currentRow = rows[i];
-    const isWhite = currentRow.roll === 0 || currentRow.color === "white";
-    if (!isWhite) continue;
+    if (!isWhiteRow(currentRow)) continue;
 
     const whiteDate = parseRowDate(currentRow);
     if (!whiteDate) continue;
 
     const mB = whiteDate.getMinutes();
 
-    const prev1 = rows[i - 1]?.roll;
-    const prev2 = rows[i - 2]?.roll;
-    const next1 = rows[i + 1]?.roll;
-    const next2 = rows[i + 2]?.roll;
+    const prev1 = getRowRoll(rows[i - 1]);
+    const prev2 = getRowRoll(rows[i - 2]);
+    const next1 = getRowRoll(rows[i + 1]);
+    const next2 = getRowRoll(rows[i + 2]);
+
+    // Helper para criar projeção segura com minutos e segundos normalizados
+    const createProjection = (
+      id: number,
+      code: string,
+      type: ConfirmationSealType,
+      name: string,
+      desc: string,
+      offsetMin: number,
+      trigDate: Date,
+    ) => {
+      const targetDate = new Date(whiteDate.getTime() + offsetMin * 60_000);
+      targetDate.setSeconds(0, 0);
+      targetDate.setMilliseconds(0);
+      projections.push({
+        strategyId: id,
+        strategyCode: code,
+        type,
+        name,
+        description: desc,
+        targetDate,
+        targetTimestamp: Math.floor(targetDate.getTime() / 60_000) * 60_000,
+        targetMinute: targetDate.getMinutes(),
+        triggerEventDate: trigDate,
+      });
+    };
 
     // --- Estratégias 1–10 (1 Branco) -> 🟨 Selo Amarelo ---
 
     // E1: minuto do branco + pedra anterior
-    if (prev1 !== undefined) {
+    if (prev1 > 0) {
       const offsetMin = prev1;
       const targetDate = new Date(whiteDate.getTime() + offsetMin * 60_000);
-      projections.push({
-        strategyId: 1,
-        strategyCode: "E1",
-        type: "yellow",
-        name: "Estratégia 1",
-        description: `Branco ${whiteDate.toISOString().substring(11, 16)} (${mB}m) + pedra ant (${prev1}) = ${targetDate.toISOString().substring(11, 16)}`,
-        targetDate,
-        targetTimestamp: Math.floor(targetDate.getTime() / 60_000) * 60_000,
-        targetMinute: targetDate.getMinutes(),
-        triggerEventDate: whiteDate,
-      });
+      createProjection(
+        1,
+        "E1",
+        "yellow",
+        "Estratégia 1",
+        `Branco ${whiteDate.toISOString().substring(11, 16)} (${mB}m) + pedra ant (${prev1}) = ${targetDate.toISOString().substring(11, 16)}`,
+        offsetMin,
+        whiteDate,
+      );
     }
 
     // E2: minuto do branco + pedra posterior
-    if (next1 !== undefined) {
+    if (next1 > 0) {
       const offsetMin = next1;
       const targetDate = new Date(whiteDate.getTime() + offsetMin * 60_000);
-      projections.push({
-        strategyId: 2,
-        strategyCode: "E2",
-        type: "yellow",
-        name: "Estratégia 2",
-        description: `Branco ${whiteDate.toISOString().substring(11, 16)} (${mB}m) + pedra post (${next1}) = ${targetDate.toISOString().substring(11, 16)}`,
-        targetDate,
-        targetTimestamp: Math.floor(targetDate.getTime() / 60_000) * 60_000,
-        targetMinute: targetDate.getMinutes(),
-        triggerEventDate: whiteDate,
-      });
+      const trigDate = parseRowDate(rows[i + 1]) || whiteDate;
+      createProjection(
+        2,
+        "E2",
+        "yellow",
+        "Estratégia 2",
+        `Branco ${whiteDate.toISOString().substring(11, 16)} (${mB}m) + pedra post (${next1}) = ${targetDate.toISOString().substring(11, 16)}`,
+        offsetMin,
+        trigDate,
+      );
     }
 
     // E3: minuto do branco + pedra anterior + posterior
-    if (prev1 !== undefined && next1 !== undefined) {
+    if (prev1 > 0 && next1 > 0) {
       const offsetMin = prev1 + next1;
       const targetDate = new Date(whiteDate.getTime() + offsetMin * 60_000);
-      projections.push({
-        strategyId: 3,
-        strategyCode: "E3",
-        type: "yellow",
-        name: "Estratégia 3",
-        description: `Branco ${whiteDate.toISOString().substring(11, 16)} + ant (${prev1}) + post (${next1}) = ${targetDate.toISOString().substring(11, 16)}`,
-        targetDate,
-        targetTimestamp: Math.floor(targetDate.getTime() / 60_000) * 60_000,
-        targetMinute: targetDate.getMinutes(),
-        triggerEventDate: whiteDate,
-      });
+      const trigDate = parseRowDate(rows[i + 1]) || whiteDate;
+      createProjection(
+        3,
+        "E3",
+        "yellow",
+        "Estratégia 3",
+        `Branco ${whiteDate.toISOString().substring(11, 16)} + ant (${prev1}) + post (${next1}) = ${targetDate.toISOString().substring(11, 16)}`,
+        offsetMin,
+        trigDate,
+      );
     }
 
     // E4: minuto do branco + duas pedras anteriores
-    if (prev1 !== undefined && prev2 !== undefined) {
+    if (prev1 > 0 && prev2 > 0) {
       const offsetMin = prev1 + prev2;
       const targetDate = new Date(whiteDate.getTime() + offsetMin * 60_000);
-      projections.push({
-        strategyId: 4,
-        strategyCode: "E4",
-        type: "yellow",
-        name: "Estratégia 4",
-        description: `Branco ${whiteDate.toISOString().substring(11, 16)} + 2 ant (${prev2}, ${prev1}) = ${targetDate.toISOString().substring(11, 16)}`,
-        targetDate,
-        targetTimestamp: Math.floor(targetDate.getTime() / 60_000) * 60_000,
-        targetMinute: targetDate.getMinutes(),
-        triggerEventDate: whiteDate,
-      });
+      createProjection(
+        4,
+        "E4",
+        "yellow",
+        "Estratégia 4",
+        `Branco ${whiteDate.toISOString().substring(11, 16)} + 2 ant (${prev2}, ${prev1}) = ${targetDate.toISOString().substring(11, 16)}`,
+        offsetMin,
+        whiteDate,
+      );
     }
 
     // E5: minuto do branco + duas pedras posteriores
-    if (next1 !== undefined && next2 !== undefined) {
+    if (next1 > 0 && next2 > 0) {
       const offsetMin = next1 + next2;
       const targetDate = new Date(whiteDate.getTime() + offsetMin * 60_000);
-      projections.push({
-        strategyId: 5,
-        strategyCode: "E5",
-        type: "yellow",
-        name: "Estratégia 5",
-        description: `Branco ${whiteDate.toISOString().substring(11, 16)} + 2 post (${next1}, ${next2}) = ${targetDate.toISOString().substring(11, 16)}`,
-        targetDate,
-        targetTimestamp: Math.floor(targetDate.getTime() / 60_000) * 60_000,
-        targetMinute: targetDate.getMinutes(),
-        triggerEventDate: whiteDate,
-      });
+      const trigDate = parseRowDate(rows[i + 2]) || whiteDate;
+      createProjection(
+        5,
+        "E5",
+        "yellow",
+        "Estratégia 5",
+        `Branco ${whiteDate.toISOString().substring(11, 16)} + 2 post (${next1}, ${next2}) = ${targetDate.toISOString().substring(11, 16)}`,
+        offsetMin,
+        trigDate,
+      );
     }
 
     // E6: minuto do branco + uma pedra anterior + uma posterior
-    if (prev1 !== undefined && next1 !== undefined) {
+    if (prev1 > 0 && next1 > 0) {
       const offsetMin = prev1 + next1;
       const targetDate = new Date(whiteDate.getTime() + offsetMin * 60_000);
-      projections.push({
-        strategyId: 6,
-        strategyCode: "E6",
-        type: "yellow",
-        name: "Estratégia 6",
-        description: `Branco ${whiteDate.toISOString().substring(11, 16)} + 1 ant (${prev1}) + 1 post (${next1}) = ${targetDate.toISOString().substring(11, 16)}`,
-        targetDate,
-        targetTimestamp: Math.floor(targetDate.getTime() / 60_000) * 60_000,
-        targetMinute: targetDate.getMinutes(),
-        triggerEventDate: whiteDate,
-      });
+      const trigDate = parseRowDate(rows[i + 1]) || whiteDate;
+      createProjection(
+        6,
+        "E6",
+        "yellow",
+        "Estratégia 6",
+        `Branco ${whiteDate.toISOString().substring(11, 16)} + 1 ant (${prev1}) + 1 post (${next1}) = ${targetDate.toISOString().substring(11, 16)}`,
+        offsetMin,
+        trigDate,
+      );
     }
 
     // E7: minuto do branco + duas pedras anteriores + uma posterior
-    if (prev1 !== undefined && prev2 !== undefined && next1 !== undefined) {
+    if (prev1 > 0 && prev2 > 0 && next1 > 0) {
       const offsetMin = prev1 + prev2 + next1;
       const targetDate = new Date(whiteDate.getTime() + offsetMin * 60_000);
-      projections.push({
-        strategyId: 7,
-        strategyCode: "E7",
-        type: "yellow",
-        name: "Estratégia 7",
-        description: `Branco ${whiteDate.toISOString().substring(11, 16)} + 2 ant (${prev2}, ${prev1}) + 1 post (${next1}) = ${targetDate.toISOString().substring(11, 16)}`,
-        targetDate,
-        targetTimestamp: Math.floor(targetDate.getTime() / 60_000) * 60_000,
-        targetMinute: targetDate.getMinutes(),
-        triggerEventDate: whiteDate,
-      });
+      const trigDate = parseRowDate(rows[i + 1]) || whiteDate;
+      createProjection(
+        7,
+        "E7",
+        "yellow",
+        "Estratégia 7",
+        `Branco ${whiteDate.toISOString().substring(11, 16)} + 2 ant (${prev2}, ${prev1}) + 1 post (${next1}) = ${targetDate.toISOString().substring(11, 16)}`,
+        offsetMin,
+        trigDate,
+      );
     }
 
     // E8: minuto do branco + uma pedra anterior + duas posteriores
-    if (prev1 !== undefined && next1 !== undefined && next2 !== undefined) {
+    if (prev1 > 0 && next1 > 0 && next2 > 0) {
       const offsetMin = prev1 + next1 + next2;
       const targetDate = new Date(whiteDate.getTime() + offsetMin * 60_000);
-      projections.push({
-        strategyId: 8,
-        strategyCode: "E8",
-        type: "yellow",
-        name: "Estratégia 8",
-        description: `Branco ${whiteDate.toISOString().substring(11, 16)} + 1 ant (${prev1}) + 2 post (${next1}, ${next2}) = ${targetDate.toISOString().substring(11, 16)}`,
-        targetDate,
-        targetTimestamp: Math.floor(targetDate.getTime() / 60_000) * 60_000,
-        targetMinute: targetDate.getMinutes(),
-        triggerEventDate: whiteDate,
-      });
+      const trigDate = parseRowDate(rows[i + 2]) || whiteDate;
+      createProjection(
+        8,
+        "E8",
+        "yellow",
+        "Estratégia 8",
+        `Branco ${whiteDate.toISOString().substring(11, 16)} + 1 ant (${prev1}) + 2 post (${next1}, ${next2}) = ${targetDate.toISOString().substring(11, 16)}`,
+        offsetMin,
+        trigDate,
+      );
     }
 
     // E9: minuto do branco + duas pedras anteriores + duas posteriores
-    if (prev1 !== undefined && prev2 !== undefined && next1 !== undefined && next2 !== undefined) {
+    if (prev1 > 0 && prev2 > 0 && next1 > 0 && next2 > 0) {
       const offsetMin = prev1 + prev2 + next1 + next2;
       const targetDate = new Date(whiteDate.getTime() + offsetMin * 60_000);
-      projections.push({
-        strategyId: 9,
-        strategyCode: "E9",
-        type: "yellow",
-        name: "Estratégia 9",
-        description: `Branco ${whiteDate.toISOString().substring(11, 16)} + 2 ant (${prev2}, ${prev1}) + 2 post (${next1}, ${next2}) = ${targetDate.toISOString().substring(11, 16)}`,
-        targetDate,
-        targetTimestamp: Math.floor(targetDate.getTime() / 60_000) * 60_000,
-        targetMinute: targetDate.getMinutes(),
-        triggerEventDate: whiteDate,
-      });
+      const trigDate = parseRowDate(rows[i + 2]) || whiteDate;
+      createProjection(
+        9,
+        "E9",
+        "yellow",
+        "Estratégia 9",
+        `Branco ${whiteDate.toISOString().substring(11, 16)} + 2 ant (${prev2}, ${prev1}) + 2 post (${next1}, ${next2}) = ${targetDate.toISOString().substring(11, 16)}`,
+        offsetMin,
+        trigDate,
+      );
     }
 
     // E10: Igual à estratégia 9, porém adicionar +15 minutos ao resultado
-    if (prev1 !== undefined && prev2 !== undefined && next1 !== undefined && next2 !== undefined) {
+    if (prev1 > 0 && prev2 > 0 && next1 > 0 && next2 > 0) {
       const offsetMin = prev1 + prev2 + next1 + next2 + 15;
       const targetDate = new Date(whiteDate.getTime() + offsetMin * 60_000);
-      projections.push({
-        strategyId: 10,
-        strategyCode: "E10",
-        type: "yellow",
-        name: "Estratégia 10",
-        description: `E9 + 15 min = ${targetDate.toISOString().substring(11, 16)}`,
-        targetDate,
-        targetTimestamp: Math.floor(targetDate.getTime() / 60_000) * 60_000,
-        targetMinute: targetDate.getMinutes(),
-        triggerEventDate: whiteDate,
-      });
+      const trigDate = parseRowDate(rows[i + 2]) || whiteDate;
+      createProjection(
+        10,
+        "E10",
+        "yellow",
+        "Estratégia 10",
+        `E9 + 15 min = ${targetDate.toISOString().substring(11, 16)}`,
+        offsetMin,
+        trigDate,
+      );
     }
 
     // --- Estratégias 11–15 (Dois Brancos Consecutivos) -> 🟦 Selo Azul ---
     const nextRow = rows[i + 1];
-    const isNextWhite = nextRow && (nextRow.roll === 0 || nextRow.color === "white");
+    const isNextWhite = isWhiteRow(nextRow);
 
     if (isNextWhite) {
       const whiteDate2 = parseRowDate(nextRow);
@@ -400,8 +430,8 @@ export function computeConfirmationProjections(
           return res;
         };
 
-        const postConsec1 = rows[i + 2]?.roll;
-        const postConsec2 = rows[i + 3]?.roll;
+        const postConsec1 = getRowRoll(rows[i + 2]);
+        const postConsec2 = getRowRoll(rows[i + 3]);
 
         // E11: somar os minutos dos dois brancos e diminuir 1 minuto
         const e11Minute = mB1 + mB2 - 1;
@@ -419,8 +449,9 @@ export function computeConfirmationProjections(
         });
 
         // E12: soma dos minutos dos dois brancos + o minuto do segundo branco + o valor da pedra posterior
-        if (postConsec1 !== undefined) {
+        if (postConsec1 > 0) {
           const e12Minute = mB1 + mB2 + mB2 + postConsec1;
+          const trigDate = parseRowDate(rows[i + 2]) || whiteDate2;
           const e12Date = computeUpcomingDateForMinute(whiteDate2, e12Minute);
           projections.push({
             strategyId: 12,
@@ -431,7 +462,7 @@ export function computeConfirmationProjections(
             targetDate: e12Date,
             targetTimestamp: Math.floor(e12Date.getTime() / 60_000) * 60_000,
             targetMinute: e12Date.getMinutes(),
-            triggerEventDate: whiteDate2,
+            triggerEventDate: trigDate,
           });
         }
 
@@ -466,13 +497,9 @@ export function computeConfirmationProjections(
         });
 
         // E15: somar os minutos dos dois brancos + as duas pedras anteriores + as duas posteriores
-        if (
-          prev1 !== undefined &&
-          prev2 !== undefined &&
-          postConsec1 !== undefined &&
-          postConsec2 !== undefined
-        ) {
+        if (prev1 > 0 && prev2 > 0 && postConsec1 > 0 && postConsec2 > 0) {
           const e15Minute = mB1 + mB2 + prev1 + prev2 + postConsec1 + postConsec2;
+          const trigDate = parseRowDate(rows[i + 3]) || whiteDate2;
           const e15Date = computeUpcomingDateForMinute(whiteDate2, e15Minute);
           projections.push({
             strategyId: 15,
@@ -483,7 +510,7 @@ export function computeConfirmationProjections(
             targetDate: e15Date,
             targetTimestamp: Math.floor(e15Date.getTime() / 60_000) * 60_000,
             targetMinute: e15Date.getMinutes(),
-            triggerEventDate: whiteDate2,
+            triggerEventDate: trigDate,
           });
         }
       }

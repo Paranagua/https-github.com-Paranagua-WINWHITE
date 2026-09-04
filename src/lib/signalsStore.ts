@@ -17,6 +17,7 @@ export type StoredSignal = {
   isRare?: boolean;
   isAlavancagem?: boolean;
   isTop1?: boolean;
+  isNoConfluence?: boolean;
   isLocked?: boolean;
   label?: string;
   confluence?: string;
@@ -149,6 +150,7 @@ export type PredictiveSignal = {
   isSupreme?: boolean;
   isAlavancagem?: boolean;
   isTop1?: boolean;
+  isNoConfluence?: boolean;
   isLocked?: boolean;
   category?: string;
   groupName?: string;
@@ -205,6 +207,7 @@ export function setPredictiveSignals(signals: PredictiveSignal[]) {
       isSupreme: s.isSupreme,
       isRare: s.isRare,
       isTop1: s.isTop1,
+      isNoConfluence: s.isNoConfluence,
       isLocked: s.isLocked,
       category: s.category,
       groupName: s.groupName,

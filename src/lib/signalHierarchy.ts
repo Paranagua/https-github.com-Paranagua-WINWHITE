@@ -20,6 +20,7 @@ import { useSignalStatsStore } from "@/lib/signalStatsStore";
  * NOTA: Top 1 isolado (1x Top 1 + 0 Top 2/3) e Coincidências Top 3 (0x Top 1) NÃO geram sinais.
  */
 export enum SignalRank {
+  NO_CONFLUENCE = 0,
   TOP1_TOP3 = 1,
   RARE = 2,
   SUPREME = 3,
@@ -207,10 +208,16 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
 
   if (typeof sig === "string") {
     const cat = sig.toLowerCase();
+    if (cat.includes("no_confluence") || cat.includes("sem conflu"))
+      return SignalRank.NO_CONFLUENCE;
     if (cat.includes("alavanc")) return SignalRank.ALAVANCAGEM;
     if (cat.includes("suprem") || cat.includes("winn")) return SignalRank.SUPREME;
     if (cat.includes("rare") || cat.includes("raro")) return SignalRank.RARE;
     return SignalRank.TOP1_TOP3;
+  }
+
+  if (sig.isNoConfluence || (sig.category || "").toLowerCase() === "no_confluence") {
+    return SignalRank.NO_CONFLUENCE;
   }
 
   const cat = (sig.category || "").toLowerCase();
@@ -390,7 +397,7 @@ export function hasWhiteInPreviousMinute(
 
     for (const r of results || []) {
       if (!r) continue;
-      const isWhite = Number(r.roll) === 0 || r.color === "white";
+      const isWhite = Number(r.roll) === 0 || r.color === "white" || String(r.color).trim() === "0";
       if (!isWhite) continue;
 
       const rawIso = (r as any).created_at || (r as any).createdAt;
@@ -1054,8 +1061,11 @@ export function buildStrategyTriggeredSignals(
 
     const hasAnalysisConfluence = matchingAnalyses.length > 0;
 
-    // 🛑 REGRA CRÍTICA: Se NÃO houver confluência com análises NEM com outra estratégia, DESCARTA!
-    if (!hasAnalysisConfluence && !hasMultipleStrategies) {
+    const isNoConfluence = !hasAnalysisConfluence && !hasMultipleStrategies;
+    const eTriggers = clusterTriggers.filter((t) => t.strategyType === "E1-E15");
+
+    // 🛑 Se NÃO houver confluência com análises NEM com outra estratégia, apenas E1-E15 podem gerar sinal (sem confluência)
+    if (isNoConfluence && eTriggers.length === 0) {
       continue;
     }
 
@@ -1078,7 +1088,20 @@ export function buildStrategyTriggeredSignals(
     const top1Count = distinctTop1Analyses.length;
     const top3Count = distinctTop3Analyses.length;
 
-    if (top1Count >= 4) {
+    if (isNoConfluence) {
+      const eCode = formattedTriggerCodes[0] || "E";
+      evaluation = {
+        rank: SignalRank.NO_CONFLUENCE,
+        category: "no_confluence" as any,
+        groupName: "Estratégia sem Confluência",
+        label: `Estratégia ${eCode}`,
+        medal: `⚪ ${eCode} (Sem Confluência)`,
+        isAlavancagem: false,
+        isSupreme: false,
+        isRare: false,
+        isTop1: false,
+      };
+    } else if (top1Count >= 4) {
       evaluation = {
         rank: SignalRank.ALAVANCAGEM,
         category: "alavancagem",
@@ -1183,8 +1206,9 @@ export function buildStrategyTriggeredSignals(
     const analysisPcts = matchingAnalyses
       .map((a) => a.pct)
       .filter((p) => typeof p === "number" && p > 0);
-    const avgPct =
-      analysisPcts.length > 0
+    const avgPct = isNoConfluence
+      ? 75.0
+      : analysisPcts.length > 0
         ? Math.round((analysisPcts.reduce((a, b) => a + b, 0) / analysisPcts.length) * 10) / 10
         : hasMultipleStrategies
           ? 88.0
@@ -1284,7 +1308,9 @@ export function buildStrategyTriggeredSignals(
     if (formattedAnalyses.length > 0) {
       confluenceParts.push(formattedAnalyses.join(", "));
     }
-    const confluenceText = confluenceParts.join(" · ");
+    const confluenceText = isNoConfluence
+      ? `Estratégia ${triggerCodesLabel} (Sem Confluência)`
+      : confluenceParts.join(" · ");
 
     const isHighTendency = matchingAnalyses.some((a) => a.isHighTendency);
     const isPossibleRec = activeRecAlerts.some((alert) => {
@@ -1320,6 +1346,7 @@ export function buildStrategyTriggeredSignals(
       isAlavancagem: evaluation.isAlavancagem,
       isRare: evaluation.isRare,
       isSupreme: evaluation.isSupreme,
+      isNoConfluence,
       strategyKey: computedStrategyKey,
       sources: allSources,
       clusterTimestamps: cluster,
@@ -1403,7 +1430,12 @@ export function mergeSignalsLifecycle(
       (cat === "top1_isolated" ||
         cat === "top3_only" ||
         cat === "top5_only" ||
-        (!sig.isAlavancagem && !sig.isSupreme && !sig.isRare && cat !== "top1_top3"))
+        (!sig.isAlavancagem &&
+          !sig.isSupreme &&
+          !sig.isRare &&
+          cat !== "top1_top3" &&
+          !sig.isNoConfluence &&
+          cat !== "no_confluence"))
     ) {
       continue;
     }
@@ -1588,6 +1620,7 @@ export function mergeSignalsLifecycle(
           isSupreme: cand.isSupreme || existing.isSupreme,
           isRare: cand.isRare || existing.isRare,
           isTop1: cand.isTop1 ?? existing.isTop1,
+          isNoConfluence: cand.isNoConfluence ?? false,
           strategyKey: cand.strategyKey || existing.strategyKey,
           sources: cand.sources && cand.sources.length > 0 ? cand.sources : combinedSources,
           clusterTimestamps: cand.clusterTimestamps || existing.clusterTimestamps,
@@ -1611,6 +1644,7 @@ export function mergeSignalsLifecycle(
           entryDate: allowsOscillation ? targetEntryDate : existing.entryDate || targetEntryDate,
           pct: Math.max(existing.pct, cand.pct),
           strategies: mergedStrategies,
+          isNoConfluence: (existing.isNoConfluence ?? false) && (cand.isNoConfluence ?? false),
           sources: combinedSources.length > 0 ? combinedSources : existing.sources,
           clusterTimestamps: cand.clusterTimestamps || existing.clusterTimestamps,
           allowsOscillation: cand.allowsOscillation ?? existing.allowsOscillation,
@@ -1760,31 +1794,33 @@ export function mergeSignalsLifecycle(
         sig.completedAt = sig.completedAt || auditRes.completedAt || now;
         sig.audit = auditRes.audit || sig.audit;
 
-        // Captura e grava no validador/estatísticas
-        try {
-          useSignalStatsStore.getState().recordCompletedSignal({
-            key: sig.key || getCanonicalSignalKey(sig.entryDate),
-            time: sig.time,
-            outcome: auditRes.outcome,
-            label: sig.label,
-            confluence: sig.confluence,
-            resultTime: sig.resultTime,
-            strategyKey: sig.strategyKey,
-            confirmedStrategies: sig.confirmedStrategies,
-            targetTime: sig.time,
-            checkedResults: auditRes.audit?.checkedResults,
-            winningResultId: sig.winningResultId,
-            winningResultCreatedAt: auditRes.audit?.winningResultCreatedAt,
-            audit: sig.audit,
-            sources: sig.sources,
-            category: sig.category,
-            isSupreme: sig.isSupreme,
-            isRare: sig.isRare,
-            isAlavancagem: sig.isAlavancagem,
-            isTop1: sig.isTop1,
-          });
-        } catch {
-          // fallback silencioso caso store não esteja disponível
+        // Captura e grava no validador/estatísticas (apenas sinais com confluência)
+        if (!sig.isNoConfluence && sig.category !== "no_confluence") {
+          try {
+            useSignalStatsStore.getState().recordCompletedSignal({
+              key: sig.key || getCanonicalSignalKey(sig.entryDate),
+              time: sig.time,
+              outcome: auditRes.outcome,
+              label: sig.label,
+              confluence: sig.confluence,
+              resultTime: sig.resultTime,
+              strategyKey: sig.strategyKey,
+              confirmedStrategies: sig.confirmedStrategies,
+              targetTime: sig.time,
+              checkedResults: auditRes.audit?.checkedResults,
+              winningResultId: sig.winningResultId,
+              winningResultCreatedAt: auditRes.audit?.winningResultCreatedAt,
+              audit: sig.audit,
+              sources: sig.sources,
+              category: sig.category,
+              isSupreme: sig.isSupreme,
+              isRare: sig.isRare,
+              isAlavancagem: sig.isAlavancagem,
+              isTop1: sig.isTop1,
+            });
+          } catch {
+            // fallback silencioso caso store não esteja disponível
+          }
         }
       }
     }

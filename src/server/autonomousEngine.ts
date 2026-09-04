@@ -119,6 +119,32 @@ class AutonomousAuditEngine {
     });
   }
 
+  public async clearData(): Promise<void> {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    this.state.recentSignals = [];
+    this.state.stats = {};
+    this.state.totalAudited = 0;
+    this.state.activeSignals = [];
+    this.activeCandidateSignals = [];
+    try {
+      await fs.mkdir(path.dirname(STORAGE_FILE), { recursive: true });
+      const payload = {
+        savedAt: new Date().toISOString(),
+        totalAudited: 0,
+        lastRoundId: this.state.lastRoundId,
+        recentSignals: [],
+        stats: {},
+      };
+      await fs.writeFile(STORAGE_FILE, JSON.stringify(payload, null, 2), "utf-8");
+      console.log("[AutonomousEngine] Storage cleared successfully upon user request.");
+    } catch (err) {
+      console.warn("[AutonomousEngine] Error writing cleared state:", err);
+    }
+  }
+
   public getState(): AutonomousAuditState {
     return {
       ...this.state,
@@ -481,6 +507,15 @@ class AutonomousAuditEngine {
     isAlavancagem?: boolean;
     isTop1?: boolean;
   }) {
+    // Sinais sem confluência (E1-E15 isoladas) NUNCA são contabilizados no painel auditor
+    if (
+      (signal as any).isNoConfluence ||
+      signal.category === "no_confluence" ||
+      (signal.confluence && signal.confluence.includes("Sem Confluência"))
+    ) {
+      return;
+    }
+
     const existingIndex = this.state.recentSignals.findIndex((s) => s.key === signal.key);
     const alreadyExists = existingIndex >= 0;
     const prevEntry = alreadyExists ? this.state.recentSignals[existingIndex] : null;

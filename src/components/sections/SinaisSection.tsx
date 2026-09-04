@@ -654,6 +654,14 @@ function SinaisSectionContent() {
     // 1. Percorre recentSignals (histórico auditado com metadados de estratégia)
     recentSignals.forEach((sig) => {
       if (sig.outcome !== "green" && sig.outcome !== "red") return;
+      // Sinais sem confluência não entram no painel auditor
+      if (
+        (sig as any).isNoConfluence ||
+        sig.category === "no_confluence" ||
+        (sig.confluence && sig.confluence.includes("Sem Confluência"))
+      ) {
+        return;
+      }
       const isWin = sig.outcome === "green";
 
       // Mapeamento para Gatilho de Soma 19 ou Soma 17
@@ -814,31 +822,38 @@ function SinaisSectionContent() {
                       ? "top1_isolated"
                       : undefined);
 
+            const isNoConf =
+              (s as any).isNoConfluence ||
+              cat === "no_confluence" ||
+              (s.confluence && s.confluence.includes("Sem Confluência"));
+
             if (auditResult.outcome === "green") {
               if (s.outcome !== "green") {
                 hasChanged = true;
-                recordCompletedSignal({
-                  key: s.key,
-                  time: s.time,
-                  outcome: "green",
-                  label: s.label,
-                  confluence: s.confluence,
-                  resultTime: auditResult.resultTime,
-                  strategyKey: s.strategyKey,
-                  confirmedStrategies: s.confirmedStrategies,
-                  targetTime: s.time,
-                  windowLabel: auditResult.audit.windowLabel,
-                  checkedResults: auditResult.audit.checkedResults,
-                  winningResultId: auditResult.winningResultId,
-                  winningResultCreatedAt: auditResult.audit.winningResultCreatedAt,
-                  audit: auditResult.audit,
-                  sources: s.sources,
-                  category: cat,
-                  isSupreme: s.isSupreme,
-                  isRare: s.isRare,
-                  isAlavancagem: s.isAlavancagem,
-                  isTop1: s.isTop1,
-                });
+                if (!isNoConf) {
+                  recordCompletedSignal({
+                    key: s.key,
+                    time: s.time,
+                    outcome: "green",
+                    label: s.label,
+                    confluence: s.confluence,
+                    resultTime: auditResult.resultTime,
+                    strategyKey: s.strategyKey,
+                    confirmedStrategies: s.confirmedStrategies,
+                    targetTime: s.time,
+                    windowLabel: auditResult.audit.windowLabel,
+                    checkedResults: auditResult.audit.checkedResults,
+                    winningResultId: auditResult.winningResultId,
+                    winningResultCreatedAt: auditResult.audit.winningResultCreatedAt,
+                    audit: auditResult.audit,
+                    sources: s.sources,
+                    category: cat,
+                    isSupreme: s.isSupreme,
+                    isRare: s.isRare,
+                    isAlavancagem: s.isAlavancagem,
+                    isTop1: s.isTop1,
+                  });
+                }
               }
               return {
                 ...s,
@@ -854,27 +869,29 @@ function SinaisSectionContent() {
             if (auditResult.outcome === "red") {
               if (s.outcome !== "red") {
                 hasChanged = true;
-                recordCompletedSignal({
-                  key: s.key,
-                  time: s.time,
-                  outcome: "red",
-                  label: s.label,
-                  confluence: s.confluence,
-                  strategyKey: s.strategyKey,
-                  confirmedStrategies: s.confirmedStrategies,
-                  targetTime: s.time,
-                  windowLabel: auditResult.audit.windowLabel,
-                  checkedResults: auditResult.audit.checkedResults,
-                  winningResultId: null,
-                  winningResultCreatedAt: null,
-                  audit: auditResult.audit,
-                  sources: s.sources,
-                  category: cat,
-                  isSupreme: s.isSupreme,
-                  isRare: s.isRare,
-                  isAlavancagem: s.isAlavancagem,
-                  isTop1: s.isTop1,
-                });
+                if (!isNoConf) {
+                  recordCompletedSignal({
+                    key: s.key,
+                    time: s.time,
+                    outcome: "red",
+                    label: s.label,
+                    confluence: s.confluence,
+                    strategyKey: s.strategyKey,
+                    confirmedStrategies: s.confirmedStrategies,
+                    targetTime: s.time,
+                    windowLabel: auditResult.audit.windowLabel,
+                    checkedResults: auditResult.audit.checkedResults,
+                    winningResultId: null,
+                    winningResultCreatedAt: null,
+                    audit: auditResult.audit,
+                    sources: s.sources,
+                    category: cat,
+                    isSupreme: s.isSupreme,
+                    isRare: s.isRare,
+                    isAlavancagem: s.isAlavancagem,
+                    isTop1: s.isTop1,
+                  });
+                }
               }
               return {
                 ...s,
@@ -1339,22 +1356,6 @@ function SinaisSectionContent() {
                                 <span>{typeBadge.icon}</span>
                                 <span className="truncate max-w-[48px]">{typeBadge.short}</span>
                               </span>
-                              {sig.hasYellowSeal && (
-                                <span
-                                  className="text-[7.5px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 rounded"
-                                  title="Confirmado por Estratégias 1–10 (🟨 Selo Amarelo)"
-                                >
-                                  🟨
-                                </span>
-                              )}
-                              {sig.hasBlueSeal && (
-                                <span
-                                  className="text-[7.5px] font-black bg-blue-500/20 text-blue-300 border border-blue-500/30 px-1 rounded"
-                                  title="Confirmado por Estratégias 11–15 (🟦 Selo Azul)"
-                                >
-                                  🟦
-                                </span>
-                              )}
                             </div>
 
                             <div className="flex items-center gap-0.5 text-[9px] font-bold font-mono opacity-80">

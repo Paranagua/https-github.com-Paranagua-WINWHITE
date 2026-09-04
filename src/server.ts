@@ -50,8 +50,19 @@ export default {
     try {
       const url = new URL(request.url);
       if (url.pathname === "/api/public/autonomous-audit") {
-        if (request.method === "POST") {
-          await autonomousEngine.runCycle();
+        if (request.method === "DELETE") {
+          await autonomousEngine.clearData();
+        } else if (request.method === "POST") {
+          try {
+            const body = await request.clone().json().catch(() => null);
+            if (body && (body.action === "clear" || body.clear === true)) {
+              await autonomousEngine.clearData();
+            } else {
+              await autonomousEngine.runCycle();
+            }
+          } catch {
+            await autonomousEngine.runCycle();
+          }
         }
         const state = autonomousEngine.getState();
         return new Response(JSON.stringify(state), {

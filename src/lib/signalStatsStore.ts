@@ -35,6 +35,7 @@ export interface AnalysisStat {
 interface SignalStatsStore {
   stats: Record<string, AnalysisStat>;
   recentSignals: SignalHistoryEntry[];
+  clearedAt?: number;
   updateStats: (key: string, outcome: "green" | "red") => void;
   recordCompletedSignal: (signal: {
     key: string;
@@ -233,12 +234,36 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             return state;
           }
 
+          const effectiveClearedAt = state.clearedAt || 0;
+
+          // Se o servidor foi limpo (recentSignals vazio e sem stats), zera tudo localmente também
+          if (
+            Array.isArray(data.recentSignals) &&
+            data.recentSignals.length === 0 &&
+            (!data.stats || Object.keys(data.stats).length === 0)
+          ) {
+            return {
+              recentSignals: state.recentSignals.filter(
+                (s) => (s.timestamp || 0) > effectiveClearedAt,
+              ),
+              stats: Object.fromEntries(
+                Object.entries(state.stats).filter(
+                  ([_, st]) => (st.lastUpdated || 0) > effectiveClearedAt,
+                ),
+              ),
+            };
+          }
+
           // Mescla os sinais com base na chave única
           const signalMap = new Map<string, SignalHistoryEntry>();
-          // Primeiro adiciona os locais
-          state.recentSignals.forEach((s) => signalMap.set(s.key, s));
+          // Primeiro adiciona os locais que sejam posteriores ao clearedAt
+          state.recentSignals
+            .filter((s) => (s.timestamp || 0) > effectiveClearedAt)
+            .forEach((s) => signalMap.set(s.key, s));
           // Depois mescla com os do servidor autônomo (priorizando dados de auditoria confirmados)
-          incomingSignals.forEach((incoming) => {
+          incomingSignals
+            .filter((s) => (s.timestamp || 0) > effectiveClearedAt)
+            .forEach((incoming) => {
             const existing = signalMap.get(incoming.key);
             if (!existing) {
               signalMap.set(incoming.key, incoming);
@@ -297,13 +322,25 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
         }),
 
       clearStats: () => {
-        set({ stats: {}, recentSignals: [] });
+        const now = Date.now();
+        set({ stats: {}, recentSignals: [], clearedAt: now });
         try {
           localStorage.removeItem("freitas-signal-stats-v3");
           localStorage.removeItem("freitas-signal-stats");
           localStorage.removeItem("freitas-signal-stats-v2");
+          localStorage.setItem("freitas-signal-stats-cleared-at", String(now));
         } catch {
           // ignore
+        }
+        // Limpa o servidor autônomo também para que nenhum dado retorne nas próximas consultas
+        if (typeof fetch !== "undefined") {
+          fetch("/api/public/autonomous-audit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "clear" }),
+          }).catch(() => {
+            fetch("/api/public/autonomous-audit", { method: "DELETE" }).catch(() => {});
+          });
         }
       },
 
