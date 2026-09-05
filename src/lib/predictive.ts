@@ -47,7 +47,7 @@ function diffMinutes(a: Date, b: Date) {
   return Math.max(0, minB - minA);
 }
 
-function collectGaps(rows: Row[], i: number, dt: Date): number[] {
+export function collectGaps(rows: Row[], i: number, dt: Date): number[] {
   const gaps: number[] = [];
   const limit = MAX_ZEROS;
   const timeoutMs = TIMEOUT_MINUTES * 60000;

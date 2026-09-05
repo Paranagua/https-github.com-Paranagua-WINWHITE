@@ -9,7 +9,9 @@ import {
   Plus,
   AlertCircle,
   ShieldCheck,
+  Palette,
 } from "lucide-react";
+import { ColorPatternBreaksPanel } from "@/components/sections/ColorPatternBreaksPanel";
 import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
 import { Card } from "@/components/double/Card";
 import {
@@ -597,12 +599,14 @@ export default function AnaliseSection() {
 
   const categories = [
     { id: "all", label: "Todas as Análises", icon: Sparkles },
+    { id: "color_breaks", label: "Quebra de Padrões de Cores", icon: Palette },
     { id: "minutes", label: "Minutos (0 a 9)", icon: Clock },
     { id: "patterns", label: "Padrões de Pedra", icon: Layers },
     { id: "sequences", label: "Gatilhos de Sequência", icon: Shuffle },
     { id: "sums", label: "Somas Consecutivas", icon: Plus },
   ];
 
+  const showColorBreaks = activeCategory === "all" || activeCategory === "color_breaks";
   const showMinutes = activeCategory === "all" || activeCategory === "minutes";
   const showPatterns = activeCategory === "all" || activeCategory === "patterns";
   const showSequences = activeCategory === "all" || activeCategory === "sequences";
@@ -1159,6 +1163,11 @@ export default function AnaliseSection() {
             detailFormatter={(c) => `Soma 21 (ant. ${c.value}) às ${fmtTime(c.triggerAt)}`}
           />
         </>
+      )}
+
+      {/* 5. SEÇÃO DE QUEBRA DE PADRÕES DE CORES (NOVA ANÁLISE INDEPENDENTE) */}
+      {showColorBreaks && (
+        <ColorPatternBreaksPanel rows={rows} selectedPedra={selected} now={now} />
       )}
     </main>
   );
