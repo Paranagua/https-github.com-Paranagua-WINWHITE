@@ -63,6 +63,11 @@ import {
 } from "@/lib/predictive";
 import { computeAllSumTriggerProjections } from "@/lib/sum19Strategies";
 import { useSignalStatsStore } from "@/lib/signalStatsStore";
+import {
+  detectColorPatternBreaksById,
+  colorBreaksToCycles,
+  COLOR_PATTERNS,
+} from "@/lib/colorPatternBreaks";
 
 type SignalAuditItem = {
   id: string;
@@ -76,6 +81,8 @@ type SignalAuditItem = {
   category: "alavancagem" | "supreme" | "rare" | "top1_top3";
   sourcesCount: number;
   top1Count: number;
+  analysisGroup?: string;
+  primaryKey?: string;
   // Auditoria real
   status: "green" | "red" | "pending";
   matchedRoll?: number;
@@ -314,37 +321,360 @@ export default function SignalPercentageValidator() {
     }
     // Constrói todas as análises suportadas
     const strategyEngines = [
-      { key: "A2", label: "A2 · Rep. Simples", fn: buildA2, isTop1: true },
-      { key: "A3", label: "A3 · 2ª Pedra (Min 9)", fn: buildA3, isTop1: true },
-      { key: "A4", label: "A4 · 1ª Dezena (Min 0)", fn: buildA4, isTop1: true },
-      { key: "A5", label: "A5 · 2ª Dezena (Min 0)", fn: buildA5, isTop1: true },
-      { key: "A10", label: "A10 · 8→11", fn: buildA8_11, isTop1: false },
-      { key: "A11", label: "A11 · 11→11", fn: buildA11_11, isTop1: false },
-      { key: "A12", label: "A12 · 4→11", fn: buildA4_11, isTop1: false },
-      { key: "A13", label: "A13 · 4↔14", fn: buildA4_14, isTop1: false },
-      { key: "A14", label: "A14 · Soma 17", fn: buildASoma17, isTop1: false },
-      { key: "A15", label: "A15 · Soma 19", fn: buildASoma19, isTop1: false },
-      { key: "A16", label: "A16 · Soma 21", fn: buildASoma21, isTop1: false },
-      { key: "A17", label: "A17 · 1ª Pedra (Min 5)", fn: buildA1Minuto5, isTop1: false },
-      { key: "A18", label: "A18 · 2ª Pedra (Min 5)", fn: buildA2Minuto5, isTop1: false },
-      { key: "A19", label: "A19 · Sanduíche (P)", fn: buildASandwichPontas, isTop1: false },
-      { key: "A20", label: "A20 · Sanduíche (M)", fn: buildASandwichMeio, isTop1: false },
-      { key: "A21", label: "A21 · 7↔11", fn: buildA7_11, isTop1: false },
-      { key: "A22", label: "A22 · 1ª Pedra (Min 1)", fn: buildA1Minuto1, isTop1: false },
-      { key: "A23", label: "A23 · 2ª Pedra (Min 1)", fn: buildA2Minuto1, isTop1: false },
-      { key: "A24", label: "A24 · 1ª Pedra (Min 2)", fn: buildA1Minuto2, isTop1: false },
-      { key: "A25", label: "A25 · 2ª Pedra (Min 2)", fn: buildA2Minuto2, isTop1: false },
-      { key: "A26", label: "A26 · 1ª Pedra (Min 3)", fn: buildA1Minuto3, isTop1: false },
-      { key: "A27", label: "A27 · 2ª Pedra (Min 3)", fn: buildA2Minuto3, isTop1: false },
-      { key: "A28", label: "A28 · 1ª Pedra (Min 4)", fn: buildA1Minuto4, isTop1: false },
-      { key: "A29", label: "A29 · 2ª Pedra (Min 4)", fn: buildA2Minuto4, isTop1: false },
-      { key: "A30", label: "A30 · 1ª Pedra (Min 6)", fn: buildA1Minuto6, isTop1: false },
-      { key: "A31", label: "A31 · 2ª Pedra (Min 6)", fn: buildA2Minuto6, isTop1: false },
-      { key: "A32", label: "A32 · 1ª Pedra (Min 7)", fn: buildA1Minuto7, isTop1: false },
-      { key: "A33", label: "A33 · 2ª Pedra (Min 7)", fn: buildA2Minuto7, isTop1: false },
-      { key: "A34", label: "A34 · 1ª Pedra (Min 8)", fn: buildA1Minuto8, isTop1: false },
-      { key: "A35", label: "A35 · 2ª Pedra (Min 8)", fn: buildA2Minuto8, isTop1: false },
-      { key: "A36", label: "A36 · 1ª Pedra (Min 9)", fn: buildA1Minuto9, isTop1: false },
+      // 1. Padrões de Pedra (PRIMÁRIAS)
+      {
+        key: "A2",
+        label: "A2 · Rep. Simples",
+        fn: buildA2,
+        isTop1: true,
+        isPrimary: true,
+        group: "pedras",
+        groupName: "Padrões de Pedra",
+      },
+      {
+        key: "A19",
+        label: "A19 · Sanduíche (P)",
+        fn: buildASandwichPontas,
+        isTop1: true,
+        isPrimary: true,
+        group: "pedras",
+        groupName: "Padrões de Pedra",
+      },
+      {
+        key: "A20",
+        label: "A20 · Sanduíche (M)",
+        fn: buildASandwichMeio,
+        isTop1: true,
+        isPrimary: true,
+        group: "pedras",
+        groupName: "Padrões de Pedra",
+      },
+
+      // 2. Gatilhos de Sequência (PRIMÁRIAS)
+      {
+        key: "A10",
+        label: "A10 · 8→11",
+        fn: buildA8_11,
+        isTop1: true,
+        isPrimary: true,
+        group: "gatilhos",
+        groupName: "Gatilhos de Sequência",
+      },
+      {
+        key: "A11",
+        label: "A11 · 11→11",
+        fn: buildA11_11,
+        isTop1: true,
+        isPrimary: true,
+        group: "gatilhos",
+        groupName: "Gatilhos de Sequência",
+      },
+      {
+        key: "A12",
+        label: "A12 · 4→11",
+        fn: buildA4_11,
+        isTop1: true,
+        isPrimary: true,
+        group: "gatilhos",
+        groupName: "Gatilhos de Sequência",
+      },
+      {
+        key: "A13",
+        label: "A13 · 4↔14",
+        fn: buildA4_14,
+        isTop1: true,
+        isPrimary: true,
+        group: "gatilhos",
+        groupName: "Gatilhos de Sequência",
+      },
+      {
+        key: "A21",
+        label: "A21 · 7↔11",
+        fn: buildA7_11,
+        isTop1: true,
+        isPrimary: true,
+        group: "gatilhos",
+        groupName: "Gatilhos de Sequência",
+      },
+
+      // 3. Somas Consecutivas (PRIMÁRIAS)
+      {
+        key: "A14",
+        label: "A14 · Soma 17",
+        fn: buildASoma17,
+        isTop1: true,
+        isPrimary: true,
+        group: "somas",
+        groupName: "Somas Consecutivas",
+      },
+      {
+        key: "A15",
+        label: "A15 · Soma 19",
+        fn: buildASoma19,
+        isTop1: true,
+        isPrimary: true,
+        group: "somas",
+        groupName: "Somas Consecutivas",
+      },
+      {
+        key: "A16",
+        label: "A16 · Soma 21",
+        fn: buildASoma21,
+        isTop1: true,
+        isPrimary: true,
+        group: "somas",
+        groupName: "Somas Consecutivas",
+      },
+
+      // 4. Quebra de Padrões de Cores (PRIMÁRIAS)
+      {
+        key: "Q1",
+        label: "Q1 · Alternados",
+        fn: (r: any[]) => colorBreaksToCycles(detectColorPatternBreaksById(r, "alternados"), r),
+        isTop1: true,
+        isPrimary: true,
+        group: "cores",
+        groupName: "Quebra de Cores",
+      },
+      {
+        key: "Q2",
+        label: "Q2 · Alt. Contínuos (2x2)",
+        fn: (r: any[]) =>
+          colorBreaksToCycles(detectColorPatternBreaksById(r, "alt_continuos_2x2"), r),
+        isTop1: true,
+        isPrimary: true,
+        group: "cores",
+        groupName: "Quebra de Cores",
+      },
+      {
+        key: "Q3",
+        label: "Q3 · Alt. Contínuos 1N (3x3)",
+        fn: (r: any[]) =>
+          colorBreaksToCycles(detectColorPatternBreaksById(r, "alt_continuos_1n"), r),
+        isTop1: true,
+        isPrimary: true,
+        group: "cores",
+        groupName: "Quebra de Cores",
+      },
+      {
+        key: "Q4",
+        label: "Q4 · Alt. Contínuos 2N (4x4)",
+        fn: (r: any[]) =>
+          colorBreaksToCycles(detectColorPatternBreaksById(r, "alt_continuos_2n"), r),
+        isTop1: true,
+        isPrimary: true,
+        group: "cores",
+        groupName: "Quebra de Cores",
+      },
+      {
+        key: "Q5",
+        label: "Q5 · Contínuos (5x)",
+        fn: (r: any[]) => colorBreaksToCycles(detectColorPatternBreaksById(r, "continuos_5x"), r),
+        isTop1: true,
+        isPrimary: true,
+        group: "cores",
+        groupName: "Quebra de Cores",
+      },
+      {
+        key: "Q6",
+        label: "Q6 · Contínuos N1 (6x)",
+        fn: (r: any[]) => colorBreaksToCycles(detectColorPatternBreaksById(r, "continuos_n1"), r),
+        isTop1: true,
+        isPrimary: true,
+        group: "cores",
+        groupName: "Quebra de Cores",
+      },
+      {
+        key: "Q7",
+        label: "Q7 · Contínuos N2 (7x+)",
+        fn: (r: any[]) => colorBreaksToCycles(detectColorPatternBreaksById(r, "continuos_n2"), r),
+        isTop1: true,
+        isPrimary: true,
+        group: "cores",
+        groupName: "Quebra de Cores",
+      },
+
+      // 5. Minutos 0 a 9 (ESTRITAMENTE CONFLUÊNCIA - Não geram sinal por si sós)
+      {
+        key: "A3",
+        label: "A3 · 2ª Pedra (Min 9)",
+        fn: buildA3,
+        isTop1: true,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A4",
+        label: "A4 · 1ª Dezena (Min 0)",
+        fn: buildA4,
+        isTop1: true,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A5",
+        label: "A5 · 2ª Dezena (Min 0)",
+        fn: buildA5,
+        isTop1: true,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A17",
+        label: "A17 · 1ª Pedra (Min 5)",
+        fn: buildA1Minuto5,
+        isTop1: false,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A18",
+        label: "A18 · 2ª Pedra (Min 5)",
+        fn: buildA2Minuto5,
+        isTop1: false,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A22",
+        label: "A22 · 1ª Pedra (Min 1)",
+        fn: buildA1Minuto1,
+        isTop1: false,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A23",
+        label: "A23 · 2ª Pedra (Min 1)",
+        fn: buildA2Minuto1,
+        isTop1: false,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A24",
+        label: "A24 · 1ª Pedra (Min 2)",
+        fn: buildA1Minuto2,
+        isTop1: false,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A25",
+        label: "A25 · 2ª Pedra (Min 2)",
+        fn: buildA2Minuto2,
+        isTop1: false,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A26",
+        label: "A26 · 1ª Pedra (Min 3)",
+        fn: buildA1Minuto3,
+        isTop1: false,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A27",
+        label: "A27 · 2ª Pedra (Min 3)",
+        fn: buildA2Minuto3,
+        isTop1: false,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A28",
+        label: "A28 · 1ª Pedra (Min 4)",
+        fn: buildA1Minuto4,
+        isTop1: false,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A29",
+        label: "A29 · 2ª Pedra (Min 4)",
+        fn: buildA2Minuto4,
+        isTop1: false,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A30",
+        label: "A30 · 1ª Pedra (Min 6)",
+        fn: buildA1Minuto6,
+        isTop1: false,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A31",
+        label: "A31 · 2ª Pedra (Min 6)",
+        fn: buildA2Minuto6,
+        isTop1: false,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A32",
+        label: "A32 · 1ª Pedra (Min 7)",
+        fn: buildA1Minuto7,
+        isTop1: false,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A33",
+        label: "A33 · 2ª Pedra (Min 7)",
+        fn: buildA2Minuto7,
+        isTop1: false,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A34",
+        label: "A34 · 1ª Pedra (Min 8)",
+        fn: buildA1Minuto8,
+        isTop1: false,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A35",
+        label: "A35 · 2ª Pedra (Min 8)",
+        fn: buildA2Minuto8,
+        isTop1: false,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
+      {
+        key: "A36",
+        label: "A36 · 1ª Pedra (Min 9)",
+        fn: buildA1Minuto9,
+        isTop1: false,
+        isPrimary: false,
+        group: "minutos",
+        groupName: "Minutos",
+      },
     ];
 
     // Para cada ponto no histórico (com janela mínima de aquecimento de 50 giros)
@@ -404,6 +734,9 @@ export default function SignalPercentageValidator() {
               value: val,
               pct: group.pct,
               isTop1,
+              isPrimary: strat.isPrimary,
+              group: strat.group,
+              groupName: strat.groupName,
               rank: rankIdx + 1,
               triggerAt: currentTrigger.triggerAt,
             };
@@ -437,6 +770,13 @@ export default function SignalPercentageValidator() {
       });
       if (whiteInM1) continue;
 
+      // REGRA FUNDAMENTAL: Apenas as 4 análises primárias são capazes de gerar sinais!
+      // (Padrões de Pedra, Gatilhos de Sequência, Somas Consecutivas, Quebra de Cores)
+      // Se o slot só contiver confluências (ex: Minutos) sem nenhuma análise primária, NÃO gera sinal!
+      const allSlotCandidates = [...data.top1, ...data.top3];
+      const primaryCandidates = allSlotCandidates.filter((p) => p.isPrimary);
+      if (primaryCandidates.length === 0) continue;
+
       const distinctTop1 = new Set(data.top1.map((p) => p.strategyKey));
       const distinctTop3 = new Set(data.top3.map((p) => p.strategyKey));
       const totalSources = distinctTop1.size + distinctTop3.size;
@@ -453,8 +793,10 @@ export default function SignalPercentageValidator() {
       } else if (distinctTop1.size === 1 && distinctTop3.size >= 1) {
         category = "top1_top3";
       } else {
-        // Top 1 isolado e Top 3 apenas não são válidos para envio de sinais
-        continue;
+        // Se houver Top 1 primário, gera sinal válido
+        const hasPrimaryTop1 = data.top1.some((p) => p.isPrimary);
+        if (!hasPrimaryTop1) continue;
+        category = "top1_top3";
       }
 
       // Porcentagem média entre as fontes confluentes do sinal
@@ -464,7 +806,7 @@ export default function SignalPercentageValidator() {
           ? Math.round((allPcts.reduce((a, b) => a + b, 0) / allPcts.length) * 10) / 10
           : 0;
 
-      const primary = data.top1[0] || data.top3[0];
+      const primary = data.top1.find((p) => p.isPrimary) || primaryCandidates[0];
       const slotDate = new Date(slotTime);
 
       // Verificação de alta precisão: Janela de 3 minutos completos (6 casas / 2 casas por minuto)
@@ -501,16 +843,12 @@ export default function SignalPercentageValidator() {
         matchingSums.length > 0
           ? `${primary.strategyLabel} + Gatilho ${sumLabels}`
           : primary.strategyLabel;
-      const displayKey =
-        matchingSums.length > 0
-          ? `${matchingSums[0].code} (${matchingSums[0].sumType})`
-          : primary.strategyKey;
 
       signals.push({
         id: `audit-${slotTime}-${primary.strategyKey}`,
         timeStr: fmtTime(slotDate),
         timestamp: slotTime,
-        strategyKey: displayKey,
+        strategyKey: primary.strategyKey,
         strategyLabel: displayLabel,
         sourceValue: primary.value,
         predictedMinute: slotDate.getMinutes(),
@@ -522,6 +860,8 @@ export default function SignalPercentageValidator() {
         matchedRoll,
         matchedColor,
         matchedTime,
+        analysisGroup: primary.group,
+        primaryKey: primary.strategyKey,
       });
     }
 
@@ -601,7 +941,14 @@ export default function SignalPercentageValidator() {
   const filteredSignals = useMemo(() => {
     return auditResults.signals.filter((s) => {
       if (filterCategory !== "all" && s.category !== filterCategory) return false;
-      if (filterStrategy !== "all" && s.strategyKey !== filterStrategy) return false;
+      if (filterStrategy !== "all") {
+        if (filterStrategy.startsWith("group:")) {
+          const grp = filterStrategy.replace("group:", "");
+          if (s.analysisGroup !== grp) return false;
+        } else if (s.strategyKey !== filterStrategy && s.primaryKey !== filterStrategy) {
+          return false;
+        }
+      }
       if (filterStatus !== "all" && s.status !== filterStatus) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -912,6 +1259,46 @@ export default function SignalPercentageValidator() {
                 <option value="supreme">👑 Supremo (2-3x Top 1 + 2+ Top 2/3)</option>
                 <option value="rare">💎 Raro (2-3x Top 1)</option>
                 <option value="top1_top3">⚡ Top 1 & Top 3</option>
+              </select>
+
+              <select
+                value={filterStrategy}
+                onChange={(e) => setFilterStrategy(e.target.value)}
+                className="rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-white focus:outline-none focus:border-primary"
+              >
+                <option value="all">Todas as Análises Geradoras</option>
+                <optgroup label="Grupos Primários Habilitados">
+                  <option value="group:pedras">🪨 Padrões de Pedra (A2, A19, A20)</option>
+                  <option value="group:gatilhos">🔀 Gatilhos de Sequência (A10..A13, A21)</option>
+                  <option value="group:somas">➕ Somas Consecutivas (A14, A15, A16)</option>
+                  <option value="group:cores">🎨 Quebra de Padrões de Cores (Q1..Q7)</option>
+                </optgroup>
+                <optgroup label="Padrões de Pedra">
+                  <option value="A2">A2 · Repetição Simples</option>
+                  <option value="A19">A19 · Sanduíche (Pontas)</option>
+                  <option value="A20">A20 · Sanduíche (Meio)</option>
+                </optgroup>
+                <optgroup label="Gatilhos de Sequência">
+                  <option value="A10">A10 · 8→11</option>
+                  <option value="A11">A11 · 11→11</option>
+                  <option value="A12">A12 · 4→11</option>
+                  <option value="A13">A13 · 4↔14</option>
+                  <option value="A21">A21 · 7↔11</option>
+                </optgroup>
+                <optgroup label="Somas Consecutivas">
+                  <option value="A14">A14 · Soma 17</option>
+                  <option value="A15">A15 · Soma 19</option>
+                  <option value="A16">A16 · Soma 21</option>
+                </optgroup>
+                <optgroup label="Quebra de Padrões de Cores">
+                  <option value="Q1">Q1 · Alternados</option>
+                  <option value="Q2">Q2 · Alt. Contínuos (2x2)</option>
+                  <option value="Q3">Q3 · Alt. Contínuos 1N (3x3)</option>
+                  <option value="Q4">Q4 · Alt. Contínuos 2N (4x4)</option>
+                  <option value="Q5">Q5 · Contínuos (5x)</option>
+                  <option value="Q6">Q6 · Contínuos N1 (6x)</option>
+                  <option value="Q7">Q7 · Contínuos N2 (7x+)</option>
+                </optgroup>
               </select>
 
               <select

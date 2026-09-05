@@ -143,7 +143,7 @@ export interface SignalAnalysisItem {
 }
 
 /**
- * Extrai e formata análises de um sinal (ex: "A1-5 88%").
+ * Extrai e formata análises de um sinal (ex: "A1-5 88%" ou "Q1-0 80%").
  */
 export function extractSignalAnalyses(sig: any): SignalAnalysisItem[] {
   if (!sig) return [];
@@ -153,8 +153,10 @@ export function extractSignalAnalyses(sig: any): SignalAnalysisItem[] {
     sig.sources.forEach((src: any) => {
       if (!src) return;
       const pctStr = typeof src.pct === "number" && src.pct > 0 ? `${Math.round(src.pct)}%` : "";
+      const code =
+        src.analysis >= 50 && src.analysis <= 56 ? `Q${src.analysis - 49}` : `A${src.analysis}`;
       results.push({
-        text: `A${src.analysis}-${src.value}`,
+        text: `${code}-${src.value}`,
         pct: pctStr,
         analysis: src.analysis,
         value: src.value,
@@ -166,16 +168,18 @@ export function extractSignalAnalyses(sig: any): SignalAnalysisItem[] {
 
   // Fallback escaneando confluence
   const text = sig.confluence || "";
-  const regex = /A(\d+)[-·](\d+)(?:\s*\(?(\d+)%?\)?)?/gi;
+  const regex = /(?:A|Q)(\d+)[-·](\d+)(?:\s*\(?(\d+)%?\)?)?/gi;
   let match: RegExpExecArray | null;
   while ((match = regex.exec(text)) !== null) {
+    const isQ = match[0].toUpperCase().startsWith("Q");
     const aNum = parseInt(match[1], 10);
+    const analysisId = isQ ? aNum + 49 : aNum;
     const val = parseInt(match[2], 10);
     const pct = match[3] ? `${match[3]}%` : "";
     results.push({
-      text: `A${aNum}-${val}`,
+      text: `${isQ ? `Q${aNum}` : `A${aNum}`}-${val}`,
       pct,
-      analysis: aNum,
+      analysis: analysisId,
       value: val,
     });
   }
@@ -896,17 +900,61 @@ export function buildSignalConfluences(rawCandidates: RawCandidate[]): Predictiv
 }
 
 /**
- * MOTOR DE SINAIS: GATILHOS POR ESTRATÉGIAS (SOMA 19, SOMA 17 E E1-E15) COM CONFLUÊNCIA
+ * ANÁLISES PRIMÁRIAS HABILITADAS PARA GERAÇÃO DE SINAIS:
+ * 1. Padrões de Pedra: A2 (Rep. Simples), A19 (Sanduíche Pontas), A20 (Sanduíche Meio)
+ * 2. Gatilhos de Sequência: A10 (8->11), A11 (11->11), A12 (4->11), A13 (4<->14), A21 (7<->11)
+ * 3. Somas Consecutivas: A14 (Soma 17), A15 (Soma 19), A16 (Soma 21)
+ * 4. Quebra de Padrões de Cores: Q1..Q7 (IDs 50 a 56: Alternados, Alt. Contínuos 2x2, 1N 3x3, 2N 4x4, Contínuos 5x, Contínuos N1 6x, Contínuos N2 7x+)
  *
- * Regras:
- * 1. As Análises NÃO geram sinais por si sós, apenas fornecem confluência.
- * 2. O sinal é disparado a partir de um gatilho de Estratégia de Soma (19 ou 17) ou Estratégia E1-E15.
- * 3. O gatilho da estratégia SÓ segue para o card se houver:
- *    - Confluência com as Análises (Top 1 / Top 2/3 projetando no mesmo minuto ou janela +/- 1m)
- *    OU
- *    - Confluência com Outra Estratégia (outra estratégia de Soma ou E1-E15 na mesma janela +/- 1m).
- * 4. Toda a hierarquia de grupos (Alavancagem, Supremo, Raro, Top 1 & Top 3) é mantida e ponderada pelas confluências.
- * 5. Sem limite de 60 minutos: projeções futuras são aceitas e monitoradas em qualquer horizonte temporal.
+ * Todas as demais análises (Minutos 0 a 9) e estratégias (E1-E15, Somas) servem estritamente como CONFLUÊNCIA.
+ */
+export const PRIMARY_SIGNAL_ANALYSIS_IDS = new Set<number>([
+  // Padrões de Pedra
+  2, 19, 20,
+  // Gatilhos de Sequência
+  10, 11, 12, 13, 21,
+  // Somas Consecutivas
+  14, 15, 16,
+  // Quebra de Padrões de Cores
+  50, 51, 52, 53, 54, 55, 56,
+]);
+
+export function isPrimarySignalAnalysis(analysisId: number): boolean {
+  return PRIMARY_SIGNAL_ANALYSIS_IDS.has(analysisId);
+}
+
+export function getAnalysisGroupName(analysisId: number): string {
+  if (analysisId === 2 || analysisId === 19 || analysisId === 20) {
+    return "Padrões de Pedra";
+  }
+  if (
+    analysisId === 10 ||
+    analysisId === 11 ||
+    analysisId === 12 ||
+    analysisId === 13 ||
+    analysisId === 21
+  ) {
+    return "Gatilhos de Sequência";
+  }
+  if (analysisId === 14 || analysisId === 15 || analysisId === 16) {
+    return "Somas Consecutivas";
+  }
+  if (analysisId >= 50 && analysisId <= 56) {
+    return "Quebra de Padrões de Cores";
+  }
+  return "Minutos (Confluência)";
+}
+
+export function formatAnalysisCode(analysisId: number): string {
+  if (analysisId >= 50 && analysisId <= 56) {
+    return `Q${analysisId - 49}`;
+  }
+  return `A${analysisId}`;
+}
+
+/**
+ * MOTOR DE SINAIS: GERADO EXCLUSIVAMENTE PELAS 4 ANÁLISES PRIMÁRIAS
+ * COM DEMAIS ANÁLISES E ESTRATÉGIAS SERVINDO ESTREITAMENTE DE CONFLUÊNCIA.
  */
 export function buildStrategyTriggeredSignals(
   sumProjections: SumTriggerProjection[],
@@ -916,67 +964,22 @@ export function buildStrategyTriggeredSignals(
   now: number = Date.now(),
   options?: { allowHistorical?: boolean; minTargetTime?: number; maxTargetTime?: number },
 ): PredictiveSignal[] {
-  // Consolida gatilhos de estratégias de Soma (19 e 17) e de Estratégias E1-E15
-  const allRawTriggers: Array<{
-    code: string;
-    name: string;
-    strategyType: "Soma 19" | "Soma 17" | "E1-E15";
-    strategyKey: string;
-    description: string;
-    targetDate: Date;
-    targetTimestamp: number;
-    targetMinute: number;
-    sealType?: "yellow" | "blue";
-    strategyId?: number;
-  }> = [];
+  // 1. Isola candidatos das 4 análises primárias (ÚNICAS capazes de gerar sinal)
+  const primaryCandidates = (analysisCandidates || []).filter((ac) => {
+    if (!ac || !ac.targetDate) return false;
+    return isPrimarySignalAnalysis(ac.analysis);
+  });
 
-  for (const sp of sumProjections || []) {
-    if (!sp || !sp.targetDate) continue;
-    const rawCode = sp.code;
-    const isSum17 = sp.sumType === "Soma 17";
-    const prefix = isSum17 ? "S17" : "S19";
-    let normCode = rawCode;
-    if (rawCode === "9-10") normCode = "10-9";
-    else if (rawCode === "7-12") normCode = "12-7";
-    else if (rawCode === "13-6") normCode = "6-13";
-    else if (rawCode === "5-14") normCode = "14-5";
-    else if (rawCode === "9-8") normCode = "8-9";
-    else if (rawCode === "6-11") normCode = "11-6";
-    else if (rawCode === "3-14") normCode = "14-3";
-    const stratKey = `${prefix}_${normCode}`;
+  // Análises restantes (Minutos 0 a 9, etc.) que atuam estritamente como CONFLUÊNCIA
+  const confluenceCandidates = (analysisCandidates || []).filter((ac) => {
+    if (!ac || !ac.targetDate) return false;
+    return !isPrimarySignalAnalysis(ac.analysis);
+  });
 
-    allRawTriggers.push({
-      code: sp.code,
-      name: sp.name,
-      strategyType: sp.sumType,
-      strategyKey: stratKey,
-      description: sp.description,
-      targetDate: sp.targetDate,
-      targetTimestamp: sp.targetTimestamp,
-      targetMinute: sp.targetMinute,
-    });
-  }
+  if (primaryCandidates.length === 0) return [];
 
-  for (const cp of confirmationProjections || []) {
-    if (!cp || !cp.targetDate) continue;
-    allRawTriggers.push({
-      code: cp.strategyCode,
-      name: cp.name,
-      strategyType: "E1-E15",
-      strategyKey: cp.strategyCode,
-      description: cp.description,
-      targetDate: cp.targetDate,
-      targetTimestamp: cp.targetTimestamp,
-      targetMinute: cp.targetMinute,
-      sealType: cp.type,
-      strategyId: cp.strategyId,
-    });
-  }
-
-  if (allRawTriggers.length === 0) return [];
-
-  // Filtra projeções das estratégias (SEM LIMITE DE 60 MINUTOS)
-  const validTriggers = allRawTriggers.filter((p) => {
+  // 2. Filtra candidatos primários pelo horizonte temporal
+  const validPrimary = primaryCandidates.filter((p) => {
     const t = p.targetDate.getTime();
     if (Number.isNaN(t)) return false;
     if (options?.allowHistorical) {
@@ -984,31 +987,30 @@ export function buildStrategyTriggeredSignals(
       const max = options.maxTargetTime ?? Infinity;
       return t >= min && t <= max;
     }
-    // Sem limite superior de 60 minutos! Tolerância de até 1 minuto no passado para não perder a virada de minuto
     return t >= now - 60_000;
   });
 
-  if (validTriggers.length === 0) return [];
+  if (validPrimary.length === 0) return [];
 
-  // Agrupa gatilhos normalizando para o início do minuto
-  const normalizedTriggers = validTriggers.map((trig) => {
-    const dt = new Date(trig.targetDate.getTime());
+  // Normaliza horário do gatilho para o início do minuto
+  const normalizedPrimary = validPrimary.map((c) => {
+    const dt = new Date(c.targetDate.getTime());
     dt.setSeconds(0, 0);
     dt.setMilliseconds(0);
-    return { ...trig, normalizedDate: dt, normalizedTime: dt.getTime() };
+    return { ...c, normalizedDate: dt, normalizedTime: dt.getTime() };
   });
 
-  // Agrupa por minuto exato
-  const triggerMinuteMap = new Map<number, typeof normalizedTriggers>();
-  for (const trig of normalizedTriggers) {
-    const list = triggerMinuteMap.get(trig.normalizedTime) || [];
-    list.push(trig);
-    triggerMinuteMap.set(trig.normalizedTime, list);
+  // Agrupa candidatos primários por minuto
+  const minuteMap = new Map<number, typeof normalizedPrimary>();
+  for (const cand of normalizedPrimary) {
+    const list = minuteMap.get(cand.normalizedTime) || [];
+    list.push(cand);
+    minuteMap.set(cand.normalizedTime, list);
   }
 
-  const sortedMinutes = Array.from(triggerMinuteMap.keys()).sort((a, b) => a - b);
+  const sortedMinutes = Array.from(minuteMap.keys()).sort((a, b) => a - b);
 
-  // Clusters de proximidade temporal de até 2 min (janela primária de 3 min)
+  // Clusters de proximidade temporal de até 2 min (janela primária de 3 min M-1..M+1)
   const clusters: number[][] = [];
   let currentCluster: number[] = [];
 
@@ -1032,253 +1034,65 @@ export function buildStrategyTriggeredSignals(
   const signals: PredictiveSignal[] = [];
 
   for (const cluster of clusters) {
-    const clusterTriggers: typeof normalizedTriggers = [];
+    const clusterPrimary: typeof normalizedPrimary = [];
     for (const m of cluster) {
-      const list = triggerMinuteMap.get(m) || [];
-      clusterTriggers.push(...list);
+      const list = minuteMap.get(m) || [];
+      clusterPrimary.push(...list);
     }
-    if (clusterTriggers.length === 0) continue;
+    if (clusterPrimary.length === 0) continue;
 
-    // Determina horário representativo
     const repTimestamp = cluster[0];
     const repDate = new Date(repTimestamp);
     const clusterWindowStart = cluster[0] - 60_000;
     const clusterWindowEnd = cluster[cluster.length - 1] + 60_000;
 
-    // 1. Busca análises confluentes na janela temporal do cluster
-    const matchingAnalyses = (analysisCandidates || []).filter((ac) => {
-      if (!ac || !ac.targetDate) return false;
+    // 1. Busca confluências das Demais Análises (Minutos 0..9)
+    const matchingConfluenceAnalyses = confluenceCandidates.filter((ac) => {
       const t = ac.targetDate.getTime();
       return t >= clusterWindowStart && t <= clusterWindowEnd;
     });
 
-    const top1Analyses = matchingAnalyses.filter((ac) => ac.isTop1);
-    const top3Analyses = matchingAnalyses.filter((ac) => !ac.isTop1);
-
-    // 2. Busca outras estratégias confluentes:
-    const distinctTriggerCodes = Array.from(new Set(clusterTriggers.map((t) => t.code)));
-    const hasMultipleStrategies = clusterTriggers.length >= 2 || distinctTriggerCodes.length >= 2;
-
-    const hasAnalysisConfluence = matchingAnalyses.length > 0;
-
-    const isNoConfluence = !hasAnalysisConfluence && !hasMultipleStrategies;
-    const eTriggers = clusterTriggers.filter((t) => t.strategyType === "E1-E15");
-
-    // 🛑 Se NÃO houver confluência com análises NEM com outra estratégia, apenas E1-E15 podem gerar sinal (sem confluência)
-    if (isNoConfluence && eTriggers.length === 0) {
-      continue;
-    }
-
-    // Avaliação da hierarquia e nível do sinal:
-    let evaluation: SignalLevelEvaluation;
-
-    const formattedTriggerCodes = distinctTriggerCodes.map((c) => formatStrategyCode(c));
-    formattedTriggerCodes.sort((a, b) => {
-      const aIsE = /^E\d+$/i.test(a);
-      const bIsE = /^E\d+$/i.test(b);
-      if (aIsE && !bIsE) return -1;
-      if (!aIsE && bIsE) return 1;
-      if (aIsE && bIsE) return parseInt(a.substring(1), 10) - parseInt(b.substring(1), 10);
-      return a.localeCompare(b);
-    });
-    const triggerCodesLabel = formattedTriggerCodes.join("/");
+    // Todas as análises ativas na janela (Primárias + Confluência)
+    const allMatchingAnalyses = [...clusterPrimary, ...matchingConfluenceAnalyses];
+    const top1Analyses = allMatchingAnalyses.filter((ac) => ac.isTop1);
+    const top3Analyses = allMatchingAnalyses.filter((ac) => !ac.isTop1);
 
     const distinctTop1Analyses = Array.from(new Set(top1Analyses.map((s) => s.analysis)));
     const distinctTop3Analyses = Array.from(new Set(top3Analyses.map((s) => s.analysis)));
     const top1Count = distinctTop1Analyses.length;
     const top3Count = distinctTop3Analyses.length;
 
-    if (isNoConfluence) {
-      const eCode = formattedTriggerCodes[0] || "E";
-      evaluation = {
-        rank: SignalRank.NO_CONFLUENCE,
-        category: "no_confluence" as any,
-        groupName: "Estratégia sem Confluência",
-        label: `Estratégia ${eCode}`,
-        medal: `⚪ ${eCode} (Sem Confluência)`,
-        isAlavancagem: false,
-        isSupreme: false,
-        isRare: false,
-        isTop1: false,
-      };
-    } else if (top1Count >= 4) {
-      evaluation = {
-        rank: SignalRank.ALAVANCAGEM,
-        category: "alavancagem",
-        groupName: "Alavancagem",
-        label: `Alavancagem (${triggerCodesLabel})`,
-        medal: `🚀 ALAVANCAGEM (${top1Count}x Top 1 + Gatilho ${triggerCodesLabel})`,
-        isAlavancagem: true,
-        isSupreme: false,
-        isRare: false,
-        isTop1: true,
-      };
-    } else if ((top1Count === 2 || top1Count === 3) && top3Count >= 2) {
-      evaluation = {
-        rank: SignalRank.SUPREME,
-        category: "supreme",
-        groupName: "Supremo",
-        label: `Supremo (${triggerCodesLabel})`,
-        medal: `👑 Supremo (${top1Count}x Top 1 + Gatilho ${triggerCodesLabel})`,
-        isAlavancagem: false,
-        isSupreme: true,
-        isRare: false,
-        isTop1: true,
-      };
-    } else if (top1Count === 2 || top1Count === 3) {
-      evaluation = {
-        rank: SignalRank.RARE,
-        category: "rare",
-        groupName: "Raro",
-        label: `Raro (${triggerCodesLabel})`,
-        medal: `💎 Raro (${top1Count}x Top 1 + Gatilho ${triggerCodesLabel})`,
-        isAlavancagem: false,
-        isSupreme: false,
-        isRare: true,
-        isTop1: true,
-      };
-    } else if (top1Count === 1 && top3Count >= 1) {
-      evaluation = {
-        rank: SignalRank.TOP1_TOP3,
-        category: "top1_top3",
-        groupName: "Top 1 & Top 3",
-        label: `Top 1 & Top 3 (${triggerCodesLabel})`,
-        medal: `⚡ Top 1 & Top 3 (Gatilho ${triggerCodesLabel})`,
-        isAlavancagem: false,
-        isSupreme: false,
-        isRare: false,
-        isTop1: true,
-      };
-    } else if (top1Count === 1) {
-      // 1 Top 1 + Gatilho da Estratégia
-      evaluation = {
-        rank: SignalRank.TOP1_TOP3,
-        category: "top1_top3",
-        groupName: "Top 1 & Estratégia",
-        label: `Gatilho ${triggerCodesLabel} + A${distinctTop1Analyses[0]}`,
-        medal: `🥇 Ouro (Gatilho ${triggerCodesLabel} + A${distinctTop1Analyses[0]})`,
-        isAlavancagem: false,
-        isSupreme: false,
-        isRare: false,
-        isTop1: true,
-      };
-    } else if (top3Count >= 1) {
-      // Top 2/3 + Gatilho da Estratégia
-      evaluation = {
-        rank: SignalRank.TOP1_TOP3,
-        category: "top1_top3",
-        groupName: "Estratégia & Análises",
-        label: `Gatilho ${triggerCodesLabel} + A${distinctTop3Analyses.join(",")}`,
-        medal: `🥈 Prata (Gatilho ${triggerCodesLabel} + A${distinctTop3Analyses.join(",")})`,
-        isAlavancagem: false,
-        isSupreme: false,
-        isRare: false,
-        isTop1: false,
-      };
-    } else if (hasMultipleStrategies) {
-      // Confluência entre múltiplas estratégias (ex: E1 + E5, E1 + 109, 109 + 118)
-      evaluation = {
-        rank: SignalRank.RARE,
-        category: "rare",
-        groupName: "Confluência de Estratégias",
-        label: `Gatilhos ${formattedTriggerCodes.join(" + ")}`,
-        medal: `💎 Dupla Estratégia (${formattedTriggerCodes.join(" + ")})`,
-        isAlavancagem: false,
-        isSupreme: false,
-        isRare: true,
-        isTop1: true,
-      };
-    } else {
-      evaluation = {
-        rank: SignalRank.TOP1_TOP3,
-        category: "top1_top3",
-        groupName: "Estratégia Confirmada",
-        label: `Gatilho ${triggerCodesLabel}`,
-        medal: `⚡ Estratégia ${triggerCodesLabel}`,
-        isAlavancagem: false,
-        isSupreme: false,
-        isRare: false,
-        isTop1: true,
-      };
-    }
-
-    // Calcula percentual de assertividade proporcional
-    const analysisPcts = matchingAnalyses
-      .map((a) => a.pct)
-      .filter((p) => typeof p === "number" && p > 0);
-    const avgPct = isNoConfluence
-      ? 75.0
-      : analysisPcts.length > 0
-        ? Math.round((analysisPcts.reduce((a, b) => a + b, 0) / analysisPcts.length) * 10) / 10
-        : hasMultipleStrategies
-          ? 88.0
-          : 80.0;
-
-    // Constrói fontes consolidadas
-    const allSources = matchingAnalyses.map((a) => ({
-      analysis: a.analysis,
-      value: a.value,
-      pct: a.pct,
-      top3: !a.isTop1,
-      rank: a.rank,
-      cycleKey: a.cycleKey,
-    }));
-
-    // Extrai e unifica selos e confirmações de E1-E15 presentes no cluster
-    const clusterConfirmed: ConfirmedStrategyInfo[] = [];
-    clusterTriggers.forEach((trig) => {
-      if (trig.strategyType === "E1-E15" && trig.strategyId) {
-        clusterConfirmed.push({
-          id: trig.strategyId,
-          code: trig.code,
-          name: trig.name,
-          type: trig.sealType || (trig.strategyId <= 10 ? "yellow" : "blue"),
-          description: trig.description,
-          calculatedTime: trig.targetDate.toISOString().substring(11, 16),
-          calculatedMinute: trig.targetMinute,
-        });
-      }
-    });
-
-    (confirmationProjections || []).forEach((cp) => {
-      if (!cp || !cp.targetDate) return;
+    // 2. Busca confluências das Estratégias (E1-E15 e Somas)
+    const matchingConfProjections = (confirmationProjections || []).filter((cp) => {
+      if (!cp || !cp.targetDate) return false;
       const t = cp.targetDate.getTime();
-      if (t >= clusterWindowStart && t <= clusterWindowEnd) {
-        if (!clusterConfirmed.some((c) => c.code === cp.strategyCode)) {
-          clusterConfirmed.push({
-            id: cp.strategyId,
-            code: cp.strategyCode,
-            name: cp.name,
-            type: cp.type,
-            description: cp.description,
-            calculatedTime: cp.targetDate.toISOString().substring(11, 16),
-            calculatedMinute: cp.targetMinute,
-          });
-        }
-      }
+      return t >= clusterWindowStart && t <= clusterWindowEnd;
     });
 
-    // 1. Coleta e formata todas as estratégias (gatilho + confirmadas)
-    // Sem percentual e com hífen removido de pares de soma (ex: 14-5 vira 145)
-    const rawStrategies: string[] = [...distinctTriggerCodes];
-    clusterTriggers.forEach((t) => {
-      if (t.code) rawStrategies.push(t.code);
+    const matchingSumProjections = (sumProjections || []).filter((sp) => {
+      if (!sp || !sp.targetDate) return false;
+      const t = sp.targetDate.getTime();
+      return t >= clusterWindowStart && t <= clusterWindowEnd;
     });
-    clusterConfirmed.forEach((c) => {
-      if (c.code) rawStrategies.push(c.code);
+
+    const rawStrategyCodes: string[] = [];
+    matchingConfProjections.forEach((cp) => {
+      if (cp.strategyCode) rawStrategyCodes.push(cp.strategyCode);
+    });
+    matchingSumProjections.forEach((sp) => {
+      if (sp.code) rawStrategyCodes.push(sp.code);
     });
 
     const distinctStrategies: string[] = [];
     const seenStrat = new Set<string>();
-    rawStrategies.forEach((st) => {
-      const formatted = formatStrategyCode(st);
-      if (formatted && !seenStrat.has(formatted)) {
-        seenStrat.add(formatted);
-        distinctStrategies.push(formatted);
+    rawStrategyCodes.forEach((st) => {
+      const fmt = formatStrategyCode(st);
+      if (fmt && !seenStrat.has(fmt)) {
+        seenStrat.add(fmt);
+        distinctStrategies.push(fmt);
       }
     });
 
-    // Ordena: E1-E15 primeiro (ex: E1), depois somas numéricas (ex: 145)
     distinctStrategies.sort((a, b) => {
       const aIsE = /^E\d+$/i.test(a);
       const bIsE = /^E\d+$/i.test(b);
@@ -1288,19 +1102,129 @@ export function buildStrategyTriggeredSignals(
       return a.localeCompare(b);
     });
 
-    // 2. Coleta e formata análises (ex: A1-5 88%)
-    const formattedAnalyses: string[] = [];
-    const seenAnalyses = new Set<string>();
-    matchingAnalyses.forEach((a) => {
-      const key = `${a.analysis}-${a.value}`;
-      if (!seenAnalyses.has(key)) {
-        seenAnalyses.add(key);
-        const pctStr = typeof a.pct === "number" && a.pct > 0 ? ` ${Math.round(a.pct)}%` : "";
-        formattedAnalyses.push(`A${a.analysis}-${a.value}${pctStr}`);
+    const hasStrategyConfluence = distinctStrategies.length > 0;
+    const strategyCodesLabel = distinctStrategies.join("/");
+
+    // Análises primárias que originaram o sinal
+    const distinctPrimaryAnalyses = Array.from(new Set(clusterPrimary.map((p) => p.analysis)));
+    const primaryCodesLabel = distinctPrimaryAnalyses.map(formatAnalysisCode).join("/");
+    const primaryGroupName = getAnalysisGroupName(distinctPrimaryAnalyses[0]);
+
+    // Avaliação da hierarquia e nível do sinal baseada nas confluências
+    let evaluation: SignalLevelEvaluation;
+
+    if (top1Count >= 4) {
+      evaluation = {
+        rank: SignalRank.ALAVANCAGEM,
+        category: "alavancagem",
+        groupName: "Alavancagem",
+        label: `Alavancagem (${primaryCodesLabel})`,
+        medal: `🚀 ALAVANCAGEM (${top1Count}x Top 1 · ${primaryGroupName})`,
+        isAlavancagem: true,
+        isSupreme: false,
+        isRare: false,
+        isTop1: true,
+      };
+    } else if ((top1Count === 2 || top1Count === 3) && (top3Count >= 2 || hasStrategyConfluence)) {
+      evaluation = {
+        rank: SignalRank.SUPREME,
+        category: "supreme",
+        groupName: "Supremo",
+        label: `Supremo (${primaryCodesLabel}${hasStrategyConfluence ? ` + ${strategyCodesLabel}` : ""})`,
+        medal: `👑 Supremo (${top1Count}x Top 1 · ${primaryGroupName})`,
+        isAlavancagem: false,
+        isSupreme: true,
+        isRare: false,
+        isTop1: true,
+      };
+    } else if (top1Count === 2 || top1Count === 3 || (top1Count === 1 && hasStrategyConfluence)) {
+      evaluation = {
+        rank: SignalRank.RARE,
+        category: "rare",
+        groupName: "Raro",
+        label: `Raro (${primaryCodesLabel}${hasStrategyConfluence ? ` + ${strategyCodesLabel}` : ""})`,
+        medal: `💎 Raro (${top1Count}x Top 1 · ${primaryGroupName})`,
+        isAlavancagem: false,
+        isSupreme: false,
+        isRare: true,
+        isTop1: true,
+      };
+    } else if (top1Count === 1 && (top3Count >= 1 || matchingConfluenceAnalyses.length >= 1)) {
+      evaluation = {
+        rank: SignalRank.TOP1_TOP3,
+        category: "top1_top3",
+        groupName: "Top 1 & Confluência",
+        label: `Top 1 & Confluência (${primaryCodesLabel})`,
+        medal: `⚡ Top 1 (${primaryCodesLabel} · ${primaryGroupName})`,
+        isAlavancagem: false,
+        isSupreme: false,
+        isRare: false,
+        isTop1: true,
+      };
+    } else {
+      evaluation = {
+        rank: SignalRank.TOP1_TOP3,
+        category: "top1_top3",
+        groupName: primaryGroupName,
+        label: `${primaryGroupName} (${primaryCodesLabel})`,
+        medal: `🥇 Ouro (${primaryCodesLabel} · ${primaryGroupName})`,
+        isAlavancagem: false,
+        isSupreme: false,
+        isRare: false,
+        isTop1: true,
+      };
+    }
+
+    // Calcula assertividade teórica média
+    const analysisPcts = allMatchingAnalyses
+      .map((a) => a.pct)
+      .filter((p) => typeof p === "number" && p > 0);
+    const avgPct =
+      analysisPcts.length > 0
+        ? Math.round((analysisPcts.reduce((a, b) => a + b, 0) / analysisPcts.length) * 10) / 10
+        : hasStrategyConfluence
+          ? 80.0
+          : 75.0;
+
+    // Fontes consolidadas
+    const allSources = allMatchingAnalyses.map((a) => ({
+      analysis: a.analysis,
+      value: a.value,
+      pct: a.pct,
+      top3: !a.isTop1,
+      rank: a.rank,
+      cycleKey: a.cycleKey,
+    }));
+
+    // Estratégias confirmadas na janela
+    const clusterConfirmed: ConfirmedStrategyInfo[] = [];
+    matchingConfProjections.forEach((cp) => {
+      if (!clusterConfirmed.some((c) => c.code === cp.strategyCode)) {
+        clusterConfirmed.push({
+          id: cp.strategyId,
+          code: cp.strategyCode,
+          name: cp.name,
+          type: cp.type,
+          description: cp.description,
+          calculatedTime: cp.targetDate.toISOString().substring(11, 16),
+          calculatedMinute: cp.targetMinute,
+        });
       }
     });
 
-    // 3. Constrói texto de confluência: Estratégias ANTES das análises e SEM percentual
+    // Formata textos de confluência
+    const formattedAnalyses: string[] = [];
+    const seenAnalyses = new Set<string>();
+    allMatchingAnalyses.forEach((a) => {
+      const code = formatAnalysisCode(a.analysis);
+      const key = `${code}-${a.value}`;
+      if (!seenAnalyses.has(key)) {
+        seenAnalyses.add(key);
+        const pctStr = typeof a.pct === "number" && a.pct > 0 ? ` ${Math.round(a.pct)}%` : "";
+        formattedAnalyses.push(`${code}-${a.value}${pctStr}`);
+      }
+    });
+
     const confluenceParts: string[] = [];
     if (distinctStrategies.length > 0) {
       confluenceParts.push(distinctStrategies.join(", "));
@@ -1308,21 +1232,21 @@ export function buildStrategyTriggeredSignals(
     if (formattedAnalyses.length > 0) {
       confluenceParts.push(formattedAnalyses.join(", "));
     }
-    const confluenceText = isNoConfluence
-      ? `Estratégia ${triggerCodesLabel} (Sem Confluência)`
-      : confluenceParts.join(" · ");
 
-    const isHighTendency = matchingAnalyses.some((a) => a.isHighTendency);
+    const confluenceText =
+      confluenceParts.length > 0
+        ? confluenceParts.join(" · ")
+        : `${primaryGroupName} (${primaryCodesLabel})`;
+
+    const isHighTendency = allMatchingAnalyses.some((a) => a.isHighTendency);
     const isPossibleRec = activeRecAlerts.some((alert) => {
       const signalTime = repDate.getTime();
       return signalTime >= alert.start && signalTime <= alert.end;
     });
 
     const canonicalKey = getCanonicalSignalKey(repDate);
-
-    // Estratégia principal do sinal
-    const firstTrig = clusterTriggers[0];
-    const computedStrategyKey = firstTrig?.strategyKey || distinctTriggerCodes[0] || "E1";
+    const computedStrategyKey =
+      clusterPrimary[0]?.strategyKey || `A${clusterPrimary[0]?.analysis}` || "A2";
 
     const hasYellowSeal = clusterConfirmed.some((c) => c.type === "yellow");
     const hasBlueSeal = clusterConfirmed.some((c) => c.type === "blue");
@@ -1346,7 +1270,7 @@ export function buildStrategyTriggeredSignals(
       isAlavancagem: evaluation.isAlavancagem,
       isRare: evaluation.isRare,
       isSupreme: evaluation.isSupreme,
-      isNoConfluence,
+      isNoConfluence: false,
       strategyKey: computedStrategyKey,
       sources: allSources,
       clusterTimestamps: cluster,

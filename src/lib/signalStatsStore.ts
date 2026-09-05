@@ -194,8 +194,14 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             signal.sources.forEach((src) => {
               if (src && src.analysis) {
                 keysToUpdate.add(`A${src.analysis}`);
+                if (src.analysis >= 50 && src.analysis <= 56) {
+                  keysToUpdate.add(`Q${src.analysis - 49}`);
+                }
               }
             });
+          }
+          if (signal.strategyKey && /^[AQ]\d+/i.test(signal.strategyKey)) {
+            keysToUpdate.add(signal.strategyKey.toUpperCase());
           }
 
           keysToUpdate.forEach((k) => {
@@ -264,39 +270,39 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
           incomingSignals
             .filter((s) => (s.timestamp || 0) > effectiveClearedAt)
             .forEach((incoming) => {
-            const existing = signalMap.get(incoming.key);
-            if (!existing) {
-              signalMap.set(incoming.key, incoming);
-            } else {
-              // Se qualquer um dos dois (local ou servidor) comprovou WIN ("green"), prevalece "green" (WIN)!
-              const resolvedOutcome =
-                existing.outcome === "green" || incoming.outcome === "green"
-                  ? "green"
-                  : existing.outcome === "red" || incoming.outcome === "red"
-                    ? "red"
-                    : "pending";
-              const resolvedLabel =
-                resolvedOutcome === "green"
-                  ? "WIN"
-                  : resolvedOutcome === "red"
-                    ? "LOSS"
-                    : "PENDING";
+              const existing = signalMap.get(incoming.key);
+              if (!existing) {
+                signalMap.set(incoming.key, incoming);
+              } else {
+                // Se qualquer um dos dois (local ou servidor) comprovou WIN ("green"), prevalece "green" (WIN)!
+                const resolvedOutcome =
+                  existing.outcome === "green" || incoming.outcome === "green"
+                    ? "green"
+                    : existing.outcome === "red" || incoming.outcome === "red"
+                      ? "red"
+                      : "pending";
+                const resolvedLabel =
+                  resolvedOutcome === "green"
+                    ? "WIN"
+                    : resolvedOutcome === "red"
+                      ? "LOSS"
+                      : "PENDING";
 
-              signalMap.set(incoming.key, {
-                ...incoming,
-                ...existing,
-                outcome: resolvedOutcome,
-                label: resolvedLabel,
-                resultTime: existing.resultTime || incoming.resultTime,
-                winningResultId: existing.winningResultId || incoming.winningResultId,
-                winningResultCreatedAt:
-                  existing.winningResultCreatedAt || incoming.winningResultCreatedAt,
-                audit: incoming.audit || existing.audit,
-                checkedResults: incoming.checkedResults ?? existing.checkedResults,
-                windowLabel: incoming.windowLabel || existing.windowLabel,
-              });
-            }
-          });
+                signalMap.set(incoming.key, {
+                  ...incoming,
+                  ...existing,
+                  outcome: resolvedOutcome,
+                  label: resolvedLabel,
+                  resultTime: existing.resultTime || incoming.resultTime,
+                  winningResultId: existing.winningResultId || incoming.winningResultId,
+                  winningResultCreatedAt:
+                    existing.winningResultCreatedAt || incoming.winningResultCreatedAt,
+                  audit: incoming.audit || existing.audit,
+                  checkedResults: incoming.checkedResults ?? existing.checkedResults,
+                  windowLabel: incoming.windowLabel || existing.windowLabel,
+                });
+              }
+            });
 
           const mergedRecent = Array.from(signalMap.values())
             .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))

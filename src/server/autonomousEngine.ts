@@ -52,6 +52,11 @@ import {
   type RawCandidate,
 } from "../lib/signalHierarchy";
 import { auditSignalWithRounds, type AuditResultItem } from "../lib/signalAuditEngine";
+import {
+  detectAllColorPatternBreaks,
+  colorBreaksToCycles,
+  COLOR_PATTERNS,
+} from "../lib/colorPatternBreaks";
 import type { PredictiveSignal } from "../lib/signalsStore";
 import type { SignalHistoryEntry, AnalysisStat } from "../lib/signalStatsStore";
 
@@ -599,8 +604,16 @@ class AutonomousAuditEngine {
 
     if (Array.isArray(signal.sources)) {
       signal.sources.forEach((src) => {
-        if (src && src.analysis) keysToUpdate.add(`A${src.analysis}`);
+        if (src && src.analysis) {
+          keysToUpdate.add(`A${src.analysis}`);
+          if (src.analysis >= 50 && src.analysis <= 56) {
+            keysToUpdate.add(`Q${src.analysis - 49}`);
+          }
+        }
       });
+    }
+    if (signal.strategyKey && /^[AQ]\d+/i.test(signal.strategyKey)) {
+      keysToUpdate.add(signal.strategyKey.toUpperCase());
     }
 
     keysToUpdate.forEach((k) => {
@@ -666,12 +679,18 @@ class AutonomousAuditEngine {
       engine[100 + i] = buildSecondary(rows, i);
     }
 
+    const colorBreakCyclesMap = detectAllColorPatternBreaks(rows);
+    COLOR_PATTERNS.forEach((p) => {
+      const brks = colorBreakCyclesMap[p.id] || [];
+      engine[p.analysisId] = colorBreaksToCycles(brks, rows);
+    });
+
     const recAlerts = buildRecAlerts(rows);
 
     const activeList: Array<{ analysis: number; value: number; open: Cycle }> = [];
     const mainIds = [
       2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-      30, 31, 32, 33, 34, 35, 36,
+      30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
     ];
 
     mainIds.forEach((a) => {
@@ -724,6 +743,11 @@ class AutonomousAuditEngine {
             return sigTime >= alertStart && sigTime <= alertEnd;
           });
 
+          const stratKey =
+            item.analysis >= 50 && item.analysis <= 56
+              ? `Q${item.analysis - 49}`
+              : `A${item.analysis}`;
+
           rawCandidates.push({
             analysis: item.analysis,
             value: item.value,
@@ -733,7 +757,7 @@ class AutonomousAuditEngine {
             rank: 1,
             isHighTendency: isTendency,
             isRecAlert: isPossibleRec,
-            strategyKey: `A${item.analysis}`,
+            strategyKey: stratKey,
             cycleKey,
           });
         }
@@ -757,6 +781,11 @@ class AutonomousAuditEngine {
             return sigTime >= alertStart && sigTime <= alertEnd;
           });
 
+          const candStratKey =
+            item.analysis >= 50 && item.analysis <= 56
+              ? `Q${item.analysis - 49}`
+              : `A${item.analysis}`;
+
           rawCandidates.push({
             analysis: item.analysis,
             value: item.value,
@@ -766,7 +795,7 @@ class AutonomousAuditEngine {
             rank: idx + 2,
             isHighTendency: isTendency,
             isRecAlert: isPossibleRec,
-            strategyKey: `A${item.analysis}`,
+            strategyKey: candStratKey,
             cycleKey,
           });
         }

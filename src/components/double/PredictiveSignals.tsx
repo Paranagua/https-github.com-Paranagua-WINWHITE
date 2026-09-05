@@ -28,6 +28,11 @@ import {
 import { computeAllSumTriggerProjections } from "@/lib/sum19Strategies";
 import { computeConfirmationProjections } from "@/lib/confirmationStrategies";
 import {
+  detectAllColorPatternBreaks,
+  colorBreaksToCycles,
+  COLOR_PATTERNS,
+} from "@/lib/colorPatternBreaks";
+import {
   buildA2,
   buildA3,
   buildA4,
@@ -224,6 +229,21 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
   const cardStrategies = extractSignalStrategies(s);
   const cardAnalyses = extractSignalAnalyses(s);
 
+  const primarySources = (s.sources || []).filter((src: any) => {
+    const a = src.analysis;
+    return [2, 19, 20, 10, 11, 12, 13, 21, 14, 15, 16, 50, 51, 52, 53, 54, 55, 56].includes(a);
+  });
+  const primaryCodes = Array.from(
+    new Set(
+      primarySources.map((src: any) =>
+        src.analysis >= 50 && src.analysis <= 56 ? `Q${src.analysis - 49}` : `A${src.analysis}`,
+      ),
+    ),
+  );
+  if (primaryCodes.length === 0 && s.strategyKey && /^[AQ]\d+/i.test(s.strategyKey)) {
+    primaryCodes.push(s.strategyKey.toUpperCase());
+  }
+
   return (
     <div
       key={s.key}
@@ -249,21 +269,26 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
             }`}
           >
             {s.title || "Sinal"}
-            <span
-              className={`text-[9px] px-1.5 py-0.5 rounded border font-bold ${
-                isAlavancagem
-                  ? "bg-slate-100 border-slate-300 text-slate-800"
-                  : isNoConfluence
-                    ? "bg-zinc-800 border-zinc-700 text-zinc-300"
-                    : "bg-white/5 border-white/10 text-white/70"
-              }`}
-            >
-              {cardStrategies.length > 0
-                ? cardStrategies.join(", ")
-                : s.sources?.[0]?.analysis
-                  ? `A${s.sources[0].analysis}`
-                  : "AUTO"}
-            </span>
+            {primaryCodes.length > 0 ? (
+              <span
+                className={`text-[9px] px-1.5 py-0.5 rounded border font-bold ${
+                  isAlavancagem
+                    ? "bg-slate-100 border-slate-300 text-slate-800"
+                    : "bg-white/10 border-white/20 text-white"
+                }`}
+                title="Análise Primária Geradora do Sinal"
+              >
+                {primaryCodes.join(", ")}
+              </span>
+            ) : null}
+            {cardStrategies.length > 0 && (
+              <span
+                className="text-[9px] px-1.5 py-0.5 rounded border font-bold bg-amber-500/15 border-amber-500/30 text-amber-300"
+                title="Estratégias de Confluência"
+              >
+                +{cardStrategies.join(", ")}
+              </span>
+            )}
           </div>
           {isAlavancagem ? (
             <span className="flex items-center gap-0.5 rounded-full bg-slate-950 px-2 py-0.5 text-[8px] font-black text-white border border-slate-800 shadow-sm animate-pulse">
@@ -555,6 +580,14 @@ export function PredictiveSignals() {
         35: buildA2Minuto8(rows),
         36: buildA1Minuto9(rows),
       };
+
+      // Adiciona as 7 Quebras de Padrões de Cores (IDs 50 a 56)
+      const colorBreakCyclesMap = detectAllColorPatternBreaks(rows);
+      COLOR_PATTERNS.forEach((p) => {
+        const brks = colorBreakCyclesMap[p.id] || [];
+        main[p.analysisId] = colorBreaksToCycles(brks, rows);
+      });
+
       const secondary: Record<number, Cycle[]> = {};
       for (let i = 1; i <= 9; i++) {
         secondary[100 + i] = buildSecondary(rows, i);
@@ -572,7 +605,7 @@ export function PredictiveSignals() {
       const out: Array<{ analysis: number; value: number; open: Cycle }> = [];
       const mainIds = [
         2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-        30, 31, 32, 33, 34, 35, 36,
+        30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
       ];
       mainIds.forEach((a) => {
         const cycles = engine[a] || [];
@@ -687,6 +720,11 @@ export function PredictiveSignals() {
               return signalTime >= alertStart && signalTime <= alertEnd;
             });
 
+            const stratKey =
+              item.analysis >= 50 && item.analysis <= 56
+                ? `Q${item.analysis - 49}`
+                : `A${item.analysis}`;
+
             rawCandidates.push({
               analysis: item.analysis,
               value: item.value,
@@ -696,7 +734,7 @@ export function PredictiveSignals() {
               rank: 1,
               isHighTendency: isTendency,
               isRecAlert: isPossibleRec,
-              strategyKey: `A${item.analysis}`,
+              strategyKey: stratKey,
               cycleKey,
             });
           }
@@ -721,6 +759,11 @@ export function PredictiveSignals() {
               return signalTime >= alertStart && signalTime <= alertEnd;
             });
 
+            const stratKey =
+              item.analysis >= 50 && item.analysis <= 56
+                ? `Q${item.analysis - 49}`
+                : `A${item.analysis}`;
+
             rawCandidates.push({
               analysis: item.analysis,
               value: item.value,
@@ -730,7 +773,7 @@ export function PredictiveSignals() {
               rank: idx + 2,
               isHighTendency: isTendency,
               isRecAlert: isPossibleRec,
-              strategyKey: `A${item.analysis}`,
+              strategyKey: stratKey,
               cycleKey,
             });
           }
@@ -918,15 +961,13 @@ export function PredictiveSignals() {
         };
       })
       .filter((s) => {
+        if (s.isNoConfluence || s.category === "no_confluence") return false;
         const rank = getSignalRank(s);
         return (
           rank === SignalRank.ALAVANCAGEM ||
           rank === SignalRank.SUPREME ||
           rank === SignalRank.RARE ||
-          rank === SignalRank.TOP1_TOP3 ||
-          rank === SignalRank.NO_CONFLUENCE ||
-          s.isNoConfluence ||
-          s.category === "no_confluence"
+          rank === SignalRank.TOP1_TOP3
         );
       })
       .sort((a, b) => {
@@ -969,17 +1010,6 @@ export function PredictiveSignals() {
       if (s.isNoConfluence || s.category === "no_confluence") return false;
       const rank = getSignalRank(s);
       return rank === SignalRank.TOP1_TOP3;
-    });
-  }, [activeSignals]);
-
-  // 5. ⚪ E1–E15 SEM CONFLUÊNCIA (Card cinza na parte inferior)
-  const noConfluenceSignals = useMemo(() => {
-    return activeSignals.filter((s) => {
-      return (
-        !!s.isNoConfluence ||
-        s.category === "no_confluence" ||
-        getSignalRank(s) === SignalRank.NO_CONFLUENCE
-      );
     });
   }, [activeSignals]);
 
@@ -1211,31 +1241,11 @@ export function PredictiveSignals() {
               </section>
             )}
 
-            {/* 5. ⚪ E1–E15 (Sem Confluência - Card cinza na parte inferior) */}
-            {noConfluenceSignals.length > 0 && (
-              <section className="space-y-3 pt-6 border-t border-zinc-800/80">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-400">
-                    <span className="h-2.5 w-2.5 rounded-full bg-zinc-500 ring-2 ring-zinc-600/40" />
-                    ⚪ E1–E15 (Sem Confluência)
-                  </div>
-                  <span className="text-[11px] text-zinc-500 font-medium">
-                    Card cinza · Não contabilizado no painel auditor até obter confluência
-                  </span>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {noConfluenceSignals.map((s) => (
-                    <SignalCard key={s.key} signal={s} />
-                  ))}
-                </div>
-              </section>
-            )}
-
             {activeSignals.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-10">
                 {loading
                   ? "Carregando resultados e calculando sinais..."
-                  : "Sem sinais ativos no momento (aguardando confluências Top 1 & Top 3, Raro, Supremo, Alavancagem ou estratégias E1–E15)."}
+                  : "Sem sinais ativos no momento (aguardando confluências Top 1 & Top 3, Raro, Supremo ou Alavancagem das 4 análises primárias)."}
               </p>
             )}
           </div>

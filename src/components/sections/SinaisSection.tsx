@@ -28,293 +28,204 @@ import {
   formatStrategyCode,
 } from "@/lib/signalHierarchy";
 
-interface StrategyMetadataItem {
+interface PrimaryAnalysisMetadataItem {
   key: string;
+  analysisId: number;
   name: string;
   shortLabel: string;
-  category: "soma19" | "soma17" | "confirmacao";
+  category: "pedras" | "sequencia" | "somas" | "cores";
   categoryLabel: string;
   badge: string;
   description: string;
 }
 
-const ALL_STRATEGIES_METADATA: StrategyMetadataItem[] = [
-  // Gatilhos de Soma 19 (Disparo)
+const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
+  // 1. Padrões de Pedra (3 análises)
   {
-    key: "S19_10-9",
-    name: "Soma 19 · 10-9 / 9-10",
-    shortLabel: "10-9 / 9-10",
-    category: "soma19",
-    categoryLabel: "Gatilho Soma 19",
+    key: "A2",
+    analysisId: 2,
+    name: "Análise 2 · Repetição Simples",
+    shortLabel: "A2",
+    category: "pedras",
+    categoryLabel: "Padrões de Pedra",
     badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-    description: "2 pedras seguintes + minuto de p1",
+    description: "Duas pedras iguais consecutivas",
   },
   {
-    key: "S19_11-8",
-    name: "Soma 19 · 11-8",
-    shortLabel: "11-8",
-    category: "soma19",
-    categoryLabel: "Gatilho Soma 19",
+    key: "A19",
+    analysisId: 19,
+    name: "Análise 19 · Sanduíche Pontas",
+    shortLabel: "A19",
+    category: "pedras",
+    categoryLabel: "Padrões de Pedra",
     badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-    description: "4 pedras seguintes + minuto do gatilho",
+    description: "Mesma pedra nas pontas de 3 giros (X - Y - X)",
   },
   {
-    key: "S19_8-11",
-    name: "Soma 19 · 8-11",
-    shortLabel: "8-11",
-    category: "soma19",
-    categoryLabel: "Gatilho Soma 19",
+    key: "A20",
+    analysisId: 20,
+    name: "Análise 20 · Sanduíche Meio",
+    shortLabel: "A20",
+    category: "pedras",
+    categoryLabel: "Padrões de Pedra",
     badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-    description: "2 pedras seguintes + minuto do gatilho",
-  },
-  {
-    key: "S19_12-7",
-    name: "Soma 19 · 12-7 / 7-12",
-    shortLabel: "12-7 / 7-12",
-    category: "soma19",
-    categoryLabel: "Gatilho Soma 19",
-    badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-    description: "4 pedras seguintes + minuto do gatilho",
-  },
-  {
-    key: "S19_6-13",
-    name: "Soma 19 · 6-13 / 13-6",
-    shortLabel: "6-13 / 13-6",
-    category: "soma19",
-    categoryLabel: "Gatilho Soma 19",
-    badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-    description: "2 pedras seguintes + minuto anterior",
-  },
-  {
-    key: "S19_14-5",
-    name: "Soma 19 · 14-5 / 5-14",
-    shortLabel: "14-5 / 5-14",
-    category: "soma19",
-    categoryLabel: "Gatilho Soma 19",
-    badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-    description: "2 pedras seguintes + minuto do gatilho",
+    description: "Pedra intermediária no padrão sanduíche",
   },
 
-  // Gatilhos de Soma 17 (Disparo)
+  // 2. Gatilhos de Sequência (5 análises)
   {
-    key: "S17_10-7",
-    name: "Soma 17 · 10-7",
-    shortLabel: "10-7 (+15m)",
-    category: "soma17",
-    categoryLabel: "Gatilho Soma 17",
+    key: "A10",
+    analysisId: 10,
+    name: "Análise 10 · Sequência 8 → 11",
+    shortLabel: "A10",
+    category: "sequencia",
+    categoryLabel: "Gatilhos de Sequência",
     badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
-    description: "Minuto do gatilho + 15 minutos",
+    description: "Transição direta do número 8 para o número 11",
   },
   {
-    key: "S17_7-10",
-    name: "Soma 17 · 7-10",
-    shortLabel: "7-10 (+7m)",
-    category: "soma17",
-    categoryLabel: "Gatilho Soma 17",
+    key: "A11",
+    analysisId: 11,
+    name: "Análise 11 · Repetição 11 → 11",
+    shortLabel: "A11",
+    category: "sequencia",
+    categoryLabel: "Gatilhos de Sequência",
     badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
-    description: "Minuto do gatilho + 7 minutos",
+    description: "Repetição consecutiva do número 11",
   },
   {
-    key: "S17_8-9",
-    name: "Soma 17 · 8-9 / 9-8",
-    shortLabel: "8-9 / 9-8",
-    category: "soma17",
-    categoryLabel: "Gatilho Soma 17",
+    key: "A12",
+    analysisId: 12,
+    name: "Análise 12 · Sequência 4 → 11",
+    shortLabel: "A12",
+    category: "sequencia",
+    categoryLabel: "Gatilhos de Sequência",
     badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
-    description: "4 pedras anteriores + minuto do gatilho",
+    description: "Transição do número 4 para o número 11",
   },
   {
-    key: "S17_11-6",
-    name: "Soma 17 · 11-6 / 6-11",
-    shortLabel: "11-6 / 6-11",
-    category: "soma17",
-    categoryLabel: "Gatilho Soma 17",
+    key: "A13",
+    analysisId: 13,
+    name: "Análise 13 · Sequência 4 ↔ 14",
+    shortLabel: "A13",
+    category: "sequencia",
+    categoryLabel: "Gatilhos de Sequência",
     badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
-    description: "3 pedras seguintes + minuto do gatilho",
+    description: "Gatilho reversível entre as pedras 4 e 14",
   },
   {
-    key: "S17_5-12",
-    name: "Soma 17 · 5-12",
-    shortLabel: "5-12",
-    category: "soma17",
-    categoryLabel: "Gatilho Soma 17",
+    key: "A21",
+    analysisId: 21,
+    name: "Análise 21 · Sequência 7 ↔ 11",
+    shortLabel: "A21",
+    category: "sequencia",
+    categoryLabel: "Gatilhos de Sequência",
     badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
-    description: "1 pedra seguinte + minuto anterior ao gatilho",
-  },
-  {
-    key: "S17_12-5",
-    name: "Soma 17 · 12-5",
-    shortLabel: "12-5 (+1m)",
-    category: "soma17",
-    categoryLabel: "Gatilho Soma 17",
-    badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
-    description: "3 pedras seguintes + minuto do gatilho + 1",
-  },
-  {
-    key: "S17_13-4",
-    name: "Soma 17 · 13-4",
-    shortLabel: "13-4",
-    category: "soma17",
-    categoryLabel: "Gatilho Soma 17",
-    badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
-    description: "2 seguintes e 1 anterior + horário do gatilho",
-  },
-  {
-    key: "S17_4-13",
-    name: "Soma 17 · 4-13",
-    shortLabel: "4-13",
-    category: "soma17",
-    categoryLabel: "Gatilho Soma 17",
-    badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
-    description: "2 anteriores ao minuto do gatilho",
-  },
-  {
-    key: "S17_14-3",
-    name: "Soma 17 · 14-3 / 3-14",
-    shortLabel: "14-3 / 3-14 (+37m)",
-    category: "soma17",
-    categoryLabel: "Gatilho Soma 17",
-    badge: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
-    description: "Minuto do gatilho + 37 minutos",
+    description: "Gatilho reversível entre as pedras 7 e 11",
   },
 
-  // Estratégias de Envio E1 a E10 (Selo Amarelo)
+  // 3. Somas Consecutivas (3 análises)
   {
-    key: "E1",
-    name: "E1 · Minuto + Anterior",
-    shortLabel: "E1",
-    category: "confirmacao",
-    categoryLabel: "Gatilho E1-E10",
-    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-    description: "Minuto do branco + pedra anterior",
+    key: "A14",
+    analysisId: 14,
+    name: "Análise 14 · Soma 17",
+    shortLabel: "A14",
+    category: "somas",
+    categoryLabel: "Somas Consecutivas",
+    badge: "bg-violet-500/15 text-violet-400 border-violet-500/30",
+    description: "Soma de 2 pedras consecutivas igual a 17",
   },
   {
-    key: "E2",
-    name: "E2 · Minuto + Posterior",
-    shortLabel: "E2",
-    category: "confirmacao",
-    categoryLabel: "Gatilho E1-E10",
-    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-    description: "Minuto do branco + pedra posterior",
+    key: "A15",
+    analysisId: 15,
+    name: "Análise 15 · Soma 19",
+    shortLabel: "A15",
+    category: "somas",
+    categoryLabel: "Somas Consecutivas",
+    badge: "bg-violet-500/15 text-violet-400 border-violet-500/30",
+    description: "Soma de 2 pedras consecutivas igual a 19",
   },
   {
-    key: "E3",
-    name: "E3 · Min + Ant + Post",
-    shortLabel: "E3",
-    category: "confirmacao",
-    categoryLabel: "Gatilho E1-E10",
-    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-    description: "Minuto do branco + pedra anterior + posterior",
-  },
-  {
-    key: "E4",
-    name: "E4 · Min + 2 Anteriores",
-    shortLabel: "E4",
-    category: "confirmacao",
-    categoryLabel: "Gatilho E1-E10",
-    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-    description: "Minuto do branco + 2 pedras anteriores",
-  },
-  {
-    key: "E5",
-    name: "E5 · Min + 2 Posteriores",
-    shortLabel: "E5",
-    category: "confirmacao",
-    categoryLabel: "Gatilho E1-E10",
-    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-    description: "Minuto do branco + 2 pedras posteriores",
-  },
-  {
-    key: "E6",
-    name: "E6 · Min + 1 Ant + 1 Post",
-    shortLabel: "E6",
-    category: "confirmacao",
-    categoryLabel: "Gatilho E1-E10",
-    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-    description: "Minuto do branco + 1 anterior + 1 posterior",
-  },
-  {
-    key: "E7",
-    name: "E7 · Min + 2 Ant + 1 Post",
-    shortLabel: "E7",
-    category: "confirmacao",
-    categoryLabel: "Gatilho E1-E10",
-    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-    description: "Minuto do branco + 2 anteriores + 1 posterior",
-  },
-  {
-    key: "E8",
-    name: "E8 · Min + 1 Ant + 2 Post",
-    shortLabel: "E8",
-    category: "confirmacao",
-    categoryLabel: "Gatilho E1-E10",
-    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-    description: "Minuto do branco + 1 anterior + 2 posteriores",
-  },
-  {
-    key: "E9",
-    name: "E9 · Min + 2 Ant + 2 Post",
-    shortLabel: "E9",
-    category: "confirmacao",
-    categoryLabel: "Gatilho E1-E10",
-    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-    description: "Minuto do branco + 2 anteriores + 2 posteriores",
-  },
-  {
-    key: "E10",
-    name: "E10 · Min + 4 Pedras + 15m",
-    shortLabel: "E10",
-    category: "confirmacao",
-    categoryLabel: "Gatilho E1-E10",
-    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-    description: "Minuto do branco + 2 ant. + 2 post. + 15 min",
+    key: "A16",
+    analysisId: 16,
+    name: "Análise 16 · Soma 21",
+    shortLabel: "A16",
+    category: "somas",
+    categoryLabel: "Somas Consecutivas",
+    badge: "bg-violet-500/15 text-violet-400 border-violet-500/30",
+    description: "Soma de 2 pedras consecutivas igual a 21",
   },
 
-  // Estratégias de Envio E11 a E15 (Selo Azul)
+  // 4. Quebra de Padrões de Cores (7 análises - IDs 50 a 56)
   {
-    key: "E11",
-    name: "E11 · 1ª Pedra + 15m",
-    shortLabel: "E11",
-    category: "confirmacao",
-    categoryLabel: "Gatilho E11-E15",
-    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
-    description: "1ª pedra da hora + 15 min",
+    key: "Q1",
+    analysisId: 50,
+    name: "Q1 · Alternados",
+    shortLabel: "Q1",
+    category: "cores",
+    categoryLabel: "Quebra de Cores",
+    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    description: "Quebra de alternância simples (V-P-V-P-V-P, mín. 6 casas)",
   },
   {
-    key: "E12",
-    name: "E12 · 1ª + 2ª Pd + Minuto",
-    shortLabel: "E12",
-    category: "confirmacao",
-    categoryLabel: "Gatilho E11-E15",
-    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
-    description: "1ª pedra + 2ª pedra da hora + minuto",
+    key: "Q2",
+    analysisId: 51,
+    name: "Q2 · Alt. Contínuos (2x2)",
+    shortLabel: "Q2",
+    category: "cores",
+    categoryLabel: "Quebra de Cores",
+    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    description: "Quebra de padrão 2x2 alternado (V-V-P-P-V-V, mín. 6 casas)",
   },
   {
-    key: "E13",
-    name: "E13 · 2 Pedras Anteriores",
-    shortLabel: "E13",
-    category: "confirmacao",
-    categoryLabel: "Gatilho E11-E15",
-    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
-    description: "2 pedras anteriores ao branco",
+    key: "Q3",
+    analysisId: 52,
+    name: "Q3 · Alt. Contínuos Nível 1",
+    shortLabel: "Q3",
+    category: "cores",
+    categoryLabel: "Quebra de Cores",
+    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    description: "Quebra de padrão 3x3 alternado (V-V-V-P-P-P, mín. 6 casas)",
   },
   {
-    key: "E14",
-    name: "E14 · 2 Pedras Posteriores",
-    shortLabel: "E14",
-    category: "confirmacao",
-    categoryLabel: "Gatilho E11-E15",
-    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
-    description: "2 pedras posteriores ao branco",
+    key: "Q4",
+    analysisId: 53,
+    name: "Q4 · Alt. Contínuos Nível 2",
+    shortLabel: "Q4",
+    category: "cores",
+    categoryLabel: "Quebra de Cores",
+    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    description: "Quebra de alternados nível 2 (+2 casas: V-V-V-V-P-P-P-P)",
   },
   {
-    key: "E15",
-    name: "E15 · Soma 2 Brancos",
-    shortLabel: "E15",
-    category: "confirmacao",
-    categoryLabel: "Gatilho E11-E15",
-    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
-    description: "Soma dos minutos de 2 brancos consecutivos",
+    key: "Q5",
+    analysisId: 54,
+    name: "Q5 · Contínuos (5x)",
+    shortLabel: "Q5",
+    category: "cores",
+    categoryLabel: "Quebra de Cores",
+    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    description: "Quebra de sequência contínua de 5 giros da mesma cor",
+  },
+  {
+    key: "Q6",
+    analysisId: 55,
+    name: "Q6 · Contínuos Nível 1 (6x)",
+    shortLabel: "Q6",
+    category: "cores",
+    categoryLabel: "Quebra de Cores",
+    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    description: "Quebra de sequência contínua de 6 giros (+1 casa)",
+  },
+  {
+    key: "Q7",
+    analysisId: 56,
+    name: "Q7 · Contínuos Nível 2 (8x)",
+    shortLabel: "Q7",
+    category: "cores",
+    categoryLabel: "Quebra de Cores",
+    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    description: "Quebra de sequência contínua de 8 giros (+2 casas)",
   },
 ];
 
@@ -496,8 +407,8 @@ function SinaisSectionContent() {
   const [resultsForValidation, setResultsForValidation] = useState<Result[]>([]);
   const [predictiveList, setPredictiveList] = useState<PredictiveSignal[]>(getPredictiveSignals());
   const [auditFilter, setAuditFilter] = useState<"geral" | "hoje">("geral");
-  const [strategyTabFilter, setStrategyTabFilter] = useState<
-    "todas" | "soma19" | "soma17" | "confirmacao"
+  const [primaryTabFilter, setPrimaryTabFilter] = useState<
+    "todas" | "pedras" | "sequencia" | "somas" | "cores"
   >("todas");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
@@ -642,19 +553,18 @@ function SinaisSectionContent() {
     };
   }, []);
 
-  // Estatísticas de Visão Geral: alimentadas em tempo real agrupadas por ESTRATÉGIA
-  const strategyStats = useMemo(() => {
-    // Agrega a partir de recentSignals para contagem exata e detalhada por estratégia
+  // Estatísticas de Visão Geral: alimentadas em tempo real agrupadas pelas 18 ANÁLISES PRIMÁRIAS
+  const primaryAnalysisStats = useMemo(() => {
+    // Agrega a partir de recentSignals para contagem exata por análise primária
     const countsByKey: Record<string, { wins: number; losses: number }> = {};
 
-    ALL_STRATEGIES_METADATA.forEach((m) => {
+    ALL_PRIMARY_ANALYSES_METADATA.forEach((m) => {
       countsByKey[m.key] = { wins: 0, losses: 0 };
     });
 
-    // 1. Percorre recentSignals (histórico auditado com metadados de estratégia)
+    // 1. Percorre recentSignals (histórico auditado)
     recentSignals.forEach((sig) => {
       if (sig.outcome !== "green" && sig.outcome !== "red") return;
-      // Sinais sem confluência não entram no painel auditor
       if (
         (sig as any).isNoConfluence ||
         sig.category === "no_confluence" ||
@@ -663,75 +573,53 @@ function SinaisSectionContent() {
         return;
       }
       const isWin = sig.outcome === "green";
+      const matchedKeys = new Set<string>();
 
-      // Mapeamento para Gatilho de Soma 19 ou Soma 17
-      if (sig.strategyKey) {
-        let matchedKey: string | undefined = undefined;
-        if (countsByKey[sig.strategyKey]) {
-          matchedKey = sig.strategyKey;
-        } else {
-          const clean = sig.strategyKey.replace(/^(S19_|S17_)/, "");
-          // 1. Procura correspondência exata de código
-          const exact = ALL_STRATEGIES_METADATA.find(
-            (m) => m.key === sig.strategyKey || m.key.replace(/^(S19_|S17_)/, "") === clean,
-          );
-          if (exact) {
-            matchedKey = exact.key;
-          } else {
-            // 2. Procura reversão apenas para estratégias que são de fato reversíveis
-            const rev = clean.split("-").reverse().join("-");
-            const foundRev = ALL_STRATEGIES_METADATA.find(
-              (m) =>
-                m.key.replace(/^(S19_|S17_)/, "") === rev &&
-                ["10-9", "12-7", "6-13", "14-5", "8-9", "11-6", "14-3"].includes(rev),
-            );
-            if (foundRev) {
-              matchedKey = foundRev.key;
-            } else {
-              const found = ALL_STRATEGIES_METADATA.find(
-                (m) => m.key.endsWith(clean) || m.shortLabel.includes(clean),
-              );
-              if (found) matchedKey = found.key;
-            }
-          }
-        }
-
-        if (matchedKey && countsByKey[matchedKey]) {
-          if (isWin) countsByKey[matchedKey].wins += 1;
-          else countsByKey[matchedKey].losses += 1;
-        }
-      }
-
-      // Mapeamento para Estratégias de Confirmação (E1-E15)
-      if (Array.isArray(sig.confirmedStrategies) && sig.confirmedStrategies.length > 0) {
-        sig.confirmedStrategies.forEach((cs) => {
-          if (cs && cs.code && countsByKey[cs.code]) {
-            if (isWin) countsByKey[cs.code].wins += 1;
-            else countsByKey[cs.code].losses += 1;
-          }
+      // Mapeamento via sig.sources (ID numérico de análise)
+      if (Array.isArray(sig.sources) && sig.sources.length > 0) {
+        sig.sources.forEach((src: any) => {
+          const m = ALL_PRIMARY_ANALYSES_METADATA.find((item) => item.analysisId === src.analysis);
+          if (m) matchedKeys.add(m.key);
         });
-      } else if (sig.confluence) {
-        // Fallback inteligente pelo texto de confluência
-        for (let i = 1; i <= 15; i++) {
-          const code = `E${i}`;
-          // Evita match incorreto de E1 em E10-E15 usando regex com limites de palavra
-          const re = new RegExp(`\\b${code}\\b`);
-          if (re.test(sig.confluence) && countsByKey[code]) {
-            if (isWin) countsByKey[code].wins += 1;
-            else countsByKey[code].losses += 1;
-          }
-        }
       }
+
+      // Mapeamento via sig.strategyKey
+      if (sig.strategyKey) {
+        const direct = ALL_PRIMARY_ANALYSES_METADATA.find(
+          (item) =>
+            item.key.toUpperCase() === sig.strategyKey?.toUpperCase() ||
+            `A${item.analysisId}` === sig.strategyKey?.toUpperCase(),
+        );
+        if (direct) matchedKeys.add(direct.key);
+      }
+
+      // Mapeamento via sig.confluence ou sig.label
+      const confText = `${sig.confluence || ""} ${sig.label || ""}`.toUpperCase();
+      ALL_PRIMARY_ANALYSES_METADATA.forEach((item) => {
+        const code = item.key.toUpperCase();
+        const altCode = `A${item.analysisId}`;
+        const re = new RegExp(`\\b(${code}|${altCode})\\b`, "i");
+        if (re.test(confText)) {
+          matchedKeys.add(item.key);
+        }
+      });
+
+      matchedKeys.forEach((key) => {
+        if (countsByKey[key]) {
+          if (isWin) countsByKey[key].wins += 1;
+          else countsByKey[key].losses += 1;
+        }
+      });
     });
 
     // 2. Mescla com o store stats para assegurar persistência mesmo em recargas
-    return ALL_STRATEGIES_METADATA.map((m) => {
+    return ALL_PRIMARY_ANALYSES_METADATA.map((m) => {
       const fromRecent = countsByKey[m.key] || { wins: 0, losses: 0 };
       const s = stats[m.key];
-      const sClean = stats[m.key.replace(/^(S19_|S17_)/, "")];
+      const sAlt = stats[`A${m.analysisId}`];
 
-      const storeWins = (s?.green || 0) + (sClean?.green || 0);
-      const storeLosses = (s?.red || 0) + (sClean?.red || 0);
+      const storeWins = (s?.green || 0) + (sAlt && sAlt !== s ? sAlt.green : 0);
+      const storeLosses = (s?.red || 0) + (sAlt && sAlt !== s ? sAlt.red : 0);
 
       const wins = Math.max(fromRecent.wins, storeWins);
       const losses = Math.max(fromRecent.losses, storeLosses);
@@ -740,6 +628,7 @@ function SinaisSectionContent() {
 
       return {
         key: m.key,
+        analysisId: m.analysisId,
         name: m.name,
         shortLabel: m.shortLabel,
         category: m.category,
@@ -754,19 +643,19 @@ function SinaisSectionContent() {
     });
   }, [stats, recentSignals]);
 
-  const displayedStrategies = useMemo(() => {
-    if (strategyTabFilter === "todas") return strategyStats;
-    return strategyStats.filter((s) => s.category === strategyTabFilter);
-  }, [strategyStats, strategyTabFilter]);
+  const displayedPrimaryAnalyses = useMemo(() => {
+    if (primaryTabFilter === "todas") return primaryAnalysisStats;
+    return primaryAnalysisStats.filter((s) => s.category === primaryTabFilter);
+  }, [primaryAnalysisStats, primaryTabFilter]);
 
-  const strategyOverallSummary = useMemo(() => {
+  const primaryOverallSummary = useMemo(() => {
     let totalWins = 0;
     let totalLosses = 0;
-    let activeStrategies = 0;
-    strategyStats.forEach((s) => {
+    let activeAnalyses = 0;
+    primaryAnalysisStats.forEach((s) => {
       totalWins += s.wins;
       totalLosses += s.losses;
-      if (s.total > 0) activeStrategies += 1;
+      if (s.total > 0) activeAnalyses += 1;
     });
     const totalOps = totalWins + totalLosses;
     const avgAssertivity = totalOps > 0 ? (totalWins / totalOps) * 100 : null;
@@ -774,10 +663,10 @@ function SinaisSectionContent() {
       totalWins,
       totalLosses,
       totalOps,
-      activeStrategies,
+      activeAnalyses,
       avgAssertivity,
     };
-  }, [strategyStats]);
+  }, [primaryAnalysisStats]);
 
   // Auditoria dos sinais preditivos contra os resultados reais (Regra rigorosa de 6 rodadas: M-1, M, M+1)
   useEffect(() => {
@@ -999,7 +888,7 @@ function SinaisSectionContent() {
                 </h3>
                 <p className="text-[10px] text-muted-foreground">
                   {auditFilter === "geral"
-                    ? "Auditoria por Estratégia em tempo real (Soma 19, Soma 17 e E1-E15)"
+                    ? "Auditoria das 18 Análises Primárias em tempo real (Padrões de Pedra, Sequências, Somas e Quebra de Cores)"
                     : `Assertividade dos últimos ${last10Stats.total} de 10 sinais`}
                 </p>
               </div>
@@ -1069,99 +958,113 @@ function SinaisSectionContent() {
           <div className="p-6">
             {auditFilter === "geral" ? (
               <div className="space-y-5">
-                {/* Barra de Filtros por Categoria de Estratégia e KPIs Rápidos */}
+                {/* Barra de Filtros por Categoria de Análise Primária e KPIs Rápidos */}
                 <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/5">
                   <div className="flex flex-wrap items-center gap-1.5 bg-black/40 p-1 rounded-xl border border-white/5">
                     <button
                       type="button"
-                      onClick={() => setStrategyTabFilter("todas")}
+                      onClick={() => setPrimaryTabFilter("todas")}
                       className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
-                        strategyTabFilter === "todas"
+                        primaryTabFilter === "todas"
                           ? "bg-white/15 text-white shadow-sm"
                           : "text-white/40 hover:text-white/70"
                       }`}
                     >
-                      Todas ({strategyStats.length})
+                      Todas ({primaryAnalysisStats.length})
                     </button>
                     <button
                       type="button"
-                      onClick={() => setStrategyTabFilter("soma19")}
+                      onClick={() => setPrimaryTabFilter("pedras")}
                       className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
-                        strategyTabFilter === "soma19"
+                        primaryTabFilter === "pedras"
                           ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
                           : "text-emerald-400/50 hover:text-emerald-300"
                       }`}
                     >
-                      Soma 19 ({strategyStats.filter((s) => s.category === "soma19").length})
+                      Padrões de Pedra (
+                      {primaryAnalysisStats.filter((s) => s.category === "pedras").length})
                     </button>
                     <button
                       type="button"
-                      onClick={() => setStrategyTabFilter("soma17")}
+                      onClick={() => setPrimaryTabFilter("sequencia")}
                       className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
-                        strategyTabFilter === "soma17"
+                        primaryTabFilter === "sequencia"
                           ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
                           : "text-cyan-400/50 hover:text-cyan-300"
                       }`}
                     >
-                      Soma 17 ({strategyStats.filter((s) => s.category === "soma17").length})
+                      Gatilhos de Sequência (
+                      {primaryAnalysisStats.filter((s) => s.category === "sequencia").length})
                     </button>
                     <button
                       type="button"
-                      onClick={() => setStrategyTabFilter("confirmacao")}
+                      onClick={() => setPrimaryTabFilter("somas")}
                       className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
-                        strategyTabFilter === "confirmacao"
+                        primaryTabFilter === "somas"
+                          ? "bg-violet-500/20 text-violet-300 border border-violet-500/30"
+                          : "text-violet-400/50 hover:text-violet-300"
+                      }`}
+                    >
+                      Somas Consecutivas (
+                      {primaryAnalysisStats.filter((s) => s.category === "somas").length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrimaryTabFilter("cores")}
+                      className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                        primaryTabFilter === "cores"
                           ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
                           : "text-amber-400/50 hover:text-amber-300"
                       }`}
                     >
-                      Estratégias E1–E15 (
-                      {strategyStats.filter((s) => s.category === "confirmacao").length})
+                      Quebra de Cores (
+                      {primaryAnalysisStats.filter((s) => s.category === "cores").length})
                     </button>
                   </div>
 
-                  {/* Resumo consolidado de todas as estratégias */}
+                  {/* Resumo consolidado de todas as análises primárias */}
                   <div className="flex items-center gap-4 text-[11px]">
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <span>Ativas:</span>
                       <strong className="text-white font-mono">
-                        {strategyOverallSummary.activeStrategies}/{strategyStats.length}
+                        {primaryOverallSummary.activeAnalyses}/{primaryAnalysisStats.length}
                       </strong>
                     </div>
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <span>Operações:</span>
                       <strong className="text-white font-mono">
-                        {strategyOverallSummary.totalOps}
+                        {primaryOverallSummary.totalOps}
                       </strong>
                       <span className="text-[10px] text-emerald-400 font-bold">
-                        ({strategyOverallSummary.totalWins}W
+                        ({primaryOverallSummary.totalWins}W
                       </span>
                       <span className="text-[10px] text-red-400 font-bold">
-                        {strategyOverallSummary.totalLosses}L)
+                        {primaryOverallSummary.totalLosses}L)
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <span>Assertividade Média:</span>
                       <strong
                         className={`font-mono font-bold ${
-                          strategyOverallSummary.avgAssertivity !== null &&
-                          strategyOverallSummary.avgAssertivity >= 70
+                          primaryOverallSummary.avgAssertivity !== null &&
+                          primaryOverallSummary.avgAssertivity >= 70
                             ? "text-emerald-400"
-                            : strategyOverallSummary.avgAssertivity !== null
+                            : primaryOverallSummary.avgAssertivity !== null
                               ? "text-amber-400"
                               : "text-white/40"
                         }`}
                       >
-                        {strategyOverallSummary.avgAssertivity !== null
-                          ? `${strategyOverallSummary.avgAssertivity.toFixed(1)}%`
+                        {primaryOverallSummary.avgAssertivity !== null
+                          ? `${primaryOverallSummary.avgAssertivity.toFixed(1)}%`
                           : "--"}
                       </strong>
                     </div>
                   </div>
                 </div>
 
-                {/* Grid de Estratégias */}
+                {/* Grid de Análises Primárias */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {displayedStrategies.map((s) => {
+                  {displayedPrimaryAnalyses.map((s) => {
                     const hasData = s.total > 0;
                     const winRate = s.assertividade !== null ? s.assertividade : 0;
                     return (
@@ -1175,11 +1078,13 @@ function SinaisSectionContent() {
                             <span
                               className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${s.badge}`}
                             >
-                              {s.category === "soma19"
-                                ? "Soma 19"
-                                : s.category === "soma17"
-                                  ? "Soma 17"
-                                  : "Confirmação"}
+                              {s.category === "pedras"
+                                ? "Pedras"
+                                : s.category === "sequencia"
+                                  ? "Sequência"
+                                  : s.category === "somas"
+                                    ? "Somas"
+                                    : "Quebra Cores"}
                             </span>
                             <span className="text-[10px] font-mono font-black text-white/60">
                               {s.shortLabel}
@@ -1264,9 +1169,9 @@ function SinaisSectionContent() {
                   })}
                 </div>
 
-                {strategyStats.every((s) => s.total === 0) && (
+                {primaryAnalysisStats.every((s) => s.total === 0) && (
                   <p className="text-center text-[11px] text-muted-foreground/60 py-2">
-                    ✨ Painel de estratégias pronto. Os dados são auditados e contabilizados
+                    ✨ Painel das análises primárias pronto. Os dados são auditados e contabilizados
                     automaticamente conforme as rodadas reais da Blaze forem acontecendo.
                   </p>
                 )}
@@ -1384,23 +1289,24 @@ function SinaisSectionContent() {
                             )}
                           </div>
 
-                          {/* Base: Estratégias ANTES das análises e sem percentual */}
+                          {/* Base: Análise Primária Geradora ANTES + Confluências de Estratégia sem percentual */}
                           <div className="flex flex-wrap items-center gap-1 mt-1 max-w-full">
-                            {extractSignalStrategies(sig).map((st, sIdx) => (
-                              <span
-                                key={`st-${sIdx}`}
-                                className="text-[7.5px] font-mono font-bold text-amber-300 bg-amber-500/15 px-1 py-0.2 rounded border border-amber-500/30"
-                              >
-                                {st}
-                              </span>
-                            ))}
                             {extractSignalAnalyses(sig).map((ana, aIdx) => (
                               <span
                                 key={`an-${aIdx}`}
-                                className="text-[7.5px] font-mono opacity-80 text-zinc-300 bg-white/5 px-1 py-0.2 rounded"
+                                className="text-[7.5px] font-mono font-bold text-emerald-300 bg-emerald-500/15 px-1 py-0.2 rounded border border-emerald-500/30"
+                                title="Análise Primária Geradora"
                               >
                                 {ana.text}
-                                {ana.pct ? ` ${ana.pct}` : ""}
+                              </span>
+                            ))}
+                            {extractSignalStrategies(sig).map((st, sIdx) => (
+                              <span
+                                key={`st-${sIdx}`}
+                                className="text-[7.5px] font-mono opacity-80 text-amber-300 bg-amber-500/10 px-1 py-0.2 rounded border border-amber-500/20"
+                                title="Confluência"
+                              >
+                                +{st}
                               </span>
                             ))}
                           </div>

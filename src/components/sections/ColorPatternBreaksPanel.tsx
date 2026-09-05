@@ -102,7 +102,7 @@ export function ColorPatternBreaksPanel({
 
   const displayedCycles = useMemo(() => {
     if (showAllCycles) return cyclesForStone;
-    return cyclesForStone.slice(-10);
+    return cyclesForStone.slice(-6);
   }, [cyclesForStone, showAllCycles]);
 
   return (
