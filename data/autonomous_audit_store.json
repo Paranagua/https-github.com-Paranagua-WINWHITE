@@ -1,8 +1,1929 @@
 {
-  "savedAt": "2026-09-06T14:05:19.200Z",
-  "totalAudited": 16,
-  "lastRoundId": 192634,
+  "savedAt": "2026-09-06T23:03:01.864Z",
+  "totalAudited": 27,
+  "lastRoundId": 193700,
   "recentSignals": [
+    {
+      "key": "sig-1788735600000",
+      "time": "20:00",
+      "outcome": "red",
+      "label": "LOSS",
+      "confluence": "E4 · A2-0 100%, A5-7 80%, A26-14 100%, A33-12 80%, A35-5 80%",
+      "timestamp": 1788735727709,
+      "targetTime": "20:00",
+      "strategyKey": "A2",
+      "confirmedStrategies": [
+        {
+          "id": 4,
+          "code": "E4",
+          "name": "Estratégia 4",
+          "type": "yellow",
+          "description": "Branco 22:47 + 2 ant (11, 2) = 23:00",
+          "calculatedTime": "23:00",
+          "calculatedMinute": 0
+        },
+        {
+          "id": 5,
+          "code": "E5",
+          "name": "Estratégia 5",
+          "type": "yellow",
+          "description": "Branco 20:52 + 2 post (4, 4) = 21:00",
+          "calculatedTime": "21:00",
+          "calculatedMinute": 0
+        },
+        {
+          "id": 7,
+          "code": "E7",
+          "name": "Estratégia 7",
+          "type": "yellow",
+          "description": "Branco 19:45 + 2 ant (8, 1) + 1 post (6) = 20:00",
+          "calculatedTime": "20:00",
+          "calculatedMinute": 0
+        },
+        {
+          "id": 8,
+          "code": "E8",
+          "name": "Estratégia 8",
+          "type": "yellow",
+          "description": "Branco 19:45 + 1 ant (1) + 2 post (6, 8) = 20:00",
+          "calculatedTime": "20:00",
+          "calculatedMinute": 0
+        },
+        {
+          "id": 9,
+          "code": "E9",
+          "name": "Estratégia 9",
+          "type": "yellow",
+          "description": "Branco 19:29 + 2 ant (8, 7) + 2 post (13, 3) = 20:00",
+          "calculatedTime": "20:00",
+          "calculatedMinute": 0
+        }
+      ],
+      "windowLabel": "19:59-20:01",
+      "checkedResults": 6,
+      "audit": {
+        "signalKey": "sig-1788735600000",
+        "targetTime": "20:00",
+        "targetIso": "2026-09-06T23:00:00.000Z",
+        "windowLabel": "19:59-20:01",
+        "windowMinutes": [
+          "19:59",
+          "20:00",
+          "20:01"
+        ],
+        "checkedResults": 6,
+        "roundsMMinus1": 2,
+        "roundsM": 2,
+        "roundsMPlus1": 2,
+        "spinsMMinus1Ids": [
+          "193694",
+          "193695"
+        ],
+        "spinsMIds": [
+          "193696",
+          "193697"
+        ],
+        "spinsMPlus1Ids": [
+          "193698",
+          "193699"
+        ],
+        "winningResultId": null,
+        "winningResultRoll": null,
+        "winningResultColor": null,
+        "winningResultTime": null,
+        "winningResultCreatedAt": null,
+        "outcome": "LOSS",
+        "isComplete6Rounds": true,
+        "auditedAt": 1788735727469
+      },
+      "sources": [
+        {
+          "analysis": 2,
+          "value": 0,
+          "pct": 100,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A2_V0_T1788734045566"
+        },
+        {
+          "analysis": 5,
+          "value": 7,
+          "pct": 80,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A5_V7_T1788732058148"
+        },
+        {
+          "analysis": 26,
+          "value": 14,
+          "pct": 100,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A26_V14_T1788732780822"
+        },
+        {
+          "analysis": 33,
+          "value": 12,
+          "pct": 80,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A33_V12_T1788734256347"
+        },
+        {
+          "analysis": 35,
+          "value": 5,
+          "pct": 80,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A35_V5_T1788733112107"
+        },
+        {
+          "analysis": 104,
+          "value": 4,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E4_T1788735600000"
+        }
+      ],
+      "category": "alavancagem",
+      "isSupreme": false,
+      "isRare": false,
+      "isAlavancagem": true,
+      "isTop1": true
+    },
+    {
+      "key": "sig-1788735060000",
+      "time": "19:51",
+      "outcome": "red",
+      "label": "LOSS",
+      "confluence": "E5, E9, E12 · A2-8 100%, A22-13 75%, A26-12 75%, A36-14 100%",
+      "timestamp": 1788735188563,
+      "targetTime": "19:51",
+      "strategyKey": "A2",
+      "confirmedStrategies": [
+        {
+          "id": 2,
+          "code": "E2",
+          "name": "Estratégia 2",
+          "type": "yellow",
+          "description": "Branco 19:45 (45m) + pedra post (6) = 19:51",
+          "calculatedTime": "19:51",
+          "calculatedMinute": 51
+        },
+        {
+          "id": 3,
+          "code": "E3",
+          "name": "Estratégia 3",
+          "type": "yellow",
+          "description": "Branco 20:42 + ant (8) + post (1) = 20:51",
+          "calculatedTime": "20:51",
+          "calculatedMinute": 51
+        },
+        {
+          "id": 4,
+          "code": "E4",
+          "name": "Estratégia 4",
+          "type": "yellow",
+          "description": "Branco 19:35 + 2 ant (5, 11) = 19:51",
+          "calculatedTime": "19:51",
+          "calculatedMinute": 51
+        },
+        {
+          "id": 5,
+          "code": "E5",
+          "name": "Estratégia 5",
+          "type": "yellow",
+          "description": "Branco 22:34 + 2 post (9, 8) = 22:51",
+          "calculatedTime": "22:51",
+          "calculatedMinute": 51
+        },
+        {
+          "id": 6,
+          "code": "E6",
+          "name": "Estratégia 6",
+          "type": "yellow",
+          "description": "Branco 20:42 + 1 ant (8) + 1 post (1) = 20:51",
+          "calculatedTime": "20:51",
+          "calculatedMinute": 51
+        },
+        {
+          "id": 8,
+          "code": "E8",
+          "name": "Estratégia 8",
+          "type": "yellow",
+          "description": "Branco 21:30 + 1 ant (12) + 2 post (4, 5) = 21:51",
+          "calculatedTime": "21:51",
+          "calculatedMinute": 51
+        },
+        {
+          "id": 9,
+          "code": "E9",
+          "name": "Estratégia 9",
+          "type": "yellow",
+          "description": "Branco 22:32 + 2 ant (3, 12) + 2 post (1, 3) = 22:51",
+          "calculatedTime": "22:51",
+          "calculatedMinute": 51
+        },
+        {
+          "id": 12,
+          "code": "E12",
+          "name": "Estratégia 12",
+          "type": "blue",
+          "description": "2 Brancos (33m + 34m) + 34m + post (9) = 22:50",
+          "calculatedTime": "22:50",
+          "calculatedMinute": 50
+        }
+      ],
+      "windowLabel": "19:50-19:52",
+      "checkedResults": 6,
+      "audit": {
+        "signalKey": "sig-1788735060000",
+        "targetTime": "19:51",
+        "targetIso": "2026-09-06T22:51:00.000Z",
+        "windowLabel": "19:50-19:52",
+        "windowMinutes": [
+          "19:50",
+          "19:51",
+          "19:52"
+        ],
+        "checkedResults": 6,
+        "roundsMMinus1": 2,
+        "roundsM": 2,
+        "roundsMPlus1": 2,
+        "spinsMMinus1Ids": [
+          "193676",
+          "193677"
+        ],
+        "spinsMIds": [
+          "193678",
+          "193679"
+        ],
+        "spinsMPlus1Ids": [
+          "193680",
+          "193681"
+        ],
+        "winningResultId": null,
+        "winningResultRoll": null,
+        "winningResultColor": null,
+        "winningResultTime": null,
+        "winningResultCreatedAt": null,
+        "outcome": "LOSS",
+        "isComplete6Rounds": true,
+        "auditedAt": 1788735188358
+      },
+      "sources": [
+        {
+          "analysis": 2,
+          "value": 8,
+          "pct": 100,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A2_V8_T1788732600144"
+        },
+        {
+          "analysis": 22,
+          "value": 13,
+          "pct": 75,
+          "top3": true,
+          "rank": 3,
+          "cycleKey": "A22_V13_T1788732660377"
+        },
+        {
+          "analysis": 26,
+          "value": 12,
+          "pct": 75,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "A26_V12_T1788731606042"
+        },
+        {
+          "analysis": 36,
+          "value": 14,
+          "pct": 100,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A36_V14_T1788733744407"
+        },
+        {
+          "analysis": 109,
+          "value": 9,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E9_T1788735060000"
+        },
+        {
+          "analysis": 112,
+          "value": 12,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E12_T1788735000000"
+        },
+        {
+          "analysis": 105,
+          "value": 5,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E5_T1788735060000"
+        }
+      ],
+      "category": "supreme",
+      "isSupreme": true,
+      "isRare": false,
+      "isAlavancagem": false,
+      "isTop1": true
+    },
+    {
+      "key": "sig-1788734160000",
+      "time": "19:36",
+      "outcome": "red",
+      "label": "LOSS",
+      "confluence": "E1, E4, E5 · A20-11 80%",
+      "timestamp": 1788734614866,
+      "targetTime": "19:36",
+      "strategyKey": "A20",
+      "confirmedStrategies": [
+        {
+          "id": 1,
+          "code": "E1",
+          "name": "Estratégia 1",
+          "type": "yellow",
+          "description": "Branco 22:33 (33m) + pedra ant (3) = 22:36",
+          "calculatedTime": "22:36",
+          "calculatedMinute": 36
+        },
+        {
+          "id": 4,
+          "code": "E4",
+          "name": "Estratégia 4",
+          "type": "yellow",
+          "description": "Branco 22:33 + 2 ant (1, 3) = 22:37",
+          "calculatedTime": "22:37",
+          "calculatedMinute": 37
+        },
+        {
+          "id": 5,
+          "code": "E5",
+          "name": "Estratégia 5",
+          "type": "yellow",
+          "description": "Branco 22:32 + 2 post (1, 3) = 22:36",
+          "calculatedTime": "22:36",
+          "calculatedMinute": 36
+        },
+        {
+          "id": 7,
+          "code": "E7",
+          "name": "Estratégia 7",
+          "type": "yellow",
+          "description": "Branco 19:03 + 2 ant (8, 13) + 1 post (12) = 19:36",
+          "calculatedTime": "19:36",
+          "calculatedMinute": 36
+        },
+        {
+          "id": 8,
+          "code": "E8",
+          "name": "Estratégia 8",
+          "type": "yellow",
+          "description": "Branco 19:03 + 1 ant (13) + 2 post (12, 8) = 19:36",
+          "calculatedTime": "19:36",
+          "calculatedMinute": 36
+        }
+      ],
+      "windowLabel": "19:35-19:37",
+      "checkedResults": 6,
+      "audit": {
+        "signalKey": "sig-1788734160000",
+        "targetTime": "19:36",
+        "targetIso": "2026-09-06T22:36:00.000Z",
+        "windowLabel": "19:35-19:37",
+        "windowMinutes": [
+          "19:35",
+          "19:36",
+          "19:37"
+        ],
+        "checkedResults": 6,
+        "roundsMMinus1": 2,
+        "roundsM": 2,
+        "roundsMPlus1": 2,
+        "spinsMMinus1Ids": [
+          "193646",
+          "193647"
+        ],
+        "spinsMIds": [
+          "193648",
+          "193649"
+        ],
+        "spinsMPlus1Ids": [
+          "193650",
+          "193651"
+        ],
+        "winningResultId": null,
+        "winningResultRoll": null,
+        "winningResultColor": null,
+        "winningResultTime": null,
+        "winningResultCreatedAt": null,
+        "outcome": "LOSS",
+        "isComplete6Rounds": true,
+        "auditedAt": 1788734614604
+      },
+      "sources": [
+        {
+          "analysis": 20,
+          "value": 11,
+          "pct": 80,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A20_V11_T1788731425316"
+        },
+        {
+          "analysis": 105,
+          "value": 5,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E5_T1788734160000"
+        },
+        {
+          "analysis": 101,
+          "value": 1,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E1_T1788734160000"
+        },
+        {
+          "analysis": 104,
+          "value": 4,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E4_T1788734220000"
+        }
+      ],
+      "category": "rare",
+      "isSupreme": false,
+      "isRare": true,
+      "isAlavancagem": false,
+      "isTop1": true
+    },
+    {
+      "key": "sig-1788733920000",
+      "time": "19:32",
+      "outcome": "green",
+      "label": "WIN",
+      "confluence": "E2, E12, 514 · A2-14 80%, A20-10 75%, A22-1 75%, A22-3 75%, A26-1 100%",
+      "resultTime": "19:32",
+      "timestamp": 1788734603993,
+      "targetTime": "19:32",
+      "strategyKey": "A2",
+      "confirmedStrategies": [
+        {
+          "id": 2,
+          "code": "E2",
+          "name": "Estratégia 2",
+          "type": "yellow",
+          "description": "Branco 22:32 (32m) + pedra post (1) = 22:33",
+          "calculatedTime": "22:33",
+          "calculatedMinute": 33
+        },
+        {
+          "id": 4,
+          "code": "E4",
+          "name": "Estratégia 4",
+          "type": "yellow",
+          "description": "Branco 20:13 + 2 ant (8, 11) = 20:32",
+          "calculatedTime": "20:32",
+          "calculatedMinute": 32
+        },
+        {
+          "id": 5,
+          "code": "E5",
+          "name": "Estratégia 5",
+          "type": "yellow",
+          "description": "Branco 21:10 + 2 post (9, 13) = 21:32",
+          "calculatedTime": "21:32",
+          "calculatedMinute": 32
+        },
+        {
+          "id": 10,
+          "code": "E10",
+          "name": "Estratégia 10",
+          "type": "yellow",
+          "description": "E9 + 15 min = 19:32",
+          "calculatedTime": "19:32",
+          "calculatedMinute": 32
+        },
+        {
+          "id": 12,
+          "code": "E12",
+          "name": "Estratégia 12",
+          "type": "blue",
+          "description": "2 Brancos (8m + 8m) + 8m + post (8) = 22:32",
+          "calculatedTime": "22:32",
+          "calculatedMinute": 32
+        }
+      ],
+      "windowLabel": "19:31-19:33",
+      "checkedResults": 6,
+      "winningResultId": "193640",
+      "audit": {
+        "signalKey": "sig-1788733920000",
+        "targetTime": "19:32",
+        "targetIso": "2026-09-06T22:32:00.000Z",
+        "windowLabel": "19:31-19:33",
+        "windowMinutes": [
+          "19:31",
+          "19:32",
+          "19:33"
+        ],
+        "checkedResults": 6,
+        "roundsMMinus1": 2,
+        "roundsM": 2,
+        "roundsMPlus1": 2,
+        "spinsMMinus1Ids": [
+          "193638",
+          "193639"
+        ],
+        "spinsMIds": [
+          "193640",
+          "193641"
+        ],
+        "spinsMPlus1Ids": [
+          "193642",
+          "193643"
+        ],
+        "winningResultId": "193640",
+        "winningResultRoll": 0,
+        "winningResultColor": "white",
+        "winningResultTime": "19:32",
+        "winningResultCreatedAt": "2026-09-06T22:32:05.119",
+        "outcome": "WIN",
+        "isComplete6Rounds": true,
+        "auditedAt": 1788734603693
+      },
+      "sources": [
+        {
+          "analysis": 2,
+          "value": 14,
+          "pct": 80,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A2_V14_T1788730883262"
+        },
+        {
+          "analysis": 20,
+          "value": 10,
+          "pct": 75,
+          "top3": true,
+          "rank": 3,
+          "cycleKey": "A20_V10_T1788729227661"
+        },
+        {
+          "analysis": 22,
+          "value": 1,
+          "pct": 75,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "A22_V1_T1788733262669"
+        },
+        {
+          "analysis": 22,
+          "value": 3,
+          "pct": 75,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "A22_V3_T1788733864885"
+        },
+        {
+          "analysis": 26,
+          "value": 1,
+          "pct": 100,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A26_V1_T1788729799598"
+        },
+        {
+          "analysis": 112,
+          "value": 12,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E12_T1788733920000"
+        },
+        {
+          "analysis": 102,
+          "value": 2,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E2_T1788733980000"
+        }
+      ],
+      "category": "supreme",
+      "isSupreme": true,
+      "isRare": false,
+      "isAlavancagem": false,
+      "isTop1": true
+    },
+    {
+      "key": "sig-1788733680000",
+      "time": "19:28",
+      "outcome": "red",
+      "label": "LOSS",
+      "confluence": "E10 · A2-12 80%",
+      "timestamp": 1788734603992,
+      "targetTime": "19:28",
+      "strategyKey": "A2",
+      "confirmedStrategies": [
+        {
+          "id": 3,
+          "code": "E3",
+          "name": "Estratégia 3",
+          "type": "yellow",
+          "description": "Branco 19:03 + ant (13) + post (12) = 19:28",
+          "calculatedTime": "19:28",
+          "calculatedMinute": 28
+        },
+        {
+          "id": 4,
+          "code": "E4",
+          "name": "Estratégia 4",
+          "type": "yellow",
+          "description": "Branco 19:08 + 2 ant (12, 8) = 19:28",
+          "calculatedTime": "19:28",
+          "calculatedMinute": 28
+        },
+        {
+          "id": 6,
+          "code": "E6",
+          "name": "Estratégia 6",
+          "type": "yellow",
+          "description": "Branco 19:03 + 1 ant (13) + 1 post (12) = 19:28",
+          "calculatedTime": "19:28",
+          "calculatedMinute": 28
+        },
+        {
+          "id": 10,
+          "code": "E10",
+          "name": "Estratégia 10",
+          "type": "yellow",
+          "description": "E9 + 15 min = 22:27",
+          "calculatedTime": "22:27",
+          "calculatedMinute": 27
+        },
+        {
+          "id": 15,
+          "code": "E15",
+          "name": "Estratégia 15",
+          "type": "blue",
+          "description": "2 Brancos (33m + 34m) + 2 ant (1, 3) + 2 post (9, 8) = 23:28",
+          "calculatedTime": "23:28",
+          "calculatedMinute": 28
+        }
+      ],
+      "windowLabel": "19:27-19:29",
+      "checkedResults": 6,
+      "audit": {
+        "signalKey": "sig-1788733680000",
+        "targetTime": "19:28",
+        "targetIso": "2026-09-06T22:28:00.000Z",
+        "windowLabel": "19:27-19:29",
+        "windowMinutes": [
+          "19:27",
+          "19:28",
+          "19:29"
+        ],
+        "checkedResults": 6,
+        "roundsMMinus1": 2,
+        "roundsM": 2,
+        "roundsMPlus1": 2,
+        "spinsMMinus1Ids": [
+          "193630",
+          "193631"
+        ],
+        "spinsMIds": [
+          "193632",
+          "193633"
+        ],
+        "spinsMPlus1Ids": [
+          "193634",
+          "193635"
+        ],
+        "winningResultId": null,
+        "winningResultRoll": null,
+        "winningResultColor": null,
+        "winningResultTime": null,
+        "winningResultCreatedAt": null,
+        "outcome": "LOSS",
+        "isComplete6Rounds": true,
+        "auditedAt": 1788734603693
+      },
+      "sources": [
+        {
+          "analysis": 2,
+          "value": 12,
+          "pct": 80,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A2_V12_T1788729408264"
+        },
+        {
+          "analysis": 110,
+          "value": 10,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E10_T1788733620000"
+        },
+        {
+          "analysis": 110,
+          "value": 10,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E10_T1788733620000"
+        }
+      ],
+      "category": "rare",
+      "isSupreme": false,
+      "isRare": true,
+      "isAlavancagem": false,
+      "isTop1": true
+    },
+    {
+      "key": "sig-1788733140000",
+      "time": "19:19",
+      "outcome": "red",
+      "label": "LOSS",
+      "confluence": "E4, E10 · A19-11 100%, A20-3 100%, A28-6 75%, A30-10 100%, A30-12 75%",
+      "timestamp": 1788734603992,
+      "targetTime": "19:19",
+      "strategyKey": "A19",
+      "confirmedStrategies": [
+        {
+          "id": 2,
+          "code": "E2",
+          "name": "Estratégia 2",
+          "type": "yellow",
+          "description": "Branco 21:10 (10m) + pedra post (9) = 21:19",
+          "calculatedTime": "21:19",
+          "calculatedMinute": 19
+        },
+        {
+          "id": 3,
+          "code": "E3",
+          "name": "Estratégia 3",
+          "type": "yellow",
+          "description": "Branco 20:56 + ant (12) + post (11) = 21:19",
+          "calculatedTime": "21:19",
+          "calculatedMinute": 19
+        },
+        {
+          "id": 4,
+          "code": "E4",
+          "name": "Estratégia 4",
+          "type": "yellow",
+          "description": "Branco 22:08 + 2 ant (6, 7) = 22:21",
+          "calculatedTime": "22:21",
+          "calculatedMinute": 21
+        },
+        {
+          "id": 6,
+          "code": "E6",
+          "name": "Estratégia 6",
+          "type": "yellow",
+          "description": "Branco 20:56 + 1 ant (12) + 1 post (11) = 21:19",
+          "calculatedTime": "21:19",
+          "calculatedMinute": 19
+        },
+        {
+          "id": 8,
+          "code": "E8",
+          "name": "Estratégia 8",
+          "type": "yellow",
+          "description": "Branco 20:51 + 1 ant (12) + 2 post (13, 3) = 21:19",
+          "calculatedTime": "21:19",
+          "calculatedMinute": 19
+        },
+        {
+          "id": 10,
+          "code": "E10",
+          "name": "Estratégia 10",
+          "type": "yellow",
+          "description": "E9 + 15 min = 22:21",
+          "calculatedTime": "22:21",
+          "calculatedMinute": 21
+        }
+      ],
+      "windowLabel": "19:18-19:20",
+      "checkedResults": 6,
+      "audit": {
+        "signalKey": "sig-1788733140000",
+        "targetTime": "19:19",
+        "targetIso": "2026-09-06T22:19:00.000Z",
+        "windowLabel": "19:18-19:20",
+        "windowMinutes": [
+          "19:18",
+          "19:19",
+          "19:20"
+        ],
+        "checkedResults": 6,
+        "roundsMMinus1": 2,
+        "roundsM": 2,
+        "roundsMPlus1": 2,
+        "spinsMMinus1Ids": [
+          "193612",
+          "193613"
+        ],
+        "spinsMIds": [
+          "193614",
+          "193615"
+        ],
+        "spinsMPlus1Ids": [
+          "193616",
+          "193617"
+        ],
+        "winningResultId": null,
+        "winningResultRoll": null,
+        "winningResultColor": null,
+        "winningResultTime": null,
+        "winningResultCreatedAt": null,
+        "outcome": "LOSS",
+        "isComplete6Rounds": true,
+        "auditedAt": 1788734603693
+      },
+      "sources": [
+        {
+          "analysis": 19,
+          "value": 11,
+          "pct": 100,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A19_V11_T1788730100623"
+        },
+        {
+          "analysis": 20,
+          "value": 3,
+          "pct": 100,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A20_V3_T1788731485555"
+        },
+        {
+          "analysis": 28,
+          "value": 6,
+          "pct": 75,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "A28_V6_T1788732268829"
+        },
+        {
+          "analysis": 30,
+          "value": 10,
+          "pct": 100,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A30_V10_T1788731786687"
+        },
+        {
+          "analysis": 30,
+          "value": 12,
+          "pct": 75,
+          "top3": true,
+          "rank": 3,
+          "cycleKey": "A30_V12_T1788732389290"
+        },
+        {
+          "analysis": 110,
+          "value": 10,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E10_T1788733260000"
+        },
+        {
+          "analysis": 104,
+          "value": 4,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E4_T1788733260000"
+        }
+      ],
+      "category": "supreme",
+      "isSupreme": true,
+      "isRare": false,
+      "isAlavancagem": false,
+      "isTop1": true
+    },
+    {
+      "key": "sig-1788732420000",
+      "time": "19:07",
+      "outcome": "green",
+      "label": "WIN",
+      "confluence": "E5, E8, E9, E10 · A20-13 100%, A19-14 80%, A20-3 75%, A27-14 100%, A30-12 75%",
+      "resultTime": "19:08",
+      "timestamp": 1788734603992,
+      "targetTime": "19:07",
+      "strategyKey": "A20",
+      "confirmedStrategies": [
+        {
+          "id": 2,
+          "code": "E2",
+          "name": "Estratégia 2",
+          "type": "yellow",
+          "description": "Branco 20:56 (56m) + pedra post (11) = 21:07",
+          "calculatedTime": "21:07",
+          "calculatedMinute": 7
+        },
+        {
+          "id": 5,
+          "code": "E5",
+          "name": "Estratégia 5",
+          "type": "yellow",
+          "description": "Branco 21:46 + 2 post (8, 12) = 22:06",
+          "calculatedTime": "22:06",
+          "calculatedMinute": 6
+        },
+        {
+          "id": 8,
+          "code": "E8",
+          "name": "Estratégia 8",
+          "type": "yellow",
+          "description": "Branco 21:34 + 1 ant (13) + 2 post (7, 13) = 22:07",
+          "calculatedTime": "22:07",
+          "calculatedMinute": 7
+        },
+        {
+          "id": 9,
+          "code": "E9",
+          "name": "Estratégia 9",
+          "type": "yellow",
+          "description": "Branco 21:51 + 2 ant (3, 7) + 2 post (3, 2) = 22:06",
+          "calculatedTime": "22:06",
+          "calculatedMinute": 6
+        },
+        {
+          "id": 10,
+          "code": "E10",
+          "name": "Estratégia 10",
+          "type": "yellow",
+          "description": "E9 + 15 min = 22:09",
+          "calculatedTime": "22:09",
+          "calculatedMinute": 9
+        },
+        {
+          "id": 14,
+          "code": "E14",
+          "name": "Estratégia 14",
+          "type": "blue",
+          "description": "2 Brancos (33m + 34m) = 23:07",
+          "calculatedTime": "23:07",
+          "calculatedMinute": 7
+        }
+      ],
+      "windowLabel": "19:06-19:08",
+      "checkedResults": 6,
+      "winningResultId": "193593",
+      "audit": {
+        "signalKey": "sig-1788732420000",
+        "targetTime": "19:07",
+        "targetIso": "2026-09-06T22:07:00.000Z",
+        "windowLabel": "19:06-19:08",
+        "windowMinutes": [
+          "19:06",
+          "19:07",
+          "19:08"
+        ],
+        "checkedResults": 6,
+        "roundsMMinus1": 2,
+        "roundsM": 2,
+        "roundsMPlus1": 2,
+        "spinsMMinus1Ids": [
+          "193589",
+          "193590"
+        ],
+        "spinsMIds": [
+          "193591",
+          "193592"
+        ],
+        "spinsMPlus1Ids": [
+          "193593",
+          "193594"
+        ],
+        "winningResultId": "193593",
+        "winningResultRoll": 0,
+        "winningResultColor": "white",
+        "winningResultTime": "19:08",
+        "winningResultCreatedAt": "2026-09-06T22:08:29.776",
+        "outcome": "WIN",
+        "isComplete6Rounds": true,
+        "auditedAt": 1788734603693
+      },
+      "sources": [
+        {
+          "analysis": 20,
+          "value": 13,
+          "pct": 100,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A20_V13_T1788729558815"
+        },
+        {
+          "analysis": 19,
+          "value": 14,
+          "pct": 80,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A19_V14_T1788730943505"
+        },
+        {
+          "analysis": 20,
+          "value": 3,
+          "pct": 75,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "A20_V3_T1788731485555"
+        },
+        {
+          "analysis": 27,
+          "value": 14,
+          "pct": 100,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A27_V14_T1788728625658"
+        },
+        {
+          "analysis": 30,
+          "value": 12,
+          "pct": 75,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "A30_V12_T1788732389290"
+        },
+        {
+          "analysis": 110,
+          "value": 10,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E10_T1788732540000"
+        },
+        {
+          "analysis": 108,
+          "value": 8,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E8_T1788732420000"
+        },
+        {
+          "analysis": 105,
+          "value": 5,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E5_T1788732360000"
+        },
+        {
+          "analysis": 108,
+          "value": 8,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E8_T1788732480000"
+        },
+        {
+          "analysis": 109,
+          "value": 9,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E9_T1788732360000"
+        }
+      ],
+      "category": "supreme",
+      "isSupreme": true,
+      "isRare": false,
+      "isAlavancagem": false,
+      "isTop1": true
+    },
+    {
+      "key": "sig-1788732000000",
+      "time": "19:00",
+      "outcome": "red",
+      "label": "LOSS",
+      "confluence": "E3, E4, E6, E7, E10 · A19-3 80%, A3-3 75%, A22-0 75%",
+      "timestamp": 1788734603992,
+      "targetTime": "19:00",
+      "strategyKey": "A19",
+      "confirmedStrategies": [
+        {
+          "id": 3,
+          "code": "E3",
+          "name": "Estratégia 3",
+          "type": "yellow",
+          "description": "Branco 21:51 + ant (7) + post (3) = 22:01",
+          "calculatedTime": "22:01",
+          "calculatedMinute": 1
+        },
+        {
+          "id": 4,
+          "code": "E4",
+          "name": "Estratégia 4",
+          "type": "yellow",
+          "description": "Branco 21:51 + 2 ant (3, 7) = 22:01",
+          "calculatedTime": "22:01",
+          "calculatedMinute": 1
+        },
+        {
+          "id": 5,
+          "code": "E5",
+          "name": "Estratégia 5",
+          "type": "yellow",
+          "description": "Branco 18:44 + 2 post (2, 14) = 19:00",
+          "calculatedTime": "19:00",
+          "calculatedMinute": 0
+        },
+        {
+          "id": 6,
+          "code": "E6",
+          "name": "Estratégia 6",
+          "type": "yellow",
+          "description": "Branco 21:51 + 1 ant (7) + 1 post (3) = 22:01",
+          "calculatedTime": "22:01",
+          "calculatedMinute": 1
+        },
+        {
+          "id": 7,
+          "code": "E7",
+          "name": "Estratégia 7",
+          "type": "yellow",
+          "description": "Branco 21:34 + 2 ant (5, 13) + 1 post (7) = 21:59",
+          "calculatedTime": "21:59",
+          "calculatedMinute": 59
+        },
+        {
+          "id": 8,
+          "code": "E8",
+          "name": "Estratégia 8",
+          "type": "yellow",
+          "description": "Branco 19:45 + 1 ant (1) + 2 post (6, 8) = 20:00",
+          "calculatedTime": "20:00",
+          "calculatedMinute": 0
+        },
+        {
+          "id": 9,
+          "code": "E9",
+          "name": "Estratégia 9",
+          "type": "yellow",
+          "description": "Branco 19:29 + 2 ant (8, 7) + 2 post (13, 3) = 20:00",
+          "calculatedTime": "20:00",
+          "calculatedMinute": 0
+        },
+        {
+          "id": 10,
+          "code": "E10",
+          "name": "Estratégia 10",
+          "type": "yellow",
+          "description": "E9 + 15 min = 21:59",
+          "calculatedTime": "21:59",
+          "calculatedMinute": 59
+        }
+      ],
+      "windowLabel": "18:59-19:01",
+      "checkedResults": 6,
+      "audit": {
+        "signalKey": "sig-1788732000000",
+        "targetTime": "19:00",
+        "targetIso": "2026-09-06T22:00:00.000Z",
+        "windowLabel": "18:59-19:01",
+        "windowMinutes": [
+          "18:59",
+          "19:00",
+          "19:01"
+        ],
+        "checkedResults": 6,
+        "roundsMMinus1": 2,
+        "roundsM": 2,
+        "roundsMPlus1": 2,
+        "spinsMMinus1Ids": [
+          "193575",
+          "193576"
+        ],
+        "spinsMIds": [
+          "193577",
+          "193578"
+        ],
+        "spinsMPlus1Ids": [
+          "193579",
+          "193580"
+        ],
+        "winningResultId": null,
+        "winningResultRoll": null,
+        "winningResultColor": null,
+        "winningResultTime": null,
+        "winningResultCreatedAt": null,
+        "outcome": "LOSS",
+        "isComplete6Rounds": true,
+        "auditedAt": 1788734603693
+      },
+      "sources": [
+        {
+          "analysis": 19,
+          "value": 3,
+          "pct": 80,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A19_V3_T1788730190945"
+        },
+        {
+          "analysis": 3,
+          "value": 3,
+          "pct": 75,
+          "top3": true,
+          "rank": 3,
+          "cycleKey": "A3_V3_T1788730190945"
+        },
+        {
+          "analysis": 22,
+          "value": 0,
+          "pct": 75,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "A22_V0_T1788727872872"
+        },
+        {
+          "analysis": 110,
+          "value": 10,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E10_T1788731940000"
+        },
+        {
+          "analysis": 107,
+          "value": 7,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E7_T1788731940000"
+        },
+        {
+          "analysis": 107,
+          "value": 7,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E7_T1788732000000"
+        },
+        {
+          "analysis": 103,
+          "value": 3,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E3_T1788732060000"
+        },
+        {
+          "analysis": 104,
+          "value": 4,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E4_T1788732060000"
+        },
+        {
+          "analysis": 106,
+          "value": 6,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E6_T1788732060000"
+        }
+      ],
+      "category": "rare",
+      "isSupreme": false,
+      "isRare": true,
+      "isAlavancagem": false,
+      "isTop1": true
+    },
+    {
+      "key": "sig-1788730920000",
+      "time": "18:42",
+      "outcome": "red",
+      "label": "LOSS",
+      "confluence": "E1, E2, E7 · A2-4 80%, A5-0 80%",
+      "timestamp": 1788734603992,
+      "targetTime": "18:42",
+      "strategyKey": "A2",
+      "confirmedStrategies": [
+        {
+          "id": 1,
+          "code": "E1",
+          "name": "Estratégia 1",
+          "type": "yellow",
+          "description": "Branco 21:30 (30m) + pedra ant (12) = 21:42",
+          "calculatedTime": "21:42",
+          "calculatedMinute": 42
+        },
+        {
+          "id": 2,
+          "code": "E2",
+          "name": "Estratégia 2",
+          "type": "yellow",
+          "description": "Branco 21:34 (34m) + pedra post (7) = 21:41",
+          "calculatedTime": "21:41",
+          "calculatedMinute": 41
+        },
+        {
+          "id": 7,
+          "code": "E7",
+          "name": "Estratégia 7",
+          "type": "yellow",
+          "description": "Branco 21:14 + 2 ant (10, 7) + 1 post (12) = 21:43",
+          "calculatedTime": "21:43",
+          "calculatedMinute": 43
+        }
+      ],
+      "windowLabel": "18:41-18:43",
+      "checkedResults": 6,
+      "audit": {
+        "signalKey": "sig-1788730920000",
+        "targetTime": "18:42",
+        "targetIso": "2026-09-06T21:42:00.000Z",
+        "windowLabel": "18:41-18:43",
+        "windowMinutes": [
+          "18:41",
+          "18:42",
+          "18:43"
+        ],
+        "checkedResults": 6,
+        "roundsMMinus1": 2,
+        "roundsM": 2,
+        "roundsMPlus1": 2,
+        "spinsMMinus1Ids": [
+          "193539",
+          "193540"
+        ],
+        "spinsMIds": [
+          "193541",
+          "193542"
+        ],
+        "spinsMPlus1Ids": [
+          "193543",
+          "193544"
+        ],
+        "winningResultId": null,
+        "winningResultRoll": null,
+        "winningResultColor": null,
+        "winningResultTime": null,
+        "winningResultCreatedAt": null,
+        "outcome": "LOSS",
+        "isComplete6Rounds": true,
+        "auditedAt": 1788734603693
+      },
+      "sources": [
+        {
+          "analysis": 2,
+          "value": 4,
+          "pct": 80,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A2_V4_T1788728023407"
+        },
+        {
+          "analysis": 5,
+          "value": 0,
+          "pct": 80,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A5_V0_T1788730251175"
+        },
+        {
+          "analysis": 107,
+          "value": 7,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E7_T1788730980000"
+        },
+        {
+          "analysis": 101,
+          "value": 1,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E1_T1788730920000"
+        },
+        {
+          "analysis": 102,
+          "value": 2,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E2_T1788730860000"
+        }
+      ],
+      "category": "supreme",
+      "isSupreme": true,
+      "isRare": false,
+      "isAlavancagem": false,
+      "isTop1": true
+    },
+    {
+      "key": "sig-1788730320000",
+      "time": "18:32",
+      "outcome": "red",
+      "label": "LOSS",
+      "confluence": "E3, E4, E5, E6, E7, E8, E10 · A20-5 80%, A18-14 75%, A29-2 80%",
+      "timestamp": 1788734603992,
+      "targetTime": "18:32",
+      "strategyKey": "A20",
+      "confirmedStrategies": [
+        {
+          "id": 3,
+          "code": "E3",
+          "name": "Estratégia 3",
+          "type": "yellow",
+          "description": "Branco 21:14 + ant (7) + post (12) = 21:33",
+          "calculatedTime": "21:33",
+          "calculatedMinute": 33
+        },
+        {
+          "id": 4,
+          "code": "E4",
+          "name": "Estratégia 4",
+          "type": "yellow",
+          "description": "Branco 21:14 + 2 ant (10, 7) = 21:31",
+          "calculatedTime": "21:31",
+          "calculatedMinute": 31
+        },
+        {
+          "id": 5,
+          "code": "E5",
+          "name": "Estratégia 5",
+          "type": "yellow",
+          "description": "Branco 21:10 + 2 post (9, 13) = 21:32",
+          "calculatedTime": "21:32",
+          "calculatedMinute": 32
+        },
+        {
+          "id": 6,
+          "code": "E6",
+          "name": "Estratégia 6",
+          "type": "yellow",
+          "description": "Branco 21:14 + 1 ant (7) + 1 post (12) = 21:33",
+          "calculatedTime": "21:33",
+          "calculatedMinute": 33
+        },
+        {
+          "id": 7,
+          "code": "E7",
+          "name": "Estratégia 7",
+          "type": "yellow",
+          "description": "Branco 20:56 + 2 ant (14, 12) + 1 post (11) = 21:33",
+          "calculatedTime": "21:33",
+          "calculatedMinute": 33
+        },
+        {
+          "id": 8,
+          "code": "E8",
+          "name": "Estratégia 8",
+          "type": "yellow",
+          "description": "Branco 20:56 + 1 ant (12) + 2 post (11, 14) = 21:33",
+          "calculatedTime": "21:33",
+          "calculatedMinute": 33
+        },
+        {
+          "id": 10,
+          "code": "E10",
+          "name": "Estratégia 10",
+          "type": "yellow",
+          "description": "E9 + 15 min = 21:33",
+          "calculatedTime": "21:33",
+          "calculatedMinute": 33
+        },
+        {
+          "id": 12,
+          "code": "E12",
+          "name": "Estratégia 12",
+          "type": "blue",
+          "description": "2 Brancos (8m + 8m) + 8m + post (8) = 22:32",
+          "calculatedTime": "22:32",
+          "calculatedMinute": 32
+        }
+      ],
+      "windowLabel": "18:31-18:33",
+      "checkedResults": 6,
+      "audit": {
+        "signalKey": "sig-1788730320000",
+        "targetTime": "18:32",
+        "targetIso": "2026-09-06T21:32:00.000Z",
+        "windowLabel": "18:31-18:33",
+        "windowMinutes": [
+          "18:31",
+          "18:32",
+          "18:33"
+        ],
+        "checkedResults": 6,
+        "roundsMMinus1": 2,
+        "roundsM": 2,
+        "roundsMPlus1": 2,
+        "spinsMMinus1Ids": [
+          "193519",
+          "193520"
+        ],
+        "spinsMIds": [
+          "193521",
+          "193522"
+        ],
+        "spinsMPlus1Ids": [
+          "193523",
+          "193524"
+        ],
+        "winningResultId": null,
+        "winningResultRoll": null,
+        "winningResultColor": null,
+        "winningResultTime": null,
+        "winningResultCreatedAt": null,
+        "outcome": "LOSS",
+        "isComplete6Rounds": true,
+        "auditedAt": 1788734603693
+      },
+      "sources": [
+        {
+          "analysis": 20,
+          "value": 5,
+          "pct": 80,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A20_V5_T1788730190945"
+        },
+        {
+          "analysis": 18,
+          "value": 14,
+          "pct": 75,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "A18_V14_T1788728143810"
+        },
+        {
+          "analysis": 29,
+          "value": 2,
+          "pct": 80,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A29_V2_T1788729889872"
+        },
+        {
+          "analysis": 110,
+          "value": 10,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E10_T1788730380000"
+        },
+        {
+          "analysis": 110,
+          "value": 10,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E10_T1788730260000"
+        },
+        {
+          "analysis": 107,
+          "value": 7,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E7_T1788730380000"
+        },
+        {
+          "analysis": 108,
+          "value": 8,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E8_T1788730380000"
+        },
+        {
+          "analysis": 105,
+          "value": 5,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E5_T1788730320000"
+        },
+        {
+          "analysis": 107,
+          "value": 7,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E7_T1788730260000"
+        },
+        {
+          "analysis": 103,
+          "value": 3,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E3_T1788730380000"
+        },
+        {
+          "analysis": 104,
+          "value": 4,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E4_T1788730260000"
+        },
+        {
+          "analysis": 105,
+          "value": 5,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E5_T1788730380000"
+        },
+        {
+          "analysis": 106,
+          "value": 6,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E6_T1788730380000"
+        }
+      ],
+      "category": "supreme",
+      "isSupreme": true,
+      "isRare": false,
+      "isAlavancagem": false,
+      "isTop1": true
+    },
+    {
+      "key": "sig-1788729600000",
+      "time": "18:20",
+      "outcome": "red",
+      "label": "LOSS",
+      "confluence": "E1, E2, E3, E5, E6, E7, E8, E10 · A20-2 100%, A17-7 75%, A18-14 75%, A25-0 75%, A27-14 75%, A32-2 75%",
+      "timestamp": 1788734603992,
+      "targetTime": "18:20",
+      "strategyKey": "A20",
+      "confirmedStrategies": [
+        {
+          "id": 1,
+          "code": "E1",
+          "name": "Estratégia 1",
+          "type": "yellow",
+          "description": "Branco 21:14 (14m) + pedra ant (7) = 21:21",
+          "calculatedTime": "21:21",
+          "calculatedMinute": 21
+        },
+        {
+          "id": 2,
+          "code": "E2",
+          "name": "Estratégia 2",
+          "type": "yellow",
+          "description": "Branco 21:10 (10m) + pedra post (9) = 21:19",
+          "calculatedTime": "21:19",
+          "calculatedMinute": 19
+        },
+        {
+          "id": 3,
+          "code": "E3",
+          "name": "Estratégia 3",
+          "type": "yellow",
+          "description": "Branco 20:56 + ant (12) + post (11) = 21:19",
+          "calculatedTime": "21:19",
+          "calculatedMinute": 19
+        },
+        {
+          "id": 4,
+          "code": "E4",
+          "name": "Estratégia 4",
+          "type": "yellow",
+          "description": "Branco 20:10 + 2 ant (9, 1) = 20:20",
+          "calculatedTime": "20:20",
+          "calculatedMinute": 20
+        },
+        {
+          "id": 5,
+          "code": "E5",
+          "name": "Estratégia 5",
+          "type": "yellow",
+          "description": "Branco 20:56 + 2 post (11, 14) = 21:21",
+          "calculatedTime": "21:21",
+          "calculatedMinute": 21
+        },
+        {
+          "id": 6,
+          "code": "E6",
+          "name": "Estratégia 6",
+          "type": "yellow",
+          "description": "Branco 20:56 + 1 ant (12) + 1 post (11) = 21:19",
+          "calculatedTime": "21:19",
+          "calculatedMinute": 19
+        },
+        {
+          "id": 7,
+          "code": "E7",
+          "name": "Estratégia 7",
+          "type": "yellow",
+          "description": "Branco 20:51 + 2 ant (5, 12) + 1 post (13) = 21:21",
+          "calculatedTime": "21:21",
+          "calculatedMinute": 21
+        },
+        {
+          "id": 8,
+          "code": "E8",
+          "name": "Estratégia 8",
+          "type": "yellow",
+          "description": "Branco 20:51 + 1 ant (12) + 2 post (13, 3) = 21:19",
+          "calculatedTime": "21:19",
+          "calculatedMinute": 19
+        },
+        {
+          "id": 10,
+          "code": "E10",
+          "name": "Estratégia 10",
+          "type": "yellow",
+          "description": "E9 + 15 min = 21:20",
+          "calculatedTime": "21:20",
+          "calculatedMinute": 20
+        },
+        {
+          "id": 11,
+          "code": "E11",
+          "name": "Estratégia 11",
+          "type": "blue",
+          "description": "2 Brancos (40m + 41m) - 1m = 18:20",
+          "calculatedTime": "18:20",
+          "calculatedMinute": 20
+        }
+      ],
+      "windowLabel": "18:19-18:21",
+      "checkedResults": 6,
+      "audit": {
+        "signalKey": "sig-1788729600000",
+        "targetTime": "18:20",
+        "targetIso": "2026-09-06T21:20:00.000Z",
+        "windowLabel": "18:19-18:21",
+        "windowMinutes": [
+          "18:19",
+          "18:20",
+          "18:21"
+        ],
+        "checkedResults": 6,
+        "roundsMMinus1": 2,
+        "roundsM": 2,
+        "roundsMPlus1": 2,
+        "spinsMMinus1Ids": [
+          "193495",
+          "193496"
+        ],
+        "spinsMIds": [
+          "193497",
+          "193498"
+        ],
+        "spinsMPlus1Ids": [
+          "193499",
+          "193500"
+        ],
+        "winningResultId": null,
+        "winningResultRoll": null,
+        "winningResultColor": null,
+        "winningResultTime": null,
+        "winningResultCreatedAt": null,
+        "outcome": "LOSS",
+        "isComplete6Rounds": true,
+        "auditedAt": 1788734603693
+      },
+      "sources": [
+        {
+          "analysis": 20,
+          "value": 2,
+          "pct": 100,
+          "top3": false,
+          "rank": 1,
+          "cycleKey": "A20_V2_T1788728113710"
+        },
+        {
+          "analysis": 17,
+          "value": 7,
+          "pct": 75,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "A17_V7_T1788729317968"
+        },
+        {
+          "analysis": 18,
+          "value": 14,
+          "pct": 75,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "A18_V14_T1788728143810"
+        },
+        {
+          "analysis": 25,
+          "value": 0,
+          "pct": 75,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "A25_V0_T1788727963186"
+        },
+        {
+          "analysis": 27,
+          "value": 14,
+          "pct": 75,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "A27_V14_T1788728625658"
+        },
+        {
+          "analysis": 32,
+          "value": 2,
+          "pct": 75,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "A32_V2_T1788729438379"
+        },
+        {
+          "analysis": 110,
+          "value": 10,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E10_T1788729600000"
+        },
+        {
+          "analysis": 107,
+          "value": 7,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E7_T1788729660000"
+        },
+        {
+          "analysis": 108,
+          "value": 8,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E8_T1788729540000"
+        },
+        {
+          "analysis": 103,
+          "value": 3,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E3_T1788729540000"
+        },
+        {
+          "analysis": 105,
+          "value": 5,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E5_T1788729660000"
+        },
+        {
+          "analysis": 106,
+          "value": 6,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E6_T1788729540000"
+        },
+        {
+          "analysis": 102,
+          "value": 2,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E2_T1788729540000"
+        },
+        {
+          "analysis": 101,
+          "value": 1,
+          "pct": 78,
+          "top3": true,
+          "rank": 2,
+          "cycleKey": "E_E1_T1788729660000"
+        }
+      ],
+      "category": "rare",
+      "isSupreme": false,
+      "isRare": true,
+      "isAlavancagem": false,
+      "isTop1": true
+    },
     {
       "key": "sig-1788702960000",
       "time": "10:56",
@@ -2285,89 +4206,89 @@
   ],
   "stats": {
     "A20": {
-      "green": 2,
-      "red": 5,
-      "lastUpdated": 1788628611578
+      "green": 4,
+      "red": 9,
+      "lastUpdated": 1788734614866
     },
     "E1": {
       "green": 3,
-      "red": 8,
-      "lastUpdated": 1788703097591
+      "red": 11,
+      "lastUpdated": 1788734614866
     },
     "E2": {
-      "green": 2,
-      "red": 8,
-      "lastUpdated": 1788702722765
+      "green": 4,
+      "red": 12,
+      "lastUpdated": 1788735188563
     },
     "E3": {
       "green": 4,
-      "red": 8,
-      "lastUpdated": 1788702722765
+      "red": 14,
+      "lastUpdated": 1788735188563
     },
     "E4": {
-      "green": 2,
-      "red": 10,
-      "lastUpdated": 1788703097591
+      "green": 3,
+      "red": 18,
+      "lastUpdated": 1788735727709
     },
     "E5": {
-      "green": 1,
-      "red": 9,
-      "lastUpdated": 1788703097591
+      "green": 3,
+      "red": 15,
+      "lastUpdated": 1788735727709
     },
     "E6": {
       "green": 4,
-      "red": 8,
-      "lastUpdated": 1788702722765
+      "red": 14,
+      "lastUpdated": 1788735188563
     },
     "E7": {
       "green": 3,
-      "red": 9,
-      "lastUpdated": 1788702722765
+      "red": 15,
+      "lastUpdated": 1788735727709
     },
     "E8": {
-      "green": 3,
-      "red": 7,
-      "lastUpdated": 1788702722765
+      "green": 4,
+      "red": 14,
+      "lastUpdated": 1788735727709
     },
     "E9": {
-      "green": 2,
-      "red": 10,
-      "lastUpdated": 1788702722765
+      "green": 3,
+      "red": 13,
+      "lastUpdated": 1788735727709
     },
     "E10": {
-      "green": 2,
-      "red": 8,
-      "lastUpdated": 1788702722765
+      "green": 4,
+      "red": 13,
+      "lastUpdated": 1788734603993
     },
     "A2": {
-      "green": 4,
-      "red": 3,
-      "lastUpdated": 1788702722765
+      "green": 5,
+      "red": 7,
+      "lastUpdated": 1788735727709
     },
     "E12": {
-      "green": 0,
-      "red": 2,
-      "lastUpdated": 1788702722765
+      "green": 1,
+      "red": 4,
+      "lastUpdated": 1788735188563
     },
     "A19": {
-      "green": 3,
-      "red": 7,
-      "lastUpdated": 1788703097591
+      "green": 4,
+      "red": 9,
+      "lastUpdated": 1788734603992
     },
     "A26": {
-      "green": 0,
-      "red": 2,
-      "lastUpdated": 1788702722765
+      "green": 1,
+      "red": 4,
+      "lastUpdated": 1788735727709
     },
     "A35": {
       "green": 0,
-      "red": 1,
-      "lastUpdated": 1788627963708
+      "red": 2,
+      "lastUpdated": 1788735727709
     },
     "A22": {
-      "green": 0,
-      "red": 1,
-      "lastUpdated": 1788627963708
+      "green": 1,
+      "red": 3,
+      "lastUpdated": 1788735188563
     },
     "A24": {
       "green": 0,
@@ -2385,14 +4306,14 @@
       "lastUpdated": 1788628278770
     },
     "A27": {
-      "green": 0,
-      "red": 1,
-      "lastUpdated": 1788627977705
+      "green": 1,
+      "red": 2,
+      "lastUpdated": 1788734603992
     },
     "A28": {
       "green": 0,
-      "red": 2,
-      "lastUpdated": 1788628278770
+      "red": 3,
+      "lastUpdated": 1788734603992
     },
     "A31": {
       "green": 1,
@@ -2401,13 +4322,158 @@
     },
     "A3": {
       "green": 2,
-      "red": 0,
-      "lastUpdated": 1788628611578
+      "red": 1,
+      "lastUpdated": 1788734603992
     },
     "E13": {
       "green": 0,
       "red": 2,
       "lastUpdated": 1788702722765
+    },
+    "E11": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788734603992
+    },
+    "A17": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788734603992
+    },
+    "A18": {
+      "green": 0,
+      "red": 2,
+      "lastUpdated": 1788734603992
+    },
+    "A25": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788734603992
+    },
+    "A32": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788734603992
+    },
+    "A29": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788734603992
+    },
+    "A5": {
+      "green": 0,
+      "red": 2,
+      "lastUpdated": 1788735727709
+    },
+    "E14": {
+      "green": 1,
+      "red": 0,
+      "lastUpdated": 1788734603992
+    },
+    "A30": {
+      "green": 1,
+      "red": 1,
+      "lastUpdated": 1788734603992
+    },
+    "E15": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788734603993
+    },
+    "A2_8": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735188563
+    },
+    "A22_13": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735188563
+    },
+    "A26_12": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735188563
+    },
+    "A36": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735188563
+    },
+    "A36_14": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735188563
+    },
+    "E9_9": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735188563
+    },
+    "A109_9": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735188563
+    },
+    "E12_12": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735188563
+    },
+    "A112_12": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735188563
+    },
+    "E5_5": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735188563
+    },
+    "A105_5": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735188563
+    },
+    "A2_0": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735727709
+    },
+    "A5_7": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735727709
+    },
+    "A26_14": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735727709
+    },
+    "A33": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735727709
+    },
+    "A33_12": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735727709
+    },
+    "A35_5": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735727709
+    },
+    "E4_4": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735727709
+    },
+    "A104_4": {
+      "green": 0,
+      "red": 1,
+      "lastUpdated": 1788735727709
     }
   }
 }

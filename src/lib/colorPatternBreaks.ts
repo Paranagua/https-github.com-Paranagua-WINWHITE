@@ -93,7 +93,7 @@ export const COLOR_PATTERNS: ColorPatternDefinition[] = [
     shortName: "Contínuos (5x)",
     categoryName: "Sequência da Mesma Cor",
     description:
-      "Mesma cor durante 5 rodadas consecutivas (P-P-P-P-P ou V-V-V-V-V) quebrada na 6ª casa disponível.",
+      "Mesma cor durante exatamente 5 rodadas consecutivas (P-P-P-P-P ou V-V-V-V-V) quebrada na 6ª casa disponível (exclusivo: quando for N1 ou N2 não conta como contínuos).",
     minCasasParaAnalise: 6,
   },
   {
@@ -102,8 +102,9 @@ export const COLOR_PATTERNS: ColorPatternDefinition[] = [
     name: "Contínuos N1 (6 consecutivas)",
     shortName: "Contínuos N1 (6x)",
     categoryName: "Sequência da Mesma Cor",
-    description: "Mesma cor durante 6 rodadas consecutivas quebrada na 7ª rodada.",
-    minCasasParaAnalise: 6,
+    description:
+      "Mesma cor durante exatamente 6 rodadas consecutivas quebrada na 7ª rodada (exclusivo: não conta como contínuos 5x, e quando for N2 não conta como N1).",
+    minCasasParaAnalise: 7,
   },
   {
     id: "continuos_n2",
@@ -111,8 +112,9 @@ export const COLOR_PATTERNS: ColorPatternDefinition[] = [
     name: "Contínuos N2 (7+ consecutivas)",
     shortName: "Contínuos N2 (7x+)",
     categoryName: "Sequência da Mesma Cor",
-    description: "Mesma cor durante 7 ou mais rodadas consecutivas quebrada na rodada seguinte.",
-    minCasasParaAnalise: 6,
+    description:
+      "Mesma cor durante 7 ou mais rodadas consecutivas quebrada na rodada seguinte (exclusivo: quando for N2 não conta como N1 e nem como contínuos).",
+    minCasasParaAnalise: 8,
   },
 ];
 
@@ -568,7 +570,12 @@ export function detectAlternadosContinuos2N(rows: Row[]): ColorBreakResult[] {
 /**
  * 5 — CONTÍNUOS (5 rodadas consecutivas da mesma cor)
  * Exemplo: P-P-P-P-P-V(2) ou V-V-V-V-V-0
- * Requer mínimo de 6 casas disponíveis. A 6ª pedra faz a quebra se não for da mesma cor.
+ * Requer exatamente 5 pedras consecutivas da mesma cor. A 6ª pedra faz a quebra se não for da mesma cor.
+ *
+ * REGRA DE EXCLUSIVIDADE:
+ * - Quando uma sequência for N1 (6 consecutivas), NÃO conta como contínuos (5x).
+ * - Quando uma sequência for N2 (7+ consecutivas), NÃO conta como contínuos (5x).
+ * Portanto, aciona ESTRITAMENTE quando o bloco tiver exatamente 5 pedras consecutivas da mesma cor.
  */
 export function detectContinuos(rows: Row[]): ColorBreakResult[] {
   const breaks: ColorBreakResult[] = [];
@@ -576,72 +583,66 @@ export function detectContinuos(rows: Row[]): ColorBreakResult[] {
   const len = rows.length;
   let i = 0;
 
-  while (i + 5 < len) {
+  while (i < len) {
     const cStart = getPatternColor(rows[i].roll);
     if (cStart === "white") {
       i++;
       continue;
     }
 
-    // Verifica se as 5 primeiras pedras são estritamente da mesma cor
-    let allSame = true;
-    for (let offset = 1; offset < 5; offset++) {
-      if (getPatternColor(rows[i + offset].roll) !== cStart) {
-        allSame = false;
-        break;
-      }
+    // Identifica toda a extensão contínua da mesma cor cStart
+    let k = i;
+    while (k < len && getPatternColor(rows[k].roll) === cStart) {
+      k++;
     }
 
-    if (!allSame) {
-      i++;
-      continue;
-    }
+    const streakLength = k - i;
 
-    // A 6ª pedra (índice i + 5) é a pedra candidata à quebra do padrão de 5 contínuos
-    const breakIndex = i + 5;
-    const breakRow = rows[breakIndex];
-    const breakRoll = Number(breakRow.roll);
-    const breakColor = getPatternColor(breakRoll);
+    // Se houve quebra da sequência (k < len):
+    if (k < len) {
+      // REGRA: ESTRITAMENTE 5 consecutivas da mesma cor (nem 6 [N1], nem 7+ [N2])
+      if (streakLength === 5) {
+        const breakRow = rows[k];
+        const breakRoll = Number(breakRow.roll);
+        const breakColor = getPatternColor(breakRoll);
+        const breakDate = parseUtcDate(breakRow.created_at);
 
-    // Se a 6ª pedra for diferente (outra cor ou 0 / branco): quebra o padrão!
-    if (breakColor !== cStart) {
-      const breakDate = parseUtcDate(breakRow.created_at);
-      const seqItems = [];
-      for (let s = i; s <= breakIndex; s++) {
-        const r = rows[s];
-        const rollNum = Number(r.roll);
-        seqItems.push({
-          roll: rollNum,
-          color: getPatternColor(rollNum),
-          id: r.id,
-          createdAt: r.created_at,
-          isBreakStone: s === breakIndex,
+        const seqItems = [];
+        for (let s = i; s <= k; s++) {
+          const r = rows[s];
+          const rollNum = Number(r.roll);
+          seqItems.push({
+            roll: rollNum,
+            color: getPatternColor(rollNum),
+            id: r.id,
+            createdAt: r.created_at,
+            isBreakStone: s === k,
+          });
+        }
+
+        breaks.push({
+          patternId: "continuos",
+          analysisId: def.analysisId,
+          patternName: def.name,
+          sequence: seqItems,
+          sequenceString: formatSequenceString(seqItems),
+          sequenceLength: 6,
+          predominantColor: cStart,
+          expectedColor: cStart,
+          breakStone: {
+            roll: breakRoll,
+            color: breakColor,
+            createdAt: breakRow.created_at,
+            date: breakDate,
+            rowIndex: k,
+          },
         });
       }
 
-      breaks.push({
-        patternId: "continuos",
-        analysisId: def.analysisId,
-        patternName: def.name,
-        sequence: seqItems,
-        sequenceString: formatSequenceString(seqItems),
-        sequenceLength: 6,
-        predominantColor: cStart,
-        expectedColor: cStart,
-        breakStone: {
-          roll: breakRoll,
-          color: breakColor,
-          createdAt: breakRow.created_at,
-          date: breakDate,
-          rowIndex: breakIndex,
-        },
-      });
-
-      // A pedra de quebra é avaliada como início potencial do próximo padrão contínuo
-      i = breakIndex;
+      // A pedra de quebra k é avaliada como início potencial do próximo padrão
+      i = k;
     } else {
-      // Se a 6ª pedra é da mesma cor, não é quebra de 5 (será 6 ou mais consecutivas)
-      i++;
+      break;
     }
   }
 
@@ -651,7 +652,12 @@ export function detectContinuos(rows: Row[]): ColorBreakResult[] {
 /**
  * 6 — CONTÍNUOS N1 (6 rodadas consecutivas da mesma cor)
  * Exemplo: P-P-P-P-P-P-V(2) ou V-V-V-V-V-V-0
- * Requer 6 pedras consecutivas da mesma cor. A 7ª pedra faz a quebra se não for da mesma cor.
+ * Requer exatamente 6 pedras consecutivas da mesma cor. A 7ª pedra faz a quebra se não for da mesma cor.
+ *
+ * REGRA DE EXCLUSIVIDADE:
+ * - Quando uma sequência for N2 (7+ consecutivas), NÃO conta como N1 e NÃO conta como contínuos.
+ * - Quando for N1 (6 consecutivas), NÃO conta como contínuos (5x).
+ * Portanto, aciona ESTRITAMENTE quando o bloco tiver exatamente 6 pedras consecutivas da mesma cor.
  */
 export function detectContinuosN1(rows: Row[]): ColorBreakResult[] {
   const breaks: ColorBreakResult[] = [];
@@ -659,72 +665,66 @@ export function detectContinuosN1(rows: Row[]): ColorBreakResult[] {
   const len = rows.length;
   let i = 0;
 
-  while (i + 6 < len) {
+  while (i < len) {
     const cStart = getPatternColor(rows[i].roll);
     if (cStart === "white") {
       i++;
       continue;
     }
 
-    // Verifica se as 6 primeiras pedras são estritamente da mesma cor
-    let allSame = true;
-    for (let offset = 1; offset < 6; offset++) {
-      if (getPatternColor(rows[i + offset].roll) !== cStart) {
-        allSame = false;
-        break;
-      }
+    // Identifica toda a extensão contínua da mesma cor cStart
+    let k = i;
+    while (k < len && getPatternColor(rows[k].roll) === cStart) {
+      k++;
     }
 
-    if (!allSame) {
-      i++;
-      continue;
-    }
+    const streakLength = k - i;
 
-    // A 7ª pedra (índice i + 6) é a pedra candidata à quebra do padrão de 6 contínuos
-    const breakIndex = i + 6;
-    const breakRow = rows[breakIndex];
-    const breakRoll = Number(breakRow.roll);
-    const breakColor = getPatternColor(breakRoll);
+    // Se houve quebra da sequência (k < len):
+    if (k < len) {
+      // REGRA: ESTRITAMENTE 6 consecutivas da mesma cor (nem 5 [Contínuos], nem 7+ [N2])
+      if (streakLength === 6) {
+        const breakRow = rows[k];
+        const breakRoll = Number(breakRow.roll);
+        const breakColor = getPatternColor(breakRoll);
+        const breakDate = parseUtcDate(breakRow.created_at);
 
-    // Se for diferente (cor oposta ou branco 0): quebrou o padrão N1
-    if (breakColor !== cStart) {
-      const breakDate = parseUtcDate(breakRow.created_at);
-      const seqItems = [];
-      for (let s = i; s <= breakIndex; s++) {
-        const r = rows[s];
-        const rollNum = Number(r.roll);
-        seqItems.push({
-          roll: rollNum,
-          color: getPatternColor(rollNum),
-          id: r.id,
-          createdAt: r.created_at,
-          isBreakStone: s === breakIndex,
+        const seqItems = [];
+        for (let s = i; s <= k; s++) {
+          const r = rows[s];
+          const rollNum = Number(r.roll);
+          seqItems.push({
+            roll: rollNum,
+            color: getPatternColor(rollNum),
+            id: r.id,
+            createdAt: r.created_at,
+            isBreakStone: s === k,
+          });
+        }
+
+        breaks.push({
+          patternId: "continuos_n1",
+          analysisId: def.analysisId,
+          patternName: def.name,
+          sequence: seqItems,
+          sequenceString: formatSequenceString(seqItems),
+          sequenceLength: 7,
+          predominantColor: cStart,
+          expectedColor: cStart,
+          breakStone: {
+            roll: breakRoll,
+            color: breakColor,
+            createdAt: breakRow.created_at,
+            date: breakDate,
+            rowIndex: k,
+          },
         });
       }
 
-      breaks.push({
-        patternId: "continuos_n1",
-        analysisId: def.analysisId,
-        patternName: def.name,
-        sequence: seqItems,
-        sequenceString: formatSequenceString(seqItems),
-        sequenceLength: 7,
-        predominantColor: cStart,
-        expectedColor: cStart,
-        breakStone: {
-          roll: breakRoll,
-          color: breakColor,
-          createdAt: breakRow.created_at,
-          date: breakDate,
-          rowIndex: breakIndex,
-        },
-      });
-
-      // A pedra de quebra é avaliada como início potencial do próximo padrão contínuo
-      i = breakIndex;
+      // A pedra de quebra k é avaliada como início potencial do próximo padrão
+      i = k;
     } else {
-      // Se a 7ª pedra for da mesma cor, será Contínuos N2 (7+)
-      i++;
+      break;
     }
   }
 
@@ -734,8 +734,11 @@ export function detectContinuosN1(rows: Row[]): ColorBreakResult[] {
 /**
  * 7 — CONTÍNUOS N2 (7 ou mais rodadas consecutivas da mesma cor)
  * Exemplo: P-P-P-P-P-P-P-V(2) ou V-V-V-V-V-V-V-0
- * O padrão continua válido enquanto a mesma cor permanecer.
- * A primeira pedra que for de outra cor ou branco faz a quebra.
+ * Requer 7 ou mais pedras consecutivas da mesma cor. A primeira pedra diferente faz a quebra.
+ *
+ * REGRA DE EXCLUSIVIDADE:
+ * - Quando uma sequência for N2 (7+ consecutivas), NÃO conta como N1 e NÃO conta como contínuos (5x).
+ * Portanto, aciona ESTRITAMENTE quando o bloco tiver 7 ou mais pedras consecutivas da mesma cor.
  */
 export function detectContinuosN2(rows: Row[]): ColorBreakResult[] {
   const breaks: ColorBreakResult[] = [];
@@ -743,72 +746,63 @@ export function detectContinuosN2(rows: Row[]): ColorBreakResult[] {
   const len = rows.length;
   let i = 0;
 
-  while (i + 7 <= len) {
+  while (i < len) {
     const cStart = getPatternColor(rows[i].roll);
     if (cStart === "white") {
       i++;
       continue;
     }
 
-    // Verifica se pelo menos 7 pedras são estritamente da mesma cor
-    let allSame = true;
-    for (let offset = 1; offset < 7; offset++) {
-      if (getPatternColor(rows[i + offset].roll) !== cStart) {
-        allSame = false;
-        break;
-      }
-    }
-
-    if (!allSame) {
-      i++;
-      continue;
-    }
-
-    // Continua expandindo enquanto a mesma cor permanecer
-    let k = i + 7;
+    // Identifica toda a extensão contínua da mesma cor cStart
+    let k = i;
     while (k < len && getPatternColor(rows[k].roll) === cStart) {
       k++;
     }
 
-    // Se encontramos a quebra (k < len):
-    if (k < len) {
-      const breakRow = rows[k];
-      const breakDate = parseUtcDate(breakRow.created_at);
-      const breakRoll = Number(breakRow.roll);
-      const breakColor = getPatternColor(breakRoll);
+    const streakLength = k - i;
 
-      const seqItems = [];
-      for (let s = i; s <= k; s++) {
-        const r = rows[s];
-        const rollNum = Number(r.roll);
-        seqItems.push({
-          roll: rollNum,
-          color: getPatternColor(rollNum),
-          id: r.id,
-          createdAt: r.created_at,
-          isBreakStone: s === k,
+    // Se houve quebra da sequência (k < len):
+    if (k < len) {
+      // REGRA: ESTRITAMENTE 7 ou mais consecutivas da mesma cor
+      if (streakLength >= 7) {
+        const breakRow = rows[k];
+        const breakRoll = Number(breakRow.roll);
+        const breakColor = getPatternColor(breakRoll);
+        const breakDate = parseUtcDate(breakRow.created_at);
+
+        const seqItems = [];
+        for (let s = i; s <= k; s++) {
+          const r = rows[s];
+          const rollNum = Number(r.roll);
+          seqItems.push({
+            roll: rollNum,
+            color: getPatternColor(rollNum),
+            id: r.id,
+            createdAt: r.created_at,
+            isBreakStone: s === k,
+          });
+        }
+
+        breaks.push({
+          patternId: "continuos_n2",
+          analysisId: def.analysisId,
+          patternName: def.name,
+          sequence: seqItems,
+          sequenceString: formatSequenceString(seqItems),
+          sequenceLength: streakLength + 1,
+          predominantColor: cStart,
+          expectedColor: cStart,
+          breakStone: {
+            roll: breakRoll,
+            color: breakColor,
+            createdAt: breakRow.created_at,
+            date: breakDate,
+            rowIndex: k,
+          },
         });
       }
 
-      breaks.push({
-        patternId: "continuos_n2",
-        analysisId: def.analysisId,
-        patternName: def.name,
-        sequence: seqItems,
-        sequenceString: formatSequenceString(seqItems),
-        sequenceLength: k - i + 1,
-        predominantColor: cStart,
-        expectedColor: cStart,
-        breakStone: {
-          roll: breakRoll,
-          color: breakColor,
-          createdAt: breakRow.created_at,
-          date: breakDate,
-          rowIndex: k,
-        },
-      });
-
-      // A pedra da quebra (k) é avaliada como início potencial do próximo padrão
+      // A pedra de quebra k é avaliada como início potencial do próximo padrão
       i = k;
     } else {
       break;
