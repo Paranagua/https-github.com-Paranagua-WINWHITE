@@ -152,6 +152,8 @@ export function extractSignalAnalyses(sig: any): SignalAnalysisItem[] {
   if (Array.isArray(sig.sources) && sig.sources.length > 0) {
     sig.sources.forEach((src: any) => {
       if (!src) return;
+      // Estratégias E já são exibidas em cardStrategies
+      if (src.analysis >= 101 && src.analysis <= 115) return;
       const pctStr = typeof src.pct === "number" && src.pct > 0 ? `${Math.round(src.pct)}%` : "";
       const code =
         src.analysis >= 50 && src.analysis <= 56 ? `Q${src.analysis - 49}` : `A${src.analysis}`;
@@ -233,6 +235,13 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
   const top3Sources = (sig.sources || []).filter((s: any) => s.top3 || s.top5);
   const distinctTop1 = new Set(top1Sources.map((s: any) => s.analysis));
   const distinctTop3 = new Set(top3Sources.map((s: any) => s.analysis));
+
+  // Regra do Usuário: As estratégias "E" devem ser consideradas como Top 2/3 (confluência)
+  const textToScan = `${sig.confluence || ""} ${sig.label || ""} ${(sig as any).strategies?.join(" ") || ""}`;
+  const eMatches = textToScan.match(/\bE(1[0-5]|[1-9])\b/gi);
+  if (eMatches) {
+    eMatches.forEach((m) => distinctTop3.add(`E_${m.toUpperCase()}`));
+  }
 
   // Quando fontes estruturadas estão presentes, calcula estritamente pelas regras dos grupos:
   if (distinctTop1.size > 0 || distinctTop3.size > 0) {
@@ -936,6 +945,9 @@ export function getAnalysisGroupName(analysisId: number): string {
   ) {
     return "Gatilhos de Sequência";
   }
+  if (analysisId >= 101 && analysisId <= 115) {
+    return "Estratégias de Confirmação (E)";
+  }
   if (analysisId === 14 || analysisId === 15 || analysisId === 16) {
     return "Somas Consecutivas";
   }
@@ -946,6 +958,9 @@ export function getAnalysisGroupName(analysisId: number): string {
 }
 
 export function formatAnalysisCode(analysisId: number): string {
+  if (analysisId >= 101 && analysisId <= 115) {
+    return `E${analysisId - 100}`;
+  }
   if (analysisId >= 50 && analysisId <= 56) {
     return `Q${analysisId - 49}`;
   }
@@ -1062,16 +1077,6 @@ export function buildStrategyTriggeredSignals(
       return t >= clusterWindowStart && t <= clusterWindowEnd;
     });
 
-    // Todas as análises ativas na janela (Primárias + Confluência)
-    const allMatchingAnalyses = [...clusterPrimary, ...matchingConfluenceAnalyses];
-    const top1Analyses = allMatchingAnalyses.filter((ac) => ac.isTop1);
-    const top3Analyses = allMatchingAnalyses.filter((ac) => !ac.isTop1);
-
-    const distinctTop1Analyses = Array.from(new Set(top1Analyses.map((s) => s.analysis)));
-    const distinctTop3Analyses = Array.from(new Set(top3Analyses.map((s) => s.analysis)));
-    const top1Count = distinctTop1Analyses.length;
-    const top3Count = distinctTop3Analyses.length;
-
     // 2. Busca confluências das Estratégias (E1-E15 e Somas)
     const matchingConfProjections = (confirmationProjections || []).filter((cp) => {
       if (!cp || !cp.targetDate) return false;
@@ -1114,6 +1119,21 @@ export function buildStrategyTriggeredSignals(
 
     const hasStrategyConfluence = distinctStrategies.length > 0;
     const strategyCodesLabel = distinctStrategies.join("/");
+
+    // REGRA DO USUÁRIO: As estratégias "E" (E1 a E15) devem ser consideradas como Top 2/3!
+    const distinctEStrategies = distinctStrategies.filter((s) => /^E\d+$/i.test(s));
+    const eStrategyCount = distinctEStrategies.length;
+
+    // Todas as análises ativas na janela (Primárias + Confluência)
+    const allMatchingAnalyses = [...clusterPrimary, ...matchingConfluenceAnalyses];
+    const top1Analyses = allMatchingAnalyses.filter((ac) => ac.isTop1);
+    const top3Analyses = allMatchingAnalyses.filter((ac) => !ac.isTop1);
+
+    const distinctTop1Analyses = Array.from(new Set(top1Analyses.map((s) => s.analysis)));
+    const distinctTop3Analyses = Array.from(new Set(top3Analyses.map((s) => s.analysis)));
+    const top1Count = distinctTop1Analyses.length;
+    // top3Count soma as análises secundárias Top 2/3 (75-79%) E as estratégias "E" (confluência Top 2/3)
+    const top3Count = distinctTop3Analyses.length + eStrategyCount;
 
     // Análises primárias que originaram o sinal
     const distinctPrimaryAnalyses = Array.from(new Set(clusterPrimary.map((p) => p.analysis)));
@@ -1205,6 +1225,19 @@ export function buildStrategyTriggeredSignals(
       rank: a.rank,
       cycleKey: a.cycleKey,
     }));
+
+    // Regra do Usuário: As estratégias "E" são consideradas como Top 2/3 nas fontes do sinal
+    matchingConfProjections.forEach((cp) => {
+      const eNum = cp.strategyId || parseInt(String(cp.strategyCode).replace(/\D/g, ""), 10) || 1;
+      allSources.push({
+        analysis: 100 + eNum,
+        value: eNum,
+        pct: 78.0,
+        top3: true,
+        rank: 2,
+        cycleKey: `E_${cp.strategyCode}_T${cp.targetTimestamp}`,
+      });
+    });
 
     // Estratégias confirmadas na janela
     const clusterConfirmed: ConfirmedStrategyInfo[] = [];

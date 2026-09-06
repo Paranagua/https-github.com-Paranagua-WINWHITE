@@ -50,6 +50,13 @@ export function getSignalTypeBadge(sig?: SignalLike | null): SignalTypeInfo {
   const distinctTop1 = new Set(top1Sources.map((s: any) => s.analysis));
   const distinctTop3 = new Set(top3Sources.map((s: any) => s.analysis));
 
+  // Regra do Usuário: As estratégias "E" devem ser consideradas como Top 2/3 (confluência)
+  const textToScan = `${sig.confluence || ""} ${sig.label || ""} ${(sig as any).strategies?.join(" ") || ""}`;
+  const eMatches = textToScan.match(/\bE(1[0-5]|[1-9])\b/gi);
+  if (eMatches) {
+    eMatches.forEach((m) => distinctTop3.add(`E_${m.toUpperCase()}`));
+  }
+
   // Quando fontes estruturadas estão presentes, calcula estritamente pelas regras dos grupos:
   if (distinctTop1.size > 0 || distinctTop3.size > 0) {
     // 1. 🚀 Alavancagem (>= 4x Top 1)

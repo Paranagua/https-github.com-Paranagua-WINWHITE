@@ -607,9 +607,12 @@ class AutonomousAuditEngine {
     if (Array.isArray(signal.sources)) {
       signal.sources.forEach((src) => {
         if (src && src.analysis) {
-          keysToUpdate.add(`A${src.analysis}`);
-          if (src.analysis >= 50 && src.analysis <= 56) {
+          if (src.analysis >= 101 && src.analysis <= 115) {
+            keysToUpdate.add(`E${src.analysis - 100}`);
+          } else if (src.analysis >= 50 && src.analysis <= 56) {
             keysToUpdate.add(`Q${src.analysis - 49}`);
+          } else {
+            keysToUpdate.add(`A${src.analysis}`);
           }
         }
       });

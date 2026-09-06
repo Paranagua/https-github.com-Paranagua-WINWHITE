@@ -398,9 +398,14 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
                         ? "border-blue-500/40 bg-blue-500/20 text-blue-300"
                         : "border-emerald-500/40 bg-emerald-500/20 text-emerald-300"
               }`}
-              title={`Estratégia ${stratCode}`}
+              title={isE ? `Estratégia ${stratCode} (Top 2/3)` : `Estratégia ${stratCode}`}
             >
-              {stratCode}
+              <span>{stratCode}</span>
+              {isE && (
+                <span className="text-[8px] font-bold opacity-75 px-1 py-0.2 rounded bg-black/20">
+                  Top 2/3
+                </span>
+              )}
             </span>
           );
         })}

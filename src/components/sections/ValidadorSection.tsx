@@ -62,6 +62,7 @@ import {
   type Row,
 } from "@/lib/predictive";
 import { computeAllSumTriggerProjections } from "@/lib/sum19Strategies";
+import { computeConfirmationProjections } from "@/lib/confirmationStrategies";
 import { useSignalStatsStore } from "@/lib/signalStatsStore";
 import {
   detectColorPatternBreaksById,
@@ -757,6 +758,30 @@ export default function SignalPercentageValidator() {
       }
     }
 
+    // 2. Projeções das Estratégias "E" (E1 a E15):
+    // REGRA DO USUÁRIO: As estratégias "E" devem ser consideradas como Top 2/3 (confluência)!
+    const confProjections = computeConfirmationProjections(allResults);
+    for (const cp of confProjections) {
+      if (!cp || !cp.targetDate) continue;
+      const slotKey = Math.floor(cp.targetDate.getTime() / 60000) * 60000;
+      if (!timeSlots.has(slotKey)) {
+        timeSlots.set(slotKey, { top1: [], top3: [] });
+      }
+
+      timeSlots.get(slotKey)!.top3.push({
+        strategyKey: cp.strategyCode,
+        strategyLabel: `${cp.strategyCode} · ${cp.name}`,
+        value: cp.strategyId,
+        pct: 78.0,
+        isTop1: false,
+        isPrimary: false,
+        group: "estrategias_e",
+        groupName: "Estratégias de Confirmação (E)",
+        rank: 2, // Considerada como Top 2/3
+        triggerAt: cp.triggerEventDate,
+      });
+    }
+
     // Agora auditamos os sinais projetados nos slots temporais contra os giros reais
     let sortedSlots = Array.from(timeSlots.entries()).sort((a, b) => b[0] - a[0]);
 
@@ -839,10 +864,21 @@ export default function SignalPercentageValidator() {
 
       const matchingSums = sumMapBySlot.get(slotTime) || [];
       const sumLabels = matchingSums.map((s) => s.code).join(", ");
-      const displayLabel =
-        matchingSums.length > 0
-          ? `${primary.strategyLabel} + Gatilho ${sumLabels}`
-          : primary.strategyLabel;
+      const matchingEstrats = Array.from(
+        new Set(data.top3.filter((p) => p.group === "estrategias_e").map((p) => p.strategyKey)),
+      );
+      const eLabels = matchingEstrats.join(", ");
+
+      let extraLabels = "";
+      if (eLabels && sumLabels) {
+        extraLabels = ` + ${eLabels} + Gatilho ${sumLabels}`;
+      } else if (eLabels) {
+        extraLabels = ` + ${eLabels}`;
+      } else if (sumLabels) {
+        extraLabels = ` + Gatilho ${sumLabels}`;
+      }
+
+      const displayLabel = `${primary.strategyLabel}${extraLabels}`;
 
       signals.push({
         id: `audit-${slotTime}-${primary.strategyKey}`,
