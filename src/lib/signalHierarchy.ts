@@ -983,13 +983,12 @@ export function buildStrategyTriggeredSignals(
   // - Apenas Análises Primárias
   // - Apenas Top 1 (isTop1 === true e rank === 1)
   // - Assertividade de 80% a 100%
-  // - Nos padrões de pedras (A2, A19, A20), APENAS a pedra "0" pode enviar sinais!
+  // - Padrões de pedras (A2, A19, A20) elegíveis para qualquer pedra (0 a 14)
   const isEligiblePrimary = (ac: RawCandidate) => {
     if (!ac || !ac.targetDate) return false;
     if (!isPrimarySignalAnalysis(ac.analysis)) return false;
     if (!ac.isTop1 || ac.rank !== 1) return false;
     if (ac.pct < 80 || ac.pct > 100) return false;
-    if ([2, 19, 20].includes(ac.analysis) && ac.value !== 0) return false;
     return true;
   };
 

@@ -718,10 +718,8 @@ export default function SignalPercentageValidator() {
             if (isRank1 && (group.pct < 80 || group.pct > 100)) return;
             if (!isRank1 && (group.pct < 75 || group.pct > 79.99)) return;
 
-            // Regra 2: Nos padrões de pedras, só pode enviar sinais as análises da pedra "0".
-            // As demais pedras desse padrão só servem para confluência.
-            const isStonePatternNonZero = strat.group === "pedras" && val !== 0;
-            const canBeTop1 = strat.isTop1 && isRank1 && !isStonePatternNonZero;
+            // Regra 2: Elegibilidade Top 1
+            const canBeTop1 = strat.isTop1 && isRank1;
             const isTop1 = canBeTop1;
 
             let targetMinute = group.m;

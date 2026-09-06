@@ -710,16 +710,12 @@ export function PredictiveSignals() {
         const cycleKey = `A${item.analysis}_V${item.value}_T${item.open.triggerAt.getTime()}`;
 
         // 1. Projeção Top 1 Principal (Regra: Top 1 de 80% a 100%)
-        // Nos padrões de pedras (A2, A19, A20), só pode enviar sinais as análises da pedra "0".
-        // As demais pedras desse padrão só servem para confluência.
-        const isStonePatternNonZero = [2, 19, 20].includes(item.analysis) && item.value !== 0;
         const top1Candidate = candidates[0];
 
         if (
           top1Candidate &&
           top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP1 &&
-          top1Candidate.pct <= MAX_ASSERTIVIDADE_TOP1 &&
-          !isStonePatternNonZero
+          top1Candidate.pct <= MAX_ASSERTIVIDADE_TOP1
         ) {
           let targetMinutes = top1Candidate.m;
           if ([17, 18].includes(item.analysis)) targetMinutes += 1;
@@ -756,11 +752,10 @@ export function PredictiveSignals() {
           }
         } else if (
           top1Candidate &&
-          ((top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP3 &&
-            top1Candidate.pct <= MAX_ASSERTIVIDADE_TOP3) ||
-            (isStonePatternNonZero && top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP3))
+          top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP3 &&
+          top1Candidate.pct <= MAX_ASSERTIVIDADE_TOP3
         ) {
-          // Se for pedra != 0 em padrões de pedras ou se estiver na faixa de 75-79%, atua estritamente como confluência (rank 2)
+          // Se estiver na faixa de 75-79%, atua estritamente como confluência (rank 2)
           let targetMinutes = top1Candidate.m;
           if ([17, 18].includes(item.analysis)) targetMinutes += 1;
           const at = addMinutes(item.open.triggerAt, targetMinutes);
