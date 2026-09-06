@@ -129,8 +129,10 @@ type Mode2Signal = {
   resultTime?: string;
 };
 
-const MIN_ASSERTIVIDADE_TOP1 = 65;
-const MIN_ASSERTIVIDADE_TOP3 = 55;
+const MIN_ASSERTIVIDADE_TOP1 = 80;
+const MAX_ASSERTIVIDADE_TOP1 = 100;
+const MIN_ASSERTIVIDADE_TOP3 = 75;
+const MAX_ASSERTIVIDADE_TOP3 = 79.99;
 const MIN_GATILHOS = MIN_CYCLES; // Mínimo de 5 ciclos válidos (com no mínimo 1 resultado) para envio de sinais (janela de 5 a 6)
 
 function addMinutes(d: Date, m: number) {
@@ -702,9 +704,18 @@ export function PredictiveSignals() {
 
         const cycleKey = `A${item.analysis}_V${item.value}_T${item.open.triggerAt.getTime()}`;
 
-        // 1. Projeção Top 1 Principal (Regra: Top 1 >= 65%)
+        // 1. Projeção Top 1 Principal (Regra: Top 1 de 80% a 100%)
+        // Nos padrões de pedras (A2, A19, A20), só pode enviar sinais as análises da pedra "0".
+        // As demais pedras desse padrão só servem para confluência.
+        const isStonePatternNonZero = [2, 19, 20].includes(item.analysis) && item.value !== 0;
         const top1Candidate = candidates[0];
-        if (top1Candidate && top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP1) {
+
+        if (
+          top1Candidate &&
+          top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP1 &&
+          top1Candidate.pct <= MAX_ASSERTIVIDADE_TOP1 &&
+          !isStonePatternNonZero
+        ) {
           let targetMinutes = top1Candidate.m;
           if ([17, 18].includes(item.analysis)) targetMinutes += 1;
           const at = addMinutes(item.open.triggerAt, targetMinutes);
@@ -738,11 +749,50 @@ export function PredictiveSignals() {
               cycleKey,
             });
           }
+        } else if (
+          top1Candidate &&
+          ((top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP3 &&
+            top1Candidate.pct <= MAX_ASSERTIVIDADE_TOP3) ||
+            (isStonePatternNonZero && top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP3))
+        ) {
+          // Se for pedra != 0 em padrões de pedras ou se estiver na faixa de 75-79%, atua estritamente como confluência (rank 2)
+          let targetMinutes = top1Candidate.m;
+          if ([17, 18].includes(item.analysis)) targetMinutes += 1;
+          const at = addMinutes(item.open.triggerAt, targetMinutes);
+          const t = at.getTime();
+
+          if (t >= now.getTime() - 60_000) {
+            const isTendency = checkHighTendency(engine[item.analysis] || [], item.value);
+            const isPossibleRec = activeAlerts.some((alert) => {
+              const signalTime = at.getTime();
+              const alertStart = alert.triggerAt.getTime();
+              const alertEnd = alertStart + alert.duration * 60000;
+              return signalTime >= alertStart && signalTime <= alertEnd;
+            });
+
+            const stratKey =
+              item.analysis >= 50 && item.analysis <= 56
+                ? `Q${item.analysis - 49}`
+                : `A${item.analysis}`;
+
+            rawCandidates.push({
+              analysis: item.analysis,
+              value: item.value,
+              pct: top1Candidate.pct,
+              targetDate: at,
+              isTop1: false,
+              rank: 2,
+              isHighTendency: isTendency,
+              isRecAlert: isPossibleRec,
+              strategyKey: stratKey,
+              cycleKey,
+            });
+          }
         }
 
-        // 2. Projeções Secundárias Top 2 ao Top 3 (Validadores: Regra Top 3 >= 55%)
+        // 2. Projeções Secundárias Top 2 ao Top 3 (Validadores: Regra Top 2/3 de 75% a 79%)
         candidates.slice(1, TOP3_DEPTH).forEach((cand, idx) => {
-          if (cand.pct < MIN_ASSERTIVIDADE_TOP3) return;
+          if (cand.pct < MIN_ASSERTIVIDADE_TOP3 || cand.pct > MAX_ASSERTIVIDADE_TOP3) return;
 
           let m = cand.m;
           if ([17, 18].includes(item.analysis)) m += 1;

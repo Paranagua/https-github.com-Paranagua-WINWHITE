@@ -964,16 +964,26 @@ export function buildStrategyTriggeredSignals(
   now: number = Date.now(),
   options?: { allowHistorical?: boolean; minTargetTime?: number; maxTargetTime?: number },
 ): PredictiveSignal[] {
-  // 1. Isola candidatos das 4 análises primárias (ÚNICAS capazes de gerar sinal)
-  const primaryCandidates = (analysisCandidates || []).filter((ac) => {
+  // 1. Isola candidatos primários elegíveis para GERAR sinais:
+  // - Apenas Análises Primárias
+  // - Apenas Top 1 (isTop1 === true e rank === 1)
+  // - Assertividade de 80% a 100%
+  // - Nos padrões de pedras (A2, A19, A20), APENAS a pedra "0" pode enviar sinais!
+  const isEligiblePrimary = (ac: RawCandidate) => {
     if (!ac || !ac.targetDate) return false;
-    return isPrimarySignalAnalysis(ac.analysis);
-  });
+    if (!isPrimarySignalAnalysis(ac.analysis)) return false;
+    if (!ac.isTop1 || ac.rank !== 1) return false;
+    if (ac.pct < 80 || ac.pct > 100) return false;
+    if ([2, 19, 20].includes(ac.analysis) && ac.value !== 0) return false;
+    return true;
+  };
 
-  // Análises restantes (Minutos 0 a 9, etc.) que atuam estritamente como CONFLUÊNCIA
+  const primaryCandidates = (analysisCandidates || []).filter(isEligiblePrimary);
+
+  // Todas as demais análises e projeções (Top 2/3 75-79%, pedras 1-14 de padrões, Minutos 0-9, etc.) atuam estritamente como CONFLUÊNCIA
   const confluenceCandidates = (analysisCandidates || []).filter((ac) => {
     if (!ac || !ac.targetDate) return false;
-    return !isPrimarySignalAnalysis(ac.analysis);
+    return !isEligiblePrimary(ac);
   });
 
   if (primaryCandidates.length === 0) return [];

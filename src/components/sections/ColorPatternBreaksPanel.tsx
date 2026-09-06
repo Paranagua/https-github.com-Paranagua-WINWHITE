@@ -544,8 +544,8 @@ export function ColorPatternBreaksPanel({
                         "text-slate-200 border-slate-400/30 bg-slate-400/15",
                         "text-amber-600 border-amber-700/30 bg-amber-700/15",
                       ];
-                      const isTop1Valid = i === 0 && r.pct >= 65;
-                      const isTop3Valid = i > 0 && r.pct >= 55;
+                      const isTop1Valid = i === 0 && r.pct >= 80 && r.pct <= 100;
+                      const isTop3Valid = i > 0 && r.pct >= 75 && r.pct <= 79.99;
 
                       return (
                         <div
@@ -567,12 +567,12 @@ export function ColorPatternBreaksPanel({
                               </span>
                               {isTop1Valid && (
                                 <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[9px] font-bold text-emerald-400">
-                                  Top 1 (≥65%)
+                                  Top 1 (80-100%)
                                 </span>
                               )}
                               {isTop3Valid && (
                                 <span className="rounded bg-blue-500/20 px-1.5 py-0.2 text-[9px] font-bold text-blue-400">
-                                  Top 3 (≥55%)
+                                  Top 2/3 (75-79%)
                                 </span>
                               )}
                             </div>

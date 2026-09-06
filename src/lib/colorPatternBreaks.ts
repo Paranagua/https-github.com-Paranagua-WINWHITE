@@ -279,8 +279,8 @@ export function detectAlternados(rows: Row[]): ColorBreakResult[] {
           },
         });
 
-        // Após uma quebra, iniciar uma nova avaliação utilizando os resultados seguintes
-        i = k + 1;
+        // A pedra da quebra (k) é avaliada como início potencial do próximo padrão
+        i = k;
         continue;
       }
     }
@@ -370,7 +370,8 @@ export function detectAlternadosContinuos(rows: Row[]): ColorBreakResult[] {
           },
         });
 
-        i = k + 1;
+        // A pedra da quebra (k) é avaliada como início potencial do próximo padrão
+        i = k;
         continue;
       }
     }
@@ -460,7 +461,8 @@ export function detectAlternadosContinuos1N(rows: Row[]): ColorBreakResult[] {
           },
         });
 
-        i = k + 1;
+        // A pedra da quebra (k) é avaliada como início potencial do próximo padrão
+        i = k;
         continue;
       }
     }
@@ -551,7 +553,8 @@ export function detectAlternadosContinuos2N(rows: Row[]): ColorBreakResult[] {
           },
         });
 
-        i = k + 1;
+        // A pedra da quebra (k) é avaliada como início potencial do próximo padrão
+        i = k;
         continue;
       }
     }
@@ -634,8 +637,8 @@ export function detectContinuos(rows: Row[]): ColorBreakResult[] {
         },
       });
 
-      // Após uma quebra, iniciar uma nova avaliação utilizando os resultados seguintes
-      i = breakIndex + 1;
+      // A pedra de quebra é avaliada como início potencial do próximo padrão contínuo
+      i = breakIndex;
     } else {
       // Se a 6ª pedra é da mesma cor, não é quebra de 5 (será 6 ou mais consecutivas)
       i++;
@@ -717,7 +720,8 @@ export function detectContinuosN1(rows: Row[]): ColorBreakResult[] {
         },
       });
 
-      i = breakIndex + 1;
+      // A pedra de quebra é avaliada como início potencial do próximo padrão contínuo
+      i = breakIndex;
     } else {
       // Se a 7ª pedra for da mesma cor, será Contínuos N2 (7+)
       i++;
@@ -804,7 +808,8 @@ export function detectContinuosN2(rows: Row[]): ColorBreakResult[] {
         },
       });
 
-      i = k + 1;
+      // A pedra da quebra (k) é avaliada como início potencial do próximo padrão
+      i = k;
     } else {
       break;
     }
@@ -814,30 +819,37 @@ export function detectContinuosN2(rows: Row[]): ColorBreakResult[] {
 }
 
 /**
- * Função unificada que executa a detecção de um padrão específico por ID
+ * Função unificada que executa a detecção de um padrão específico por ID.
+ * Aceita tanto (id, rows) quanto (rows, id) e suporta aliases para máxima robustez.
  */
 export function detectColorPatternBreaksById(
-  id: ColorPatternType,
-  rows: Row[],
+  idOrRows: ColorPatternType | string | Row[],
+  rowsOrId?: Row[] | string,
 ): ColorBreakResult[] {
-  switch (id) {
-    case "alternados":
-      return detectAlternados(rows);
-    case "alternados_continuos":
-      return detectAlternadosContinuos(rows);
-    case "alternados_continuos_1n":
-      return detectAlternadosContinuos1N(rows);
-    case "alternados_continuos_2n":
-      return detectAlternadosContinuos2N(rows);
-    case "continuos":
-      return detectContinuos(rows);
-    case "continuos_n1":
-      return detectContinuosN1(rows);
-    case "continuos_n2":
-      return detectContinuosN2(rows);
-    default:
-      return [];
+  let id: string;
+  let rows: Row[];
+
+  if (Array.isArray(idOrRows)) {
+    rows = idOrRows;
+    id = String(rowsOrId || "");
+  } else {
+    id = String(idOrRows);
+    rows = (rowsOrId as Row[]) || [];
   }
+
+  // Mapeamento e normalização de aliases
+  if (id === "alt_continuos_2x2" || id === "alternados_continuos")
+    return detectAlternadosContinuos(rows);
+  if (id === "alt_continuos_1n" || id === "alternados_continuos_1n")
+    return detectAlternadosContinuos1N(rows);
+  if (id === "alt_continuos_2n" || id === "alternados_continuos_2n")
+    return detectAlternadosContinuos2N(rows);
+  if (id === "continuos_5x" || id === "continuos") return detectContinuos(rows);
+  if (id === "continuos_n1") return detectContinuosN1(rows);
+  if (id === "continuos_n2") return detectContinuosN2(rows);
+  if (id === "alternados") return detectAlternados(rows);
+
+  return [];
 }
 
 /**

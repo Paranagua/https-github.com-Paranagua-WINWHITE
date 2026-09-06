@@ -54,7 +54,10 @@ export default {
           await autonomousEngine.clearData();
         } else if (request.method === "POST") {
           try {
-            const body = await request.clone().json().catch(() => null);
+            const body = await request
+              .clone()
+              .json()
+              .catch(() => null);
             if (body && (body.action === "clear" || body.clear === true)) {
               await autonomousEngine.clearData();
             } else {

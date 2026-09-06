@@ -67,8 +67,10 @@ const STORAGE_FILE = path.join(process.cwd(), "data", "autonomous_audit_store.js
 
 const CANDIDATE_DEPTH = 3;
 const TOP3_DEPTH = 3;
-const MIN_ASSERTIVIDADE_TOP1 = 65;
-const MIN_ASSERTIVIDADE_TOP3 = 55;
+const MIN_ASSERTIVIDADE_TOP1 = 80;
+const MAX_ASSERTIVIDADE_TOP1 = 100;
+const MIN_ASSERTIVIDADE_TOP3 = 75;
+const MAX_ASSERTIVIDADE_TOP3 = 79.99;
 
 function addMinutes(date: Date, minutes: number): Date {
   return new Date(date.getTime() + minutes * 60000);
@@ -220,12 +222,12 @@ class AutonomousAuditEngine {
     this.isProcessing = true;
 
     try {
-      // 1. Carrega os últimos 600 resultados da Blaze (ordem cronológica: mais antigo -> mais recente)
+      // 1. Carrega os últimos 3000 resultados da Blaze (ordem cronológica: mais antigo -> mais recente)
       const { data, error } = await this.supabaseClient
         .from("blaze_results")
         .select("id, roll, color, created_at")
         .order("id", { ascending: false })
-        .limit(600);
+        .limit(3000);
 
       if (error) {
         throw new Error(`blaze_results query failed: ${error.message}`);
@@ -725,9 +727,18 @@ class AutonomousAuditEngine {
 
       const cycleKey = `A${item.analysis}_V${item.value}_T${item.open.triggerAt.getTime()}`;
 
-      // Top 1 (assertividade >= 65%)
+      // 1. Projeção Top 1 Principal (Regra: Top 1 de 80% a 100%)
+      // Nos padrões de pedras (A2, A19, A20), só pode enviar sinais as análises da pedra "0".
+      // As demais pedras desse padrão só servem para confluência.
+      const isStonePatternNonZero = [2, 19, 20].includes(item.analysis) && item.value !== 0;
       const top1Candidate = candidates[0];
-      if (top1Candidate && top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP1) {
+
+      if (
+        top1Candidate &&
+        top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP1 &&
+        top1Candidate.pct <= MAX_ASSERTIVIDADE_TOP1 &&
+        !isStonePatternNonZero
+      ) {
         let targetMinutes = top1Candidate.m;
         if ([17, 18].includes(item.analysis)) targetMinutes += 1;
         const at = addMinutes(item.open.triggerAt, targetMinutes);
@@ -761,11 +772,50 @@ class AutonomousAuditEngine {
             cycleKey,
           });
         }
+      } else if (
+        top1Candidate &&
+        ((top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP3 &&
+          top1Candidate.pct <= MAX_ASSERTIVIDADE_TOP3) ||
+          (isStonePatternNonZero && top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP3))
+      ) {
+        // Se for pedra != 0 em padrões de pedras ou se estiver na faixa de 75-79%, atua estritamente como confluência (rank 2)
+        let targetMinutes = top1Candidate.m;
+        if ([17, 18].includes(item.analysis)) targetMinutes += 1;
+        const at = addMinutes(item.open.triggerAt, targetMinutes);
+        const t = at.getTime();
+
+        if (t >= now.getTime() - 5 * 3600_000) {
+          const isTendency = checkHighTendency(engine[item.analysis] || [], item.value);
+          const isPossibleRec = recAlerts.some((alert) => {
+            const sigTime = at.getTime();
+            const alertStart = alert.triggerAt.getTime();
+            const alertEnd = alertStart + alert.duration * 60000;
+            return sigTime >= alertStart && sigTime <= alertEnd;
+          });
+
+          const stratKey =
+            item.analysis >= 50 && item.analysis <= 56
+              ? `Q${item.analysis - 49}`
+              : `A${item.analysis}`;
+
+          rawCandidates.push({
+            analysis: item.analysis,
+            value: item.value,
+            pct: top1Candidate.pct,
+            targetDate: at,
+            isTop1: false,
+            rank: 2,
+            isHighTendency: isTendency,
+            isRecAlert: isPossibleRec,
+            strategyKey: stratKey,
+            cycleKey,
+          });
+        }
       }
 
-      // Top 2 / 3 (assertividade >= 55%)
+      // 2. Projeções Secundárias Top 2 ao Top 3 (Validadores: Regra Top 2/3 de 75% a 79%)
       candidates.slice(1, TOP3_DEPTH).forEach((cand, idx) => {
-        if (cand.pct < MIN_ASSERTIVIDADE_TOP3) return;
+        if (cand.pct < MIN_ASSERTIVIDADE_TOP3 || cand.pct > MAX_ASSERTIVIDADE_TOP3) return;
         let m = cand.m;
         if ([17, 18].includes(item.analysis)) m += 1;
         const at = addMinutes(item.open.triggerAt, m);

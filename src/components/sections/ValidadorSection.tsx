@@ -163,7 +163,7 @@ export default function SignalPercentageValidator() {
         .from("blaze_results")
         .select("id, roll, color, created_at")
         .order("created_at", { ascending: false })
-        .limit(1000);
+        .limit(3000);
 
       if (data) {
         const rows: Row[] = data
@@ -711,11 +711,17 @@ export default function SignalPercentageValidator() {
           if (topGroups.length === 0) continue;
 
           topGroups.forEach((group, rankIdx) => {
-            const isTop1 = strat.isTop1 && rankIdx === 0;
-            // Regra: Top 1 >= 65% para gerar sinal
-            if (isTop1 && group.pct < 65) return;
-            // Regra: Top 3 >= 55%
-            if (!isTop1 && group.pct < 55) return;
+            const isRank1 = rankIdx === 0;
+            // Regra 1: Top 1 de 80 a 100%
+            // Regra 1: Top 2/3 de 75 a 79%
+            if (isRank1 && (group.pct < 80 || group.pct > 100)) return;
+            if (!isRank1 && (group.pct < 75 || group.pct > 79.99)) return;
+
+            // Regra 2: Nos padrões de pedras, só pode enviar sinais as análises da pedra "0".
+            // As demais pedras desse padrão só servem para confluência.
+            const isStonePatternNonZero = strat.group === "pedras" && val !== 0;
+            const canBeTop1 = strat.isTop1 && isRank1 && !isStonePatternNonZero;
+            const isTop1 = canBeTop1;
 
             let targetMinute = group.m;
             if (["A17", "A18"].includes(strat.key)) targetMinute += 1;
@@ -737,7 +743,7 @@ export default function SignalPercentageValidator() {
               isPrimary: strat.isPrimary,
               group: strat.group,
               groupName: strat.groupName,
-              rank: rankIdx + 1,
+              rank: isTop1 ? 1 : rankIdx + 1,
               triggerAt: currentTrigger.triggerAt,
             };
 
@@ -770,18 +776,15 @@ export default function SignalPercentageValidator() {
       });
       if (whiteInM1) continue;
 
-      // REGRA FUNDAMENTAL: Apenas as 4 análises primárias são capazes de gerar sinais!
-      // (Padrões de Pedra, Gatilhos de Sequência, Somas Consecutivas, Quebra de Cores)
-      // Se o slot só contiver confluências (ex: Minutos) sem nenhuma análise primária, NÃO gera sinal!
-      const allSlotCandidates = [...data.top1, ...data.top3];
-      const primaryCandidates = allSlotCandidates.filter((p) => p.isPrimary);
-      if (primaryCandidates.length === 0) continue;
-
+      // REGRA FUNDAMENTAL 4: Só as Top 1 têm poder para enviar sinais! As demais só servem de confluência.
+      // Além disso, deve haver pelo menos uma análise primária com Top 1 elegível.
       const distinctTop1 = new Set(data.top1.map((p) => p.strategyKey));
       const distinctTop3 = new Set(data.top3.map((p) => p.strategyKey));
-      const totalSources = distinctTop1.size + distinctTop3.size;
 
-      if (totalSources === 0) continue;
+      if (distinctTop1.size === 0) continue;
+
+      const hasPrimaryTop1 = data.top1.some((p) => p.isPrimary);
+      if (!hasPrimaryTop1) continue;
 
       let category: SignalAuditItem["category"] = "top1_top3";
       if (distinctTop1.size >= 4) {
@@ -793,9 +796,6 @@ export default function SignalPercentageValidator() {
       } else if (distinctTop1.size === 1 && distinctTop3.size >= 1) {
         category = "top1_top3";
       } else {
-        // Se houver Top 1 primário, gera sinal válido
-        const hasPrimaryTop1 = data.top1.some((p) => p.isPrimary);
-        if (!hasPrimaryTop1) continue;
         category = "top1_top3";
       }
 
