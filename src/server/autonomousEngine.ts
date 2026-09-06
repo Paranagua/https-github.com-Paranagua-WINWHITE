@@ -607,12 +607,18 @@ class AutonomousAuditEngine {
     if (Array.isArray(signal.sources)) {
       signal.sources.forEach((src) => {
         if (src && src.analysis) {
+          let code = "";
           if (src.analysis >= 101 && src.analysis <= 115) {
-            keysToUpdate.add(`E${src.analysis - 100}`);
+            code = `E${src.analysis - 100}`;
           } else if (src.analysis >= 50 && src.analysis <= 56) {
-            keysToUpdate.add(`Q${src.analysis - 49}`);
+            code = `Q${src.analysis - 49}`;
           } else {
-            keysToUpdate.add(`A${src.analysis}`);
+            code = `A${src.analysis}`;
+          }
+          keysToUpdate.add(code);
+          if (typeof src.value === "number" && src.value >= 0 && src.value <= 14) {
+            keysToUpdate.add(`${code}_${src.value}`);
+            keysToUpdate.add(`A${src.analysis}_${src.value}`);
           }
         }
       });

@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  ChevronRight,
 } from "lucide-react";
 import { setSection } from "@/lib/sectionStore";
 import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
@@ -27,6 +28,8 @@ import {
   extractSignalAnalyses,
   formatStrategyCode,
 } from "@/lib/signalHierarchy";
+import { AnalysisStonesModal, type PrimaryAnalysisInfo } from "./AnalysisStonesModal";
+import type { Row } from "@/lib/predictive";
 
 interface PrimaryAnalysisMetadataItem {
   key: string;
@@ -411,6 +414,8 @@ function SinaisSectionContent() {
     "todas" | "pedras" | "sequencia" | "somas" | "cores"
   >("todas");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [selectedAnalysisForDetail, setSelectedAnalysisForDetail] =
+    useState<PrimaryAnalysisInfo | null>(null);
 
   const stats = useSignalStatsStore((state) => state.stats);
   const recentSignals = useSignalStatsStore((state) => state.recentSignals);
@@ -667,6 +672,23 @@ function SinaisSectionContent() {
       avgAssertivity,
     };
   }, [primaryAnalysisStats]);
+
+  const rawRows: Row[] = useMemo(() => {
+    return [...resultsForValidation].reverse().map((r) => ({
+      id: Number(r.id),
+      roll: String(r.roll),
+      color: String(r.color),
+      created_at: r.createdAt,
+    }));
+  }, [resultsForValidation]);
+
+  const currentActiveAnalysisDetail = useMemo(() => {
+    if (!selectedAnalysisForDetail) return null;
+    return (
+      primaryAnalysisStats.find((s) => s.key === selectedAnalysisForDetail.key) ||
+      selectedAnalysisForDetail
+    );
+  }, [selectedAnalysisForDetail, primaryAnalysisStats]);
 
   // Auditoria dos sinais preditivos contra os resultados reais (Regra rigorosa de 6 rodadas: M-1, M, M+1)
   useEffect(() => {
@@ -1062,15 +1084,33 @@ function SinaisSectionContent() {
                   </div>
                 </div>
 
+                {/* Dica interativa para o usuário */}
+                <div className="flex items-center justify-between px-1 text-[11px] text-muted-foreground/80">
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                    Clique em qualquer análise para abrir o detalhamento das 14 pedras e branco (0 a
+                    14) com assertividade auditada e preditiva.
+                  </span>
+                  <span className="hidden sm:inline-block text-[10px] text-primary/80 font-semibold font-mono">
+                    18 Análises Monitoradas
+                  </span>
+                </div>
+
                 {/* Grid de Análises Primárias */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                   {displayedPrimaryAnalyses.map((s) => {
                     const hasData = s.total > 0;
                     const winRate = s.assertividade !== null ? s.assertividade : 0;
+                    const isSelected = selectedAnalysisForDetail?.key === s.key;
                     return (
                       <div
                         key={s.key}
-                        className="flex flex-col justify-between p-3.5 rounded-xl bg-white/[0.02] border border-white/5 hover:border-white/15 transition-all group"
+                        onClick={() => setSelectedAnalysisForDetail(s)}
+                        className={`flex flex-col justify-between p-3.5 rounded-xl transition-all group cursor-pointer active:scale-[0.99] relative select-none ${
+                          isSelected
+                            ? "bg-primary/10 border-2 border-primary shadow-[0_0_15px_rgba(239,68,68,0.25)]"
+                            : "bg-white/[0.02] border border-white/5 hover:border-primary/40 hover:bg-white/[0.04]"
+                        }`}
                       >
                         <div>
                           {/* Cabeçalho do Card */}
@@ -1144,7 +1184,7 @@ function SinaisSectionContent() {
                           )}
                         </div>
 
-                        {/* Rodapé: Vitórias, Derrotas e Total de Operações */}
+                        {/* Rodapé: Vitórias, Derrotas e Botão de Drill-down para as 14 pedras */}
                         <div className="flex items-center justify-between text-[10px] font-bold pt-2 border-t border-white/5 mt-auto">
                           <div className="flex items-center gap-2">
                             <span
@@ -1160,9 +1200,10 @@ function SinaisSectionContent() {
                               {s.losses}L
                             </span>
                           </div>
-                          <span className="text-[9px] text-white/40 font-mono">
-                            {s.total} {s.total === 1 ? "op." : "ops."}
-                          </span>
+                          <div className="flex items-center gap-0.5 text-[9px] text-primary group-hover:text-primary/90 font-bold transition-colors">
+                            <span>14 pedras</span>
+                            <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                          </div>
                         </div>
                       </div>
                     );
@@ -1322,6 +1363,16 @@ function SinaisSectionContent() {
 
         {/* Gerador Preditivo de Próximos Sinais */}
         <PredictiveSignals />
+
+        {/* Modal de Detalhamento das 14 Pedras da Análise Selecionada */}
+        <AnalysisStonesModal
+          analysis={currentActiveAnalysisDetail}
+          isOpen={!!selectedAnalysisForDetail}
+          onClose={() => setSelectedAnalysisForDetail(null)}
+          rows={rawRows}
+          recentSignals={recentSignals}
+          stats={stats}
+        />
       </div>
     </div>
   );
