@@ -59,6 +59,11 @@ import {
 } from "../lib/colorPatternBreaks";
 import type { PredictiveSignal } from "../lib/signalsStore";
 import type { SignalHistoryEntry, AnalysisStat } from "../lib/signalStatsStore";
+import {
+  persistCyclesBatch,
+  mergePersistedWithLiveCycles,
+  fetchPersistedCyclesMap,
+} from "../lib/cyclePersistence";
 
 const BLAZE_SUPABASE_URL = "https://fprjzaawmhadvwdlyfun.supabase.co";
 const BLAZE_SUPABASE_ANON_KEY = "sb_publishable_6_SYqk2nwh4IyEgwLGtiuQ_JI_Zf9Ov";
@@ -108,6 +113,8 @@ class AutonomousAuditEngine {
   private pollTimer: NodeJS.Timeout | null = null;
   private saveTimer: NodeJS.Timeout | null = null;
   private realtimeChannel: any = null;
+  private persistedCyclesCache: Record<number, Cycle[]> = {};
+  private lastCycleRefreshAt = 0;
 
   private state: AutonomousAuditState = {
     status: "idle",
@@ -124,6 +131,20 @@ class AutonomousAuditEngine {
     this.loadPersistedState().catch((err) => {
       console.warn("[AutonomousEngine] Could not load persisted state:", err.message);
     });
+    this.refreshPersistedCycles().catch(() => {});
+  }
+
+  private async refreshPersistedCycles(): Promise<void> {
+    try {
+      const mainIds = [
+        2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+        30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
+      ];
+      this.persistedCyclesCache = await fetchPersistedCyclesMap(mainIds, 40);
+      this.lastCycleRefreshAt = Date.now();
+    } catch (err) {
+      console.warn("[AutonomousEngine] Could not refresh persisted cycles:", err);
+    }
   }
 
   public async clearData(): Promise<void> {
@@ -704,6 +725,14 @@ class AutonomousAuditEngine {
       30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
     ];
 
+    // Mescla com ciclos persistidos prévios (mantendo cálculo em tempo real como fallback)
+    mainIds.forEach((a) => {
+      const persisted = this.persistedCyclesCache[a];
+      if (persisted && persisted.length > 0) {
+        engine[a] = mergePersistedWithLiveCycles(persisted, engine[a] || []);
+      }
+    });
+
     mainIds.forEach((a) => {
       const cycles = engine[a] || [];
       const openByValue = new Map<number, Cycle>();
@@ -719,6 +748,18 @@ class AutonomousAuditEngine {
         activeList.push({ analysis: a, value, open });
       });
     });
+
+    // Salva ciclos recentes e abertos de forma idempotente
+    const cyclesToPersist: Cycle[] = [];
+    mainIds.forEach((a) => {
+      const list = engine[a];
+      if (list && list.length > 0) {
+        cyclesToPersist.push(...list.slice(-10));
+      }
+    });
+    if (cyclesToPersist.length > 0) {
+      persistCyclesBatch(cyclesToPersist).catch(() => {});
+    }
 
     for (const item of activeList) {
       const allCycles = (engine[item.analysis] || []).filter((c) => c.value === item.value);

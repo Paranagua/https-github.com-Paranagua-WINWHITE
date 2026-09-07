@@ -3,6 +3,7 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { autonomousEngine } from "./server/autonomousEngine";
+import { predictiveCyclesStore } from "./server/predictiveCyclesStore";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -73,6 +74,84 @@ export default {
           headers: {
             "Content-Type": "application/json",
             "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      }
+
+      if (url.pathname === "/api/public/predictive-cycles") {
+        if (request.method === "POST") {
+          let saved = 0;
+          try {
+            const body = await request
+              .clone()
+              .json()
+              .catch(() => null);
+            if (body && Array.isArray(body.records)) {
+              saved = predictiveCyclesStore.upsertBatch(body.records);
+              // Tenta persistir no Supabase via admin/client
+              try {
+                const { supabaseAdmin } = await import("./integrations/supabase/client.server");
+                if (supabaseAdmin) {
+                  await (supabaseAdmin as any)
+                    .from("predictive_cycles")
+                    .upsert(body.records, { onConflict: "cycle_key" });
+                }
+              } catch {
+                // Silencioso se migration ainda não foi executada no banco remoto
+              }
+            }
+          } catch (e) {
+            console.error("[Server] Error saving predictive cycles:", e);
+          }
+          return new Response(JSON.stringify({ ok: true, saved }), {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+              "Access-Control-Allow-Origin": "*",
+            },
+          });
+        }
+
+        // GET
+        const analysis = url.searchParams.get("analysis")
+          ? Number(url.searchParams.get("analysis"))
+          : undefined;
+        const value = url.searchParams.get("value")
+          ? Number(url.searchParams.get("value"))
+          : undefined;
+        const limit = url.searchParams.get("limit") ? Number(url.searchParams.get("limit")) : 300;
+
+        let cycles = predictiveCyclesStore.getCycles({ analysis, value, limit });
+
+        // Se cache em memória estiver vazio, tenta carregar do Supabase
+        if (cycles.length === 0) {
+          try {
+            const { supabaseAdmin } = await import("./integrations/supabase/client.server");
+            if (supabaseAdmin) {
+              let q = (supabaseAdmin as any)
+                .from("predictive_cycles")
+                .select("*")
+                .order("trigger_at", { ascending: false })
+                .limit(limit);
+              if (analysis !== undefined) q = q.eq("analysis", analysis);
+              if (value !== undefined) q = q.eq("value", value);
+              const { data } = await q;
+              if (data && Array.isArray(data)) {
+                predictiveCyclesStore.upsertBatch(data);
+                cycles = data;
+              }
+            }
+          } catch {
+            // Ignora se tabela ainda não existir no remoto
+          }
+        }
+
+        return new Response(JSON.stringify(cycles), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "public, max-age=5",
             "Access-Control-Allow-Origin": "*",
           },
         });

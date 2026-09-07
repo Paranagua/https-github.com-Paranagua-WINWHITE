@@ -36,10 +36,11 @@ interface PrimaryAnalysisMetadataItem {
   analysisId: number;
   name: string;
   shortLabel: string;
-  category: "pedras" | "sequencia" | "somas" | "cores";
+  category: "pedras" | "sequencia" | "somas" | "cores" | "minutos";
   categoryLabel: string;
   badge: string;
   description: string;
+  minute?: number;
 }
 
 const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
@@ -230,6 +231,238 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
     badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
     description: "Quebra de sequência contínua de 8 giros (+2 casas)",
   },
+
+  // 5. Minutos (0 a 9) (20 análises: 1ª e 2ª pedra dos minutos 0 a 9)
+  // Minuto 0
+  {
+    key: "A4",
+    analysisId: 4,
+    name: "Análise 4 · Minuto 0 (1ª Pedra)",
+    shortLabel: "A4",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "1ª pedra nos minutos de final 0 (00, 10, 20...)",
+    minute: 0,
+  },
+  {
+    key: "A5",
+    analysisId: 5,
+    name: "Análise 5 · Minuto 0 (2ª Pedra)",
+    shortLabel: "A5",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "2ª pedra nos minutos de final 0 (00, 10, 20...)",
+    minute: 0,
+  },
+  // Minuto 1
+  {
+    key: "A22",
+    analysisId: 22,
+    name: "Análise 22 · Minuto 1 (1ª Pedra)",
+    shortLabel: "A22",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "1ª pedra nos minutos de final 1 (01, 11, 21...)",
+    minute: 1,
+  },
+  {
+    key: "A23",
+    analysisId: 23,
+    name: "Análise 23 · Minuto 1 (2ª Pedra)",
+    shortLabel: "A23",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "2ª pedra nos minutos de final 1 (01, 11, 21...)",
+    minute: 1,
+  },
+  // Minuto 2
+  {
+    key: "A24",
+    analysisId: 24,
+    name: "Análise 24 · Minuto 2 (1ª Pedra)",
+    shortLabel: "A24",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "1ª pedra nos minutos de final 2 (02, 12, 22...)",
+    minute: 2,
+  },
+  {
+    key: "A25",
+    analysisId: 25,
+    name: "Análise 25 · Minuto 2 (2ª Pedra)",
+    shortLabel: "A25",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "2ª pedra nos minutos de final 2 (02, 12, 22...)",
+    minute: 2,
+  },
+  // Minuto 3
+  {
+    key: "A26",
+    analysisId: 26,
+    name: "Análise 26 · Minuto 3 (1ª Pedra)",
+    shortLabel: "A26",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "1ª pedra nos minutos de final 3 (03, 13, 23...)",
+    minute: 3,
+  },
+  {
+    key: "A27",
+    analysisId: 27,
+    name: "Análise 27 · Minuto 3 (2ª Pedra)",
+    shortLabel: "A27",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "2ª pedra nos minutos de final 3 (03, 13, 23...)",
+    minute: 3,
+  },
+  // Minuto 4
+  {
+    key: "A28",
+    analysisId: 28,
+    name: "Análise 28 · Minuto 4 (1ª Pedra)",
+    shortLabel: "A28",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "1ª pedra nos minutos de final 4 (04, 14, 24...)",
+    minute: 4,
+  },
+  {
+    key: "A29",
+    analysisId: 29,
+    name: "Análise 29 · Minuto 4 (2ª Pedra)",
+    shortLabel: "A29",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "2ª pedra nos minutos de final 4 (04, 14, 24...)",
+    minute: 4,
+  },
+  // Minuto 5
+  {
+    key: "A17",
+    analysisId: 17,
+    name: "Análise 17 · Minuto 5 (1ª Pedra)",
+    shortLabel: "A17",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "1ª pedra nos minutos de final 5 (05, 15, 25...)",
+    minute: 5,
+  },
+  {
+    key: "A18",
+    analysisId: 18,
+    name: "Análise 18 · Minuto 5 (2ª Pedra)",
+    shortLabel: "A18",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "2ª pedra nos minutos de final 5 (05, 15, 25...)",
+    minute: 5,
+  },
+  // Minuto 6
+  {
+    key: "A30",
+    analysisId: 30,
+    name: "Análise 30 · Minuto 6 (1ª Pedra)",
+    shortLabel: "A30",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "1ª pedra nos minutos de final 6 (06, 16, 26...)",
+    minute: 6,
+  },
+  {
+    key: "A31",
+    analysisId: 31,
+    name: "Análise 31 · Minuto 6 (2ª Pedra)",
+    shortLabel: "A31",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "2ª pedra nos minutos de final 6 (06, 16, 26...)",
+    minute: 6,
+  },
+  // Minuto 7
+  {
+    key: "A32",
+    analysisId: 32,
+    name: "Análise 32 · Minuto 7 (1ª Pedra)",
+    shortLabel: "A32",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "1ª pedra nos minutos de final 7 (07, 17, 27...)",
+    minute: 7,
+  },
+  {
+    key: "A33",
+    analysisId: 33,
+    name: "Análise 33 · Minuto 7 (2ª Pedra)",
+    shortLabel: "A33",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "2ª pedra nos minutos de final 7 (07, 17, 27...)",
+    minute: 7,
+  },
+  // Minuto 8
+  {
+    key: "A34",
+    analysisId: 34,
+    name: "Análise 34 · Minuto 8 (1ª Pedra)",
+    shortLabel: "A34",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "1ª pedra nos minutos de final 8 (08, 18, 28...)",
+    minute: 8,
+  },
+  {
+    key: "A35",
+    analysisId: 35,
+    name: "Análise 35 · Minuto 8 (2ª Pedra)",
+    shortLabel: "A35",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "2ª pedra nos minutos de final 8 (08, 18, 28...)",
+    minute: 8,
+  },
+  // Minuto 9
+  {
+    key: "A36",
+    analysisId: 36,
+    name: "Análise 36 · Minuto 9 (1ª Pedra)",
+    shortLabel: "A36",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "1ª pedra nos minutos de final 9 (09, 19, 29...)",
+    minute: 9,
+  },
+  {
+    key: "A3",
+    analysisId: 3,
+    name: "Análise 3 · Minuto 9 (2ª Pedra)",
+    shortLabel: "A3",
+    category: "minutos",
+    categoryLabel: "Minutos (0 a 9)",
+    badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    description: "2ª pedra nos minutos de final 9 (09, 19, 29...)",
+    minute: 9,
+  },
 ];
 
 type Result = {
@@ -411,8 +644,9 @@ function SinaisSectionContent() {
   const [predictiveList, setPredictiveList] = useState<PredictiveSignal[]>(getPredictiveSignals());
   const [auditFilter, setAuditFilter] = useState<"geral" | "hoje">("geral");
   const [primaryTabFilter, setPrimaryTabFilter] = useState<
-    "todas" | "pedras" | "sequencia" | "somas" | "cores"
+    "todas" | "pedras" | "sequencia" | "somas" | "cores" | "minutos"
   >("todas");
+  const [selectedMinuteFilter, setSelectedMinuteFilter] = useState<number | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [selectedAnalysisForDetail, setSelectedAnalysisForDetail] =
     useState<PrimaryAnalysisInfo | null>(null);
@@ -640,6 +874,7 @@ function SinaisSectionContent() {
         categoryLabel: m.categoryLabel,
         badge: m.badge,
         description: m.description,
+        minute: m.minute,
         assertividade,
         wins,
         losses,
@@ -649,9 +884,15 @@ function SinaisSectionContent() {
   }, [stats, recentSignals]);
 
   const displayedPrimaryAnalyses = useMemo(() => {
-    if (primaryTabFilter === "todas") return primaryAnalysisStats;
-    return primaryAnalysisStats.filter((s) => s.category === primaryTabFilter);
-  }, [primaryAnalysisStats, primaryTabFilter]);
+    let list = primaryAnalysisStats;
+    if (primaryTabFilter !== "todas") {
+      list = list.filter((s) => s.category === primaryTabFilter);
+    }
+    if (primaryTabFilter === "minutos" && selectedMinuteFilter !== null) {
+      list = list.filter((s) => s.minute === selectedMinuteFilter);
+    }
+    return list;
+  }, [primaryAnalysisStats, primaryTabFilter, selectedMinuteFilter]);
 
   const primaryOverallSummary = useMemo(() => {
     let totalWins = 0;
@@ -1042,6 +1283,21 @@ function SinaisSectionContent() {
                       Quebra de Cores (
                       {primaryAnalysisStats.filter((s) => s.category === "cores").length})
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPrimaryTabFilter("minutos");
+                        setSelectedMinuteFilter(null);
+                      }}
+                      className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                        primaryTabFilter === "minutos"
+                          ? "bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                          : "text-blue-400/50 hover:text-blue-300"
+                      }`}
+                    >
+                      Minutos (0 a 9) (
+                      {primaryAnalysisStats.filter((s) => s.category === "minutos").length})
+                    </button>
                   </div>
 
                   {/* Resumo consolidado de todas as análises primárias */}
@@ -1084,6 +1340,40 @@ function SinaisSectionContent() {
                   </div>
                 </div>
 
+                {/* Subfiltro de Minutos quando a aba Minutos estiver ativa */}
+                {primaryTabFilter === "minutos" && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1 pb-1">
+                    <span className="text-[10px] uppercase font-bold text-blue-400/70 tracking-wider mr-1">
+                      Filtrar Minuto:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMinuteFilter(null)}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
+                        selectedMinuteFilter === null
+                          ? "bg-blue-500/30 text-blue-200 border border-blue-500/40"
+                          : "bg-white/5 text-white/50 hover:text-white/80"
+                      }`}
+                    >
+                      Todos (20)
+                    </button>
+                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((min) => (
+                      <button
+                        key={min}
+                        type="button"
+                        onClick={() => setSelectedMinuteFilter(min)}
+                        className={`px-2 py-0.5 text-[10px] font-bold font-mono rounded transition-all ${
+                          selectedMinuteFilter === min
+                            ? "bg-blue-500/30 text-blue-200 border border-blue-500/40"
+                            : "bg-white/5 text-white/50 hover:text-white/80"
+                        }`}
+                      >
+                        Minuto {min}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* Dica interativa para o usuário */}
                 <div className="flex items-center justify-between px-1 text-[11px] text-muted-foreground/80">
                   <span className="flex items-center gap-1.5">
@@ -1092,7 +1382,7 @@ function SinaisSectionContent() {
                     14) com assertividade auditada e preditiva.
                   </span>
                   <span className="hidden sm:inline-block text-[10px] text-primary/80 font-semibold font-mono">
-                    18 Análises Monitoradas
+                    {primaryAnalysisStats.length} Análises Monitoradas
                   </span>
                 </div>
 
@@ -1124,7 +1414,9 @@ function SinaisSectionContent() {
                                   ? "Sequência"
                                   : s.category === "somas"
                                     ? "Somas"
-                                    : "Quebra Cores"}
+                                    : s.category === "cores"
+                                      ? "Quebra Cores"
+                                      : "Minutos"}
                             </span>
                             <span className="text-[10px] font-mono font-black text-white/60">
                               {s.shortLabel}

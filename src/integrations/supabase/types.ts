@@ -113,6 +113,54 @@ export type Database = {
         };
         Relationships: [];
       };
+      predictive_cycles: {
+        Row: {
+          id: string;
+          cycle_key: string;
+          analysis: number;
+          analysis_code: string | null;
+          analysis_name: string | null;
+          value: number;
+          trigger_at: string;
+          gaps: number[];
+          total_whites: number;
+          first_white_gap: number | null;
+          status: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          cycle_key: string;
+          analysis: number;
+          analysis_code?: string | null;
+          analysis_name?: string | null;
+          value: number;
+          trigger_at: string;
+          gaps?: number[];
+          total_whites?: number;
+          first_white_gap?: number | null;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          cycle_key?: string;
+          analysis?: number;
+          analysis_code?: string | null;
+          analysis_name?: string | null;
+          value?: number;
+          trigger_at?: string;
+          gaps?: number[];
+          total_whites?: number;
+          first_white_gap?: number | null;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       trigger_audits: {
         Row: {
           analysis_count: number | null;

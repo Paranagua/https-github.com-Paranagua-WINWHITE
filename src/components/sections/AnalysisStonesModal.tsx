@@ -9,6 +9,9 @@ import {
 import { colorOf, type Color } from "@/components/double/types";
 import {
   buildA2,
+  buildA3,
+  buildA4,
+  buildA5,
   buildASandwichPontas,
   buildASandwichMeio,
   buildA8_11,
@@ -19,6 +22,23 @@ import {
   buildASoma17,
   buildASoma19,
   buildASoma21,
+  buildA1Minuto1,
+  buildA2Minuto1,
+  buildA1Minuto2,
+  buildA2Minuto2,
+  buildA1Minuto3,
+  buildA2Minuto3,
+  buildA1Minuto4,
+  buildA2Minuto4,
+  buildA1Minuto5,
+  buildA2Minuto5,
+  buildA1Minuto6,
+  buildA2Minuto6,
+  buildA1Minuto7,
+  buildA2Minuto7,
+  buildA1Minuto8,
+  buildA2Minuto8,
+  buildA1Minuto9,
   computeTop,
   isValidCycle,
   type Cycle,
@@ -44,7 +64,7 @@ export interface PrimaryAnalysisInfo {
   analysisId: number;
   name: string;
   shortLabel: string;
-  category: "pedras" | "sequencia" | "somas" | "cores";
+  category: "pedras" | "sequencia" | "somas" | "cores" | "minutos";
   categoryLabel: string;
   badge: string;
   description: string;
@@ -122,10 +142,71 @@ function getCyclesForAnalysis(key: string, id: number, rows: Row[]): Cycle[] {
         return colorBreaksToCycles(detectColorPatternBreaksById(rows, "continuos_n1"), rows);
       case "Q7":
         return colorBreaksToCycles(detectColorPatternBreaksById(rows, "continuos_n2"), rows);
+      // Minutos (0 a 9)
+      case "A4":
+        return buildA4(rows);
+      case "A5":
+        return buildA5(rows);
+      case "A22":
+        return buildA1Minuto1(rows);
+      case "A23":
+        return buildA2Minuto1(rows);
+      case "A24":
+        return buildA1Minuto2(rows);
+      case "A25":
+        return buildA2Minuto2(rows);
+      case "A26":
+        return buildA1Minuto3(rows);
+      case "A27":
+        return buildA2Minuto3(rows);
+      case "A28":
+        return buildA1Minuto4(rows);
+      case "A29":
+        return buildA2Minuto4(rows);
+      case "A17":
+        return buildA1Minuto5(rows);
+      case "A18":
+        return buildA2Minuto5(rows);
+      case "A30":
+        return buildA1Minuto6(rows);
+      case "A31":
+        return buildA2Minuto6(rows);
+      case "A32":
+        return buildA1Minuto7(rows);
+      case "A33":
+        return buildA2Minuto7(rows);
+      case "A34":
+        return buildA1Minuto8(rows);
+      case "A35":
+        return buildA2Minuto8(rows);
+      case "A36":
+        return buildA1Minuto9(rows);
+      case "A3":
+        return buildA3(rows);
       default:
         if (id === 2) return buildA2(rows);
         if (id === 19) return buildASandwichPontas(rows);
         if (id === 20) return buildASandwichMeio(rows);
+        if (id === 4) return buildA4(rows);
+        if (id === 5) return buildA5(rows);
+        if (id === 22) return buildA1Minuto1(rows);
+        if (id === 23) return buildA2Minuto1(rows);
+        if (id === 24) return buildA1Minuto2(rows);
+        if (id === 25) return buildA2Minuto2(rows);
+        if (id === 26) return buildA1Minuto3(rows);
+        if (id === 27) return buildA2Minuto3(rows);
+        if (id === 28) return buildA1Minuto4(rows);
+        if (id === 29) return buildA2Minuto4(rows);
+        if (id === 17) return buildA1Minuto5(rows);
+        if (id === 18) return buildA2Minuto5(rows);
+        if (id === 30) return buildA1Minuto6(rows);
+        if (id === 31) return buildA2Minuto6(rows);
+        if (id === 32) return buildA1Minuto7(rows);
+        if (id === 33) return buildA2Minuto7(rows);
+        if (id === 34) return buildA1Minuto8(rows);
+        if (id === 35) return buildA2Minuto8(rows);
+        if (id === 36) return buildA1Minuto9(rows);
+        if (id === 3) return buildA3(rows);
         if (id >= 50 && id <= 56) {
           const map: Record<number, string> = {
             50: "alternados",

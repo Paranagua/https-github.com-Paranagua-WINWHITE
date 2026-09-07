@@ -78,6 +78,11 @@ import {
   type Cycle,
   type Row,
 } from "@/lib/predictive";
+import {
+  persistCyclesBatch,
+  mergePersistedWithLiveCycles,
+  fetchPersistedCyclesMap,
+} from "@/lib/cyclePersistence";
 
 type Mode1Signal = {
   key: string;
@@ -456,6 +461,34 @@ export function PredictiveSignals() {
   const [activeRecAlerts, setActiveRecAlerts] = useState<
     Array<{ type: string; start: number; end: number }>
   >([]);
+  const [persistedCycles, setPersistedCycles] = useState<Record<number, Cycle[]>>({});
+
+  // 0. Carrega ciclos preditivos persistidos do Supabase/Servidor com fallback seguro
+  useEffect(() => {
+    let alive = true;
+    const mainIds = [
+      2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+      30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
+    ];
+
+    const loadCycles = async () => {
+      try {
+        const map = await fetchPersistedCyclesMap(mainIds, 50);
+        if (alive && Object.keys(map).length > 0) {
+          setPersistedCycles(map);
+        }
+      } catch {
+        // Fallback transparente: o motor utiliza o cálculo em memória das rodadas
+      }
+    };
+
+    loadCycles();
+    const interval = setInterval(loadCycles, 60000);
+    return () => {
+      alive = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   // 1. Carrega dados e sincroniza via realtime + polling de alta frequência
   useEffect(() => {
@@ -595,6 +628,17 @@ export function PredictiveSignals() {
         main[p.analysisId] = colorBreaksToCycles(brks, rows);
       });
 
+      // Mescla com ciclos persistidos prévios quando disponíveis (com cálculo ao vivo como fallback seguro)
+      const mainAnalysisIds = [
+        2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+        30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
+      ];
+      mainAnalysisIds.forEach((a) => {
+        if (persistedCycles[a]?.length) {
+          main[a] = mergePersistedWithLiveCycles(persistedCycles[a], main[a] || []);
+        }
+      });
+
       const secondary: Record<number, Cycle[]> = {};
       for (let i = 1; i <= 9; i++) {
         secondary[100 + i] = buildSecondary(rows, i);
@@ -604,7 +648,30 @@ export function PredictiveSignals() {
       console.error("[PredictiveSignals] Engine build error:", err);
       return {} as Record<number, Cycle[]>;
     }
-  }, [rows]);
+  }, [rows, persistedCycles]);
+
+  // Sincronização e persistência contínua dos ciclos no Supabase/Servidor de forma idempotente
+  useEffect(() => {
+    if (rows.length === 0) return;
+    const timer = setTimeout(() => {
+      const mainIds = [
+        2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+        30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
+      ];
+      const batch: Cycle[] = [];
+      mainIds.forEach((a) => {
+        const list = engine[a];
+        if (list && list.length > 0) {
+          batch.push(...list.slice(-10));
+        }
+      });
+      if (batch.length > 0) {
+        persistCyclesBatch(batch).catch(() => {});
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [engine, rows.length]);
 
   /** Ciclos em aberto (status < MAX_ZEROS) por análise + valor. O gatilho ativo é o ciclo aberto mais recente de cada pedra. */
   const active = useMemo(() => {
