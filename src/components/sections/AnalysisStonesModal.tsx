@@ -64,7 +64,7 @@ export interface PrimaryAnalysisInfo {
   analysisId: number;
   name: string;
   shortLabel: string;
-  category: "pedras" | "sequencia" | "somas" | "cores" | "minutos";
+  category: "pedras" | "sequencia" | "somas" | "cores" | "minutos" | "tendencias";
   categoryLabel: string;
   badge: string;
   description: string;
@@ -183,6 +183,8 @@ function getCyclesForAnalysis(key: string, id: number, rows: Row[]): Cycle[] {
         return buildA1Minuto9(rows);
       case "A3":
         return buildA3(rows);
+      case "TENDENCIAS":
+        return buildA2(rows);
       default:
         if (id === 2) return buildA2(rows);
         if (id === 19) return buildASandwichPontas(rows);

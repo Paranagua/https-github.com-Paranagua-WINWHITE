@@ -16,6 +16,7 @@ export type StoredSignal = {
   isSupreme?: boolean;
   isRare?: boolean;
   isAlavancagem?: boolean;
+  isTendencias?: boolean;
   isTop1?: boolean;
   isNoConfluence?: boolean;
   isLocked?: boolean;
@@ -149,6 +150,7 @@ export type PredictiveSignal = {
   isRare?: boolean;
   isSupreme?: boolean;
   isAlavancagem?: boolean;
+  isTendencias?: boolean;
   isTop1?: boolean;
   isNoConfluence?: boolean;
   isLocked?: boolean;

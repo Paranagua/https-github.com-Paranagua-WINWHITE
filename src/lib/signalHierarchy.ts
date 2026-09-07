@@ -21,13 +21,14 @@ import { useSignalStatsStore } from "@/lib/signalStatsStore";
  */
 export enum SignalRank {
   NO_CONFLUENCE = 0,
-  TOP1_TOP3 = 1,
-  RARE = 2,
-  SUPREME = 3,
-  ALAVANCAGEM = 4,
+  TENDENCIAS = 1,
+  TOP1_TOP3 = 2,
+  RARE = 3,
+  SUPREME = 4,
+  ALAVANCAGEM = 5,
 }
 
-export type SignalCategory = "top1_top3" | "rare" | "supreme" | "alavancagem";
+export type SignalCategory = "top1_top3" | "rare" | "supreme" | "alavancagem" | "tendencias";
 
 export interface SignalLevelEvaluation {
   rank: SignalRank;
@@ -219,6 +220,8 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
     if (cat.includes("alavanc")) return SignalRank.ALAVANCAGEM;
     if (cat.includes("suprem") || cat.includes("winn")) return SignalRank.SUPREME;
     if (cat.includes("rare") || cat.includes("raro")) return SignalRank.RARE;
+    if (cat.includes("top1")) return SignalRank.TOP1_TOP3;
+    if (cat.includes("tendencia")) return SignalRank.TENDENCIAS;
     return SignalRank.TOP1_TOP3;
   }
 
@@ -290,6 +293,21 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
     conf.includes("RARO")
   ) {
     return SignalRank.RARE;
+  }
+
+  if (cat.includes("top1_top3") || (cat.includes("top1") && cat.includes("top3"))) {
+    return SignalRank.TOP1_TOP3;
+  }
+
+  // Sinais do grupo Tendências (quando não confluem com os outros grupos)
+  if (
+    sig.isTendencias ||
+    cat.includes("tendencia") ||
+    label.includes("TENDENCIA") ||
+    medal.includes("TENDENCIA") ||
+    sig.strategyKey === "TENDENCIAS"
+  ) {
+    return SignalRank.TENDENCIAS;
   }
 
   return SignalRank.TOP1_TOP3;
@@ -1400,6 +1418,8 @@ export function mergeSignalsLifecycle(
           !sig.isSupreme &&
           !sig.isRare &&
           cat !== "top1_top3" &&
+          cat !== "tendencias" &&
+          !sig.isTendencias &&
           !sig.isNoConfluence &&
           cat !== "no_confluence"))
     ) {
@@ -1437,17 +1457,24 @@ export function mergeSignalsLifecycle(
       existingKey = canonicalKey;
       existing = resultMap.get(canonicalKey);
     } else {
-      // Busca sinal pendente existente em janela de ±1 minuto (confluência temporal)
-      for (const [k, s] of resultMap.entries()) {
-        if (!s || !s.entryDate) continue;
-        const sTime =
-          s.entryDate instanceof Date
-            ? s.entryDate.getTime()
-            : parseUtcDate(s.entryDate as any).getTime();
-        if (Math.abs(candTime - sTime) <= 60_000 && s.outcome === "pending") {
-          existingKey = k;
-          existing = s;
-          break;
+      // Se o candidato for exclusivo do grupo Tendências, ele NÃO deve ser fundido com minutos adjacentes (±1m) de outros grupos!
+      // Confluência com outro grupo só ocorre quando coincidem no mesmo minuto exato.
+      const isCandTendPure =
+        cand.category === "tendencias" || (cand.isTendencias && !cand.isAlavancagem && !cand.isSupreme && !cand.isRare);
+
+      if (!isCandTendPure) {
+        // Busca sinal pendente existente em janela de ±1 minuto (confluência temporal)
+        for (const [k, s] of resultMap.entries()) {
+          if (!s || !s.entryDate) continue;
+          const sTime =
+            s.entryDate instanceof Date
+              ? s.entryDate.getTime()
+              : parseUtcDate(s.entryDate as any).getTime();
+          if (Math.abs(candTime - sTime) <= 60_000 && s.outcome === "pending") {
+            existingKey = k;
+            existing = s;
+            break;
+          }
         }
       }
     }
@@ -1691,6 +1718,14 @@ export function mergeSignalsLifecycle(
     const hasConflict = sourceCycleKeys.some((ck) => claimedCycleKeys.has(ck));
 
     if (hasConflict) {
+      // Se for sinal exclusivo do grupo Tendências, preserva o sinal com suas fontes
+      if (sig.category === "tendencias" || (sig.isTendencias && !sig.isAlavancagem && !sig.isSupreme && !sig.isRare)) {
+        for (const ck of sourceCycleKeys) {
+          claimedCycleKeys.add(ck);
+        }
+        continue;
+      }
+
       // Filtra fontes exclusivas (cujo cycleKey não foi reivindicado)
       const exclusiveSources = currentSources.filter(
         (src) => !claimedCycleKeys.has(getSourceCycleKey(src)),
