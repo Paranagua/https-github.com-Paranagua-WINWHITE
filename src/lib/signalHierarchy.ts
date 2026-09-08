@@ -1072,9 +1072,41 @@ export function buildStrategyTriggeredSignals(
     clusters.push(currentCluster);
   }
 
+  // Atribuição EXCLUSIVA de tendências 3/3 para evitar que a MESMA tendência
+  // seja associada a múltiplos sinais/clusters com diferença de 1 minuto
+  const clusterTendencyAssignments = new Map<number, RawTendencyCandidate[]>();
+
+  for (const tc of tendencyCandidates || []) {
+    if (!tc || !tc.targetDate || tc.ratio !== "3/3") continue;
+    const t = tc.targetDate.getTime();
+    if (Number.isNaN(t)) continue;
+
+    let bestClusterIdx = -1;
+    let bestDist = Infinity;
+
+    clusters.forEach((cluster, idx) => {
+      const cStart = cluster[0] - 60_000;
+      const cEnd = cluster[cluster.length - 1] + 60_000;
+      if (t >= cStart && t <= cEnd) {
+        const dist = Math.abs(cluster[0] - t);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestClusterIdx = idx;
+        }
+      }
+    });
+
+    if (bestClusterIdx !== -1) {
+      const list = clusterTendencyAssignments.get(bestClusterIdx) || [];
+      list.push(tc);
+      clusterTendencyAssignments.set(bestClusterIdx, list);
+    }
+  }
+
   const signals: PredictiveSignal[] = [];
 
-  for (const cluster of clusters) {
+  for (let clusterIdx = 0; clusterIdx < clusters.length; clusterIdx++) {
+    const cluster = clusters[clusterIdx];
     const clusterPrimary: typeof normalizedPrimary = [];
     for (const m of cluster) {
       const list = minuteMap.get(m) || [];
@@ -1285,11 +1317,8 @@ export function buildStrategyTriggeredSignals(
     });
 
     // Regra 3: As tendências com 100% de 3/3 atuam como confluência para os outros grupos
-    const matching3_3Tendencies = (tendencyCandidates || []).filter((tc) => {
-      if (!tc || !tc.targetDate || tc.ratio !== "3/3") return false;
-      const t = tc.targetDate.getTime();
-      return t >= clusterWindowStart && t <= clusterWindowEnd;
-    });
+    // Exclusividade garantida: cada tendência é atribuída unicamente ao cluster temporalmente mais próximo
+    const matching3_3Tendencies = clusterTendencyAssignments.get(clusterIdx) || [];
 
     if (matching3_3Tendencies.length > 0) {
       matching3_3Tendencies.forEach((tc) => {
@@ -1396,16 +1425,34 @@ export function buildEmAltaSignals(
   higherTierSignals: PredictiveSignal[],
   now: number = Date.now(),
 ): PredictiveSignal[] {
-  // 1. Horários já ocupados pelos grupos de maior hierarquia
+  // 1. Horários já ocupados pelos grupos de maior hierarquia e rastreamento de tendências utilizadas
   const occupiedMinutes = new Set<number>();
   const occupiedClocks = new Set<string>();
+  const usedTendencyKeysInHigherTier = new Set<string>();
+  const higherTierTendencyAnalysesByMinute = new Map<number, Set<number>>();
 
   for (const sig of higherTierSignals || []) {
     const dt = sig.entryDate instanceof Date ? sig.entryDate : new Date(sig.entryDate || 0);
-    if (!Number.isNaN(dt.getTime())) {
-      const minStart = Math.floor(dt.getTime() / 60_000) * 60_000;
+    const sigMs = dt.getTime();
+    if (!Number.isNaN(sigMs)) {
+      const minStart = Math.floor(sigMs / 60_000) * 60_000;
       occupiedMinutes.add(minStart);
       occupiedClocks.add(fmtClock(dt));
+
+      for (const src of sig.sources || []) {
+        if (src.cycleKey) {
+          usedTendencyKeysInHigherTier.add(src.cycleKey);
+        }
+        if (
+          src.cycleKey?.startsWith("TEND_") ||
+          src.cycleKey?.startsWith("T3/3") ||
+          (src.rank === 1 && src.pct === 100)
+        ) {
+          const set = higherTierTendencyAnalysesByMinute.get(minStart) || new Set<number>();
+          set.add(src.analysis);
+          higherTierTendencyAnalysesByMinute.set(minStart, set);
+        }
+      }
     }
   }
 
@@ -1414,7 +1461,34 @@ export function buildEmAltaSignals(
     if (!tc || !tc.targetDate) return false;
     if (tc.ratio !== "3/3" || tc.pct < 100) return false;
     const t = tc.targetDate.getTime();
-    return !Number.isNaN(t) && t >= now - 60_000;
+    if (Number.isNaN(t) || t < now - 60_000) return false;
+
+    const tcKey =
+      tc.cycleKey ||
+      `TEND_A${tc.analysis}_V${tc.value}_T${tc.triggerAt?.getTime?.() || tc.targetDate.getTime()}`;
+
+    // A mesma tendência já foi utilizada por um grupo de maior hierarquia
+    if (usedTendencyKeysInHigherTier.has(tcKey)) return false;
+
+    const candMin = Math.floor(t / 60_000) * 60_000;
+    const clockStr = fmtClock(tc.targetDate);
+
+    // Regra 4: se algum outro grupo mostrar mesmo horário (sinal), o sinal do grupo 'em alta' some
+    if (occupiedMinutes.has(candMin) || occupiedClocks.has(clockStr)) {
+      return false;
+    }
+
+    // Regra de Não Duplicação a 1 minuto:
+    // Se um sinal de maior hierarquia a 1 minuto de diferença utilizou essa mesma análise de tendência, bloqueia
+    for (let offset = -60_000; offset <= 60_000; offset += 60_000) {
+      const neighborMin = candMin + offset;
+      const analyses = higherTierTendencyAnalysesByMinute.get(neighborMin);
+      if (analyses && analyses.has(tc.analysis)) {
+        return false;
+      }
+    }
+
+    return true;
   });
 
   if (valid3_3.length === 0) return [];
@@ -1431,32 +1505,74 @@ export function buildEmAltaSignals(
   const minuteMap = new Map<number, RawTendencyCandidate[]>();
   for (const cand of valid3_3) {
     const minStart = Math.floor(cand.targetDate.getTime() / 60_000) * 60_000;
-    const clockStr = fmtClock(cand.targetDate);
-
-    // Regra 4: se algum outro grupo mostrar mesmo horário (sinal), o sinal do grupo 'em alta' some
-    if (occupiedMinutes.has(minStart) || occupiedClocks.has(clockStr)) {
-      continue;
-    }
-
     const list = minuteMap.get(minStart) || [];
     list.push(cand);
     minuteMap.set(minStart, list);
   }
 
+  // Ordena os minutos candidatos
+  const sortedMinutes = Array.from(minuteMap.keys()).sort((a, b) => a - b);
+
+  // Exclusividade de tendências da mesma análise com 1 minuto de diferença entre sinais do próprio grupo 'EM ALTA'
+  const emAltaEmittedAnalysesByMinute = new Map<number, Set<number>>();
+  const filteredMinuteMap = new Map<number, RawTendencyCandidate[]>();
+
+  for (const minStart of sortedMinutes) {
+    const tendencies = minuteMap.get(minStart) || [];
+    const validForThisMinute: RawTendencyCandidate[] = [];
+
+    for (const cand of tendencies) {
+      // Verifica se a mesma análise já foi aceita em minStart - 60_000 (1 minuto antes)
+      const prevMin = minStart - 60_000;
+      const prevAnalyses = emAltaEmittedAnalysesByMinute.get(prevMin);
+      if (prevAnalyses && prevAnalyses.has(cand.analysis)) {
+        // Já foi enviado um sinal da mesma análise 1 minuto antes! Ignora neste minuto.
+        continue;
+      }
+      validForThisMinute.push(cand);
+    }
+
+    if (validForThisMinute.length > 0) {
+      filteredMinuteMap.set(minStart, validForThisMinute);
+      const set = emAltaEmittedAnalysesByMinute.get(minStart) || new Set<number>();
+      validForThisMinute.forEach((c) => set.add(c.analysis));
+      emAltaEmittedAnalysesByMinute.set(minStart, set);
+    }
+  }
+
+  // Atribuição exclusiva de confluências 2/3 ao minuto mais próximo de 'EM ALTA'
+  const conf2_3Map = new Map<number, RawTendencyCandidate[]>();
+  const activeMinutes = Array.from(filteredMinuteMap.keys());
+
+  for (const tc of valid2_3) {
+    const t = tc.targetDate.getTime();
+    let bestMin = -1;
+    let bestDist = Infinity;
+
+    for (const m of activeMinutes) {
+      if (t >= m - 60_000 && t <= m + 60_000) {
+        const dist = Math.abs(m - t);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestMin = m;
+        }
+      }
+    }
+
+    if (bestMin !== -1) {
+      const list = conf2_3Map.get(bestMin) || [];
+      list.push(tc);
+      conf2_3Map.set(bestMin, list);
+    }
+  }
+
   const emAltaSignals: PredictiveSignal[] = [];
 
-  for (const [minStart, primaryTendencies] of minuteMap.entries()) {
+  for (const [minStart, primaryTendencies] of filteredMinuteMap.entries()) {
     if (primaryTendencies.length === 0) continue;
 
     const repDate = new Date(minStart);
-    const windowStart = minStart - 60_000;
-    const windowEnd = minStart + 60_000;
-
-    // Confluências de tendências 2/3 no mesmo minuto ou janela
-    const conf2_3 = valid2_3.filter((tc) => {
-      const t = tc.targetDate.getTime();
-      return t >= windowStart && t <= windowEnd;
-    });
+    const conf2_3 = conf2_3Map.get(minStart) || [];
 
     const allClusterTendencies = [...primaryTendencies, ...conf2_3];
 
@@ -1651,6 +1767,61 @@ export function mergeSignalsLifecycle(
 
       // Se já houve branco em M-1, bloqueia a publicação!
       if (whiteInM1) {
+        continue;
+      }
+
+      // Bloqueio de 1 minuto: a mesma tendência NÃO pode ser utilizada para enviar sinais com diferença de um minuto
+      let hasTendencyConflictWithNeighbor = false;
+      const candSources = cand.sources || [];
+      const candTendencyCycleKeys = new Set(
+        candSources
+          .filter(
+            (s: any) =>
+              (s.cycleKey && (s.cycleKey.startsWith("TEND_") || s.cycleKey.startsWith("T3/3"))) ||
+              cand.isEmAlta,
+          )
+          .map((s: any) => s.cycleKey)
+          .filter(Boolean),
+      );
+      const candTendencyAnalyses = new Set(
+        candSources
+          .filter(
+            (s: any) =>
+              (s.cycleKey && (s.cycleKey.startsWith("TEND_") || s.cycleKey.startsWith("T3/3"))) ||
+              cand.isEmAlta,
+          )
+          .map((s: any) => s.analysis),
+      );
+
+      if (candTendencyCycleKeys.size > 0 || candTendencyAnalyses.size > 0) {
+        for (const s of resultMap.values()) {
+          if (!s || !s.entryDate) continue;
+          const sTime =
+            s.entryDate instanceof Date
+              ? s.entryDate.getTime()
+              : parseUtcDate(s.entryDate as any).getTime();
+          if (Math.abs(candTime - sTime) <= 60_000) {
+            for (const src of s.sources || []) {
+              if (src.cycleKey && candTendencyCycleKeys.has(src.cycleKey)) {
+                hasTendencyConflictWithNeighbor = true;
+                break;
+              }
+              if (
+                (src.cycleKey?.startsWith("TEND_") ||
+                  src.cycleKey?.startsWith("T3/3") ||
+                  s.isEmAlta) &&
+                candTendencyAnalyses.has(src.analysis)
+              ) {
+                hasTendencyConflictWithNeighbor = true;
+                break;
+              }
+            }
+            if (hasTendencyConflictWithNeighbor) break;
+          }
+        }
+      }
+
+      if (hasTendencyConflictWithNeighbor) {
         continue;
       }
 
@@ -1891,7 +2062,34 @@ export function mergeSignalsLifecycle(
       });
 
       if (!evalLevel || top1Sources.length === 0) {
-        resultMap.delete(sigKey);
+        if (sig.isEmAlta) {
+          const remaining3_3 = exclusiveSources.filter(
+            (s: any) =>
+              (s.rank === 1 && s.pct === 100) ||
+              (s.cycleKey && (s.cycleKey.startsWith("TEND_") || s.cycleKey.startsWith("T3/3"))),
+          );
+          if (remaining3_3.length === 0) {
+            resultMap.delete(sigKey);
+          } else {
+            for (const src of exclusiveSources) {
+              claimedCycleKeys.add(getSourceCycleKey(src));
+            }
+            const primaryCodes = Array.from(
+              new Set(remaining3_3.map((t: any) => formatAnalysisCode(t.analysis))),
+            );
+            const confItems = exclusiveSources.map(
+              (t: any) => `${formatAnalysisCode(t.analysis)}-${t.value}`,
+            );
+            resultMap.set(sigKey, {
+              ...sig,
+              sources: exclusiveSources,
+              label: `Tendência 3/3 (${primaryCodes.join("/")})`,
+              confluence: confItems.join(" · "),
+            });
+          }
+        } else {
+          resultMap.delete(sigKey);
+        }
       } else {
         // Reivindica os cycleKeys exclusivos
         for (const src of exclusiveSources) {
@@ -1927,6 +2125,122 @@ export function mergeSignalsLifecycle(
       // Sem conflito: reivindica todos os cycleKeys deste sinal
       for (const ck of sourceCycleKeys) {
         claimedCycleKeys.add(ck);
+      }
+    }
+  }
+
+  // 3.1. Garantia Estrita de Exclusividade Temporal de Tendências (Prevenção de sinais a 1 minuto com a mesma tendência)
+  const allSignalsList = Array.from(resultMap.values()).filter((s) => s && s.entryDate);
+  allSignalsList.sort((a, b) => {
+    const tA =
+      a.entryDate instanceof Date
+        ? a.entryDate.getTime()
+        : parseUtcDate(a.entryDate as any).getTime();
+    const tB =
+      b.entryDate instanceof Date
+        ? b.entryDate.getTime()
+        : parseUtcDate(b.entryDate as any).getTime();
+    return tA - tB;
+  });
+
+  for (let i = 0; i < allSignalsList.length; i++) {
+    for (let j = i + 1; j < allSignalsList.length; j++) {
+      const s1 = allSignalsList[i];
+      const s2 = allSignalsList[j];
+      const t1 =
+        s1.entryDate instanceof Date
+          ? s1.entryDate.getTime()
+          : parseUtcDate(s1.entryDate as any).getTime();
+      const t2 =
+        s2.entryDate instanceof Date
+          ? s2.entryDate.getTime()
+          : parseUtcDate(s2.entryDate as any).getTime();
+
+      if (Math.abs(t2 - t1) > 60_000) break;
+
+      const s1TendencyKeys = new Set(
+        (s1.sources || [])
+          .filter((s: any) => s.cycleKey?.startsWith("TEND_") || s.cycleKey?.startsWith("T3/3"))
+          .map((s: any) => s.cycleKey),
+      );
+      const s2TendencyKeys = new Set(
+        (s2.sources || [])
+          .filter((s: any) => s.cycleKey?.startsWith("TEND_") || s.cycleKey?.startsWith("T3/3"))
+          .map((s: any) => s.cycleKey),
+      );
+
+      const s1TendencyAnalyses = new Set(
+        (s1.sources || [])
+          .filter(
+            (s: any) =>
+              s.cycleKey?.startsWith("TEND_") || s.cycleKey?.startsWith("T3/3") || s1.isEmAlta,
+          )
+          .map((s: any) => s.analysis),
+      );
+      const s2TendencyAnalyses = new Set(
+        (s2.sources || [])
+          .filter(
+            (s: any) =>
+              s.cycleKey?.startsWith("TEND_") || s.cycleKey?.startsWith("T3/3") || s2.isEmAlta,
+          )
+          .map((s: any) => s.analysis),
+      );
+
+      let sharedKey = "";
+      for (const k of s1TendencyKeys) {
+        if (s2TendencyKeys.has(k)) {
+          sharedKey = k;
+          break;
+        }
+      }
+
+      let sharedAnalysis = -1;
+      if (!sharedKey && (s1.isEmAlta || s2.isEmAlta)) {
+        for (const a of s1TendencyAnalyses) {
+          if (s2TendencyAnalyses.has(a)) {
+            sharedAnalysis = a;
+            break;
+          }
+        }
+      }
+
+      if (sharedKey || sharedAnalysis !== -1) {
+        const rank1 = getSignalRank(s1);
+        const rank2 = getSignalRank(s2);
+
+        let keeper = s1;
+        let looser = s2;
+
+        if (s2.outcome && s2.outcome !== "pending" && s1.outcome === "pending") {
+          keeper = s2;
+          looser = s1;
+        } else if (s2.isLocked && !s1.isLocked) {
+          keeper = s2;
+          looser = s1;
+        } else if (rank2 > rank1 && !s1.isLocked) {
+          keeper = s2;
+          looser = s1;
+        }
+
+        const looserKey = looser.key || getCanonicalSignalKey(looser.entryDate);
+
+        if (looser.isEmAlta || (looser.category || "").toLowerCase() === "em_alta") {
+          resultMap.delete(looserKey);
+        } else if (looser.outcome === "pending" && !looser.isLocked) {
+          const cleanSources = (looser.sources || []).filter((s: any) => {
+            if (sharedKey && s.cycleKey === sharedKey) return false;
+            if (
+              sharedAnalysis !== -1 &&
+              s.analysis === sharedAnalysis &&
+              (s.cycleKey?.startsWith("TEND_") || s.cycleKey?.startsWith("T3/3"))
+            ) {
+              return false;
+            }
+            return true;
+          });
+          looser.sources = cleanSources;
+          resultMap.set(looserKey, looser);
+        }
       }
     }
   }
