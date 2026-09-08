@@ -1255,28 +1255,6 @@ export function buildStrategyTriggeredSignals(
       });
     });
 
-    // Regra 3: As tendências com 100% de 3/3 atuam como confluência para os outros grupos
-    const matching3_3Tendencies = (tendencyCandidates || []).filter((tc) => {
-      if (!tc || !tc.targetDate || tc.ratio !== "3/3") return false;
-      const t = tc.targetDate.getTime();
-      return t >= clusterWindowStart && t <= clusterWindowEnd;
-    });
-
-    if (matching3_3Tendencies.length > 0) {
-      matching3_3Tendencies.forEach((tc) => {
-        allSources.push({
-          analysis: tc.analysis,
-          value: tc.value,
-          pct: 100,
-          top3: false,
-          rank: 1,
-          cycleKey: tc.cycleKey,
-        });
-        const code = formatAnalysisCode(tc.analysis);
-        formattedAnalyses.push(`T3/3·${code}-${tc.value}`);
-      });
-    }
-
     // Estratégias confirmadas na janela
     const clusterConfirmed: ConfirmedStrategyInfo[] = [];
     matchingConfProjections.forEach((cp) => {
@@ -1305,6 +1283,32 @@ export function buildStrategyTriggeredSignals(
         formattedAnalyses.push(`${code}-${a.value}${pctStr}`);
       }
     });
+
+    // Regra 3: As tendências com 100% de 3/3 atuam como confluência para os outros grupos
+    const matching3_3Tendencies = (tendencyCandidates || []).filter((tc) => {
+      if (!tc || !tc.targetDate || tc.ratio !== "3/3") return false;
+      const t = tc.targetDate.getTime();
+      return t >= clusterWindowStart && t <= clusterWindowEnd;
+    });
+
+    if (matching3_3Tendencies.length > 0) {
+      matching3_3Tendencies.forEach((tc) => {
+        allSources.push({
+          analysis: tc.analysis,
+          value: tc.value,
+          pct: 100,
+          top3: false,
+          rank: 1,
+          cycleKey: tc.cycleKey,
+        });
+        const code = formatAnalysisCode(tc.analysis);
+        const tKey = `T3/3·${code}-${tc.value}`;
+        if (!seenAnalyses.has(tKey)) {
+          seenAnalyses.add(tKey);
+          formattedAnalyses.push(tKey);
+        }
+      });
+    }
 
     const confluenceParts: string[] = [];
     if (distinctStrategies.length > 0) {

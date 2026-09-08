@@ -783,6 +783,39 @@ class AutonomousAuditEngine {
           isValidCycle(c),
       );
 
+      // TENDÊNCIA: baseada exclusivamente nos 3 ciclos mais recentes daquela mesma análise
+      if (pastValid.length >= 3) {
+        const tendencyResult = computeAnalysisTendency(pastValid, item.open.triggerAt);
+        if (tendencyResult.hasTendency && tendencyResult.tendency) {
+          const t = tendencyResult.tendency;
+          let targetMinutes = t.gap;
+          if ([17, 18].includes(item.analysis)) targetMinutes += 1;
+          const at = addMinutes(item.open.triggerAt, targetMinutes);
+          const targetMs = at.getTime();
+
+          if (targetMs >= now.getTime() - 5 * 3600_000) {
+            const stratKey =
+              item.analysis >= 50 && item.analysis <= 56
+                ? `Q${item.analysis - 49}`
+                : `A${item.analysis}`;
+
+            tendencyCandidates.push({
+              analysis: item.analysis,
+              value: item.value,
+              gap: t.gap,
+              targetDate: at,
+              ratio: t.ratio,
+              count: t.count,
+              pct: t.pct,
+              triggerAt: item.open.triggerAt,
+              cycleKey: `TEND_A${item.analysis}_V${item.value}_T${item.open.triggerAt.getTime()}`,
+              strategyKey: stratKey,
+              label: `Tendência ${t.ratio} (${stratKey}-${item.value})`,
+            });
+          }
+        }
+      }
+
       if (pastValid.length < 4) continue;
       const hist = pastValid.slice(-5);
       const candidates = computeTop(hist, CANDIDATE_DEPTH);
@@ -908,35 +941,6 @@ class AutonomousAuditEngine {
           });
         }
       });
-
-      // 3. TENDÊNCIA baseada exclusivamente nos 3 ciclos mais recentes da mesma análise
-      const tendency = computeAnalysisTendency(item.analysis, item.value, allCycles, item.open);
-      if (tendency && tendency.confluenceRatio >= 2 / 3) {
-        let tm = tendency.projectedGapMinutes;
-        if ([17, 18].includes(item.analysis)) tm += 1;
-        const at = addMinutes(item.open.triggerAt, tm);
-        const t = at.getTime();
-
-        if (t >= now.getTime() - 5 * 3600_000) {
-          const stratKey =
-            item.analysis >= 50 && item.analysis <= 56
-              ? `Q${item.analysis - 49}`
-              : `A${item.analysis}`;
-
-          tendencyCandidates.push({
-            analysis: item.analysis,
-            value: item.value,
-            confluenceRatio: tendency.confluenceRatio,
-            confluentCount: tendency.confluentCount,
-            totalCyclesChecked: tendency.totalCyclesChecked,
-            ratioLabel: tendency.ratioLabel,
-            projectedGapMinutes: tm,
-            targetDate: at,
-            strategyKey: stratKey,
-            cycleKey,
-          });
-        }
-      }
     }
 
     return { rawCandidates, tendencyCandidates };
