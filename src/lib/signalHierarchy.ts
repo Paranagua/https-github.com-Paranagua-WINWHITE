@@ -95,13 +95,9 @@ export function extractSignalStrategies(sig: any): string[] {
     }
   }
 
-  // 5. Escaneia confluence e label para capturar E1-E15 e pares de soma (14-5, etc.)
+  // 5. Escaneia confluence e label para capturar pares de soma (14-5, 10-7, etc.) — estratégias "E" desativadas nas confluências
   const textToScan = `${sig.confluence || ""} ${sig.label || ""}`;
   if (textToScan) {
-    const eMatches = textToScan.match(/\bE(1[0-5]|[1-9])\b/gi);
-    if (eMatches) {
-      eMatches.forEach((m) => list.push(m.toUpperCase()));
-    }
     // Procura por pares de soma como 14-5, 10-9, 11-8, 12-7, 6-13, 8-11, 10-7, 8-9, 11-6, 5-12, 13-4, 14-3
     const sumMatches = textToScan.match(/\b\d+-\d+\b/g);
     if (sumMatches) {
@@ -109,30 +105,20 @@ export function extractSignalStrategies(sig: any): string[] {
     }
   }
 
-  // Deduplica mantendo valores únicos
+  // Deduplica mantendo valores únicos e filtra qualquer estratégia "E" (desativadas nas confluências)
   const seen = new Set<string>();
   const result: string[] = [];
   for (const item of list) {
+    if (/^E\d+$/i.test(item)) continue; // Estratégias "E" desativadas nas confluências
     const formatted = formatStrategyCode(item);
-    if (formatted && !seen.has(formatted)) {
+    if (formatted && !/^E\d+$/i.test(formatted) && !seen.has(formatted)) {
       seen.add(formatted);
       result.push(formatted);
     }
   }
 
-  // Ordena: E1-E15 primeiro (ex: E1, E2...), depois somas numéricas (ex: 145, 109...)
-  result.sort((a, b) => {
-    const aIsE = /^E\d+$/i.test(a);
-    const bIsE = /^E\d+$/i.test(b);
-    if (aIsE && !bIsE) return -1;
-    if (!aIsE && bIsE) return 1;
-    if (aIsE && bIsE) {
-      const numA = parseInt(a.substring(1), 10);
-      const numB = parseInt(b.substring(1), 10);
-      return numA - numB;
-    }
-    return a.localeCompare(b);
-  });
+  // Ordena somas numéricas (ex: 89, 107, 109, 145...)
+  result.sort((a, b) => a.localeCompare(b));
 
   return result;
 }
@@ -252,11 +238,12 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
   const distinctTop1 = new Set(top1Sources.map((s: any) => s.analysis));
   const distinctTop3 = new Set(top3Sources.map((s: any) => s.analysis));
 
-  // Regra do Usuário: As estratégias "E" devem ser consideradas como Top 2/3 (confluência)
+  // Regra do Usuário: Estratégias "E" desativadas nas confluências.
+  // Apenas as estratégias de soma =17&19 atuam ativamente como confluência Top 2/3.
   const textToScan = `${sig.confluence || ""} ${sig.label || ""} ${(sig as any).strategies?.join(" ") || ""}`;
-  const eMatches = textToScan.match(/\bE(1[0-5]|[1-9])\b/gi);
-  if (eMatches) {
-    eMatches.forEach((m) => distinctTop3.add(`E_${m.toUpperCase()}`));
+  const sumMatches = textToScan.match(/\b\d+-\d+\b/g);
+  if (sumMatches) {
+    sumMatches.forEach((m) => distinctTop3.add(`SUM_${formatStrategyCode(m)}`));
   }
 
   // Quando fontes estruturadas estão presentes, calcula estritamente pelas regras dos grupos:
@@ -1125,13 +1112,8 @@ export function buildStrategyTriggeredSignals(
       return t >= clusterWindowStart && t <= clusterWindowEnd;
     });
 
-    // 2. Busca confluências das Estratégias (E1-E15 e Somas)
-    const matchingConfProjections = (confirmationProjections || []).filter((cp) => {
-      if (!cp || !cp.targetDate) return false;
-      const t = cp.targetDate.getTime();
-      return t >= clusterWindowStart && t <= clusterWindowEnd;
-    });
-
+    // 2. Busca confluências das Estratégias: ESTRATÉGIAS "E" DESATIVADAS NAS CONFLUÊNCIAS.
+    // Deixa ativa apenas as estratégias de soma =17&19 (Soma 19 e Soma 17)!
     const matchingSumProjections = (sumProjections || []).filter((sp) => {
       if (!sp || !sp.targetDate) return false;
       const t = sp.targetDate.getTime();
@@ -1139,9 +1121,6 @@ export function buildStrategyTriggeredSignals(
     });
 
     const rawStrategyCodes: string[] = [];
-    matchingConfProjections.forEach((cp) => {
-      if (cp.strategyCode) rawStrategyCodes.push(cp.strategyCode);
-    });
     matchingSumProjections.forEach((sp) => {
       if (sp.code) rawStrategyCodes.push(sp.code);
     });
@@ -1156,21 +1135,13 @@ export function buildStrategyTriggeredSignals(
       }
     });
 
-    distinctStrategies.sort((a, b) => {
-      const aIsE = /^E\d+$/i.test(a);
-      const bIsE = /^E\d+$/i.test(b);
-      if (aIsE && !bIsE) return -1;
-      if (!aIsE && bIsE) return 1;
-      if (aIsE && bIsE) return parseInt(a.substring(1), 10) - parseInt(b.substring(1), 10);
-      return a.localeCompare(b);
-    });
+    distinctStrategies.sort((a, b) => a.localeCompare(b));
 
     const hasStrategyConfluence = distinctStrategies.length > 0;
     const strategyCodesLabel = distinctStrategies.join("/");
 
-    // REGRA DO USUÁRIO: As estratégias "E" (E1 a E15) devem ser consideradas como Top 2/3!
-    const distinctEStrategies = distinctStrategies.filter((s) => /^E\d+$/i.test(s));
-    const eStrategyCount = distinctEStrategies.length;
+    // REGRA DO USUÁRIO: Estratégias de soma =17&19 ativas como confluência Top 2/3
+    const sumStrategyCount = distinctStrategies.length;
 
     // Todas as análises ativas na janela (Primárias + Confluência)
     const allMatchingAnalyses = [...clusterPrimary, ...matchingConfluenceAnalyses];
@@ -1180,8 +1151,8 @@ export function buildStrategyTriggeredSignals(
     const distinctTop1Analyses = Array.from(new Set(top1Analyses.map((s) => s.analysis)));
     const distinctTop3Analyses = Array.from(new Set(top3Analyses.map((s) => s.analysis)));
     const top1Count = distinctTop1Analyses.length;
-    // top3Count soma as análises secundárias Top 2/3 (75-79%) E as estratégias "E" (confluência Top 2/3)
-    const top3Count = distinctTop3Analyses.length + eStrategyCount;
+    // top3Count soma as análises secundárias Top 2/3 (75-79%) E as estratégias de soma =17&19 ativas
+    const top3Count = distinctTop3Analyses.length + sumStrategyCount;
 
     // Análises primárias que originaram o sinal
     const distinctPrimaryAnalyses = Array.from(new Set(clusterPrimary.map((p) => p.analysis)));
@@ -1274,34 +1245,23 @@ export function buildStrategyTriggeredSignals(
       cycleKey: a.cycleKey,
     }));
 
-    // Regra do Usuário: As estratégias "E" são consideradas como Top 2/3 nas fontes do sinal
-    matchingConfProjections.forEach((cp) => {
-      const eNum = cp.strategyId || parseInt(String(cp.strategyCode).replace(/\D/g, ""), 10) || 1;
+    // Regra do Usuário: Estratégias "E" desativadas nas confluências.
+    // Apenas as estratégias de soma =17&19 (Soma 17 e Soma 19) atuam como confluência Top 2/3:
+    matchingSumProjections.forEach((sp, sIdx) => {
+      const numericCode = parseInt(formatStrategyCode(sp.code), 10) || sIdx + 1;
+      const sumBase = sp.sumType === "Soma 17" ? 20000 : 30000;
       allSources.push({
-        analysis: 100 + eNum,
-        value: eNum,
+        analysis: sumBase + numericCode,
+        value: numericCode,
         pct: 78.0,
         top3: true,
         rank: 2,
-        cycleKey: `E_${cp.strategyCode}_T${cp.targetTimestamp}`,
+        cycleKey: sp.id || `SUM_${sp.code}_T${sp.targetTimestamp}`,
       });
     });
 
-    // Estratégias confirmadas na janela
+    // Estratégias confirmadas na janela: vazio pois estratégias "E" estão desativadas nas confluências
     const clusterConfirmed: ConfirmedStrategyInfo[] = [];
-    matchingConfProjections.forEach((cp) => {
-      if (!clusterConfirmed.some((c) => c.code === cp.strategyCode)) {
-        clusterConfirmed.push({
-          id: cp.strategyId,
-          code: cp.strategyCode,
-          name: cp.name,
-          type: cp.type,
-          description: cp.description,
-          calculatedTime: cp.targetDate.toISOString().substring(11, 16),
-          calculatedMinute: cp.targetMinute,
-        });
-      }
-    });
 
     // Formata textos de confluência
     const formattedAnalyses: string[] = [];
@@ -1398,11 +1358,8 @@ export function buildStrategyTriggeredSignals(
     });
   }
 
-  // Aplica e complementa estratégias de confirmação adicionais se confluentes
-  const verifiedSignals = applyConfirmationStrategies(signals, confirmationProjections);
-
-  // Ordena cronologicamente
-  return verifiedSignals.sort((a, b) => {
+  // Ordena cronologicamente (estratégias E desativadas nas confluências)
+  return signals.sort((a, b) => {
     const tA =
       a.entryDate instanceof Date ? a.entryDate.getTime() : new Date(a.entryDate || 0).getTime();
     const tB =
@@ -2309,5 +2266,6 @@ export function mergeSignalsLifecycle(
     return (tA || 0) - (tB || 0);
   });
 
-  return applyConfirmationStrategies(sortedList, results);
+  // Retorna a lista ordenada por horário de entrada (estratégias E desativadas nas confluências)
+  return sortedList;
 }

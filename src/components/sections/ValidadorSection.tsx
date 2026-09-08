@@ -756,27 +756,26 @@ export default function SignalPercentageValidator() {
       }
     }
 
-    // 2. Projeções das Estratégias "E" (E1 a E15):
-    // REGRA DO USUÁRIO: As estratégias "E" devem ser consideradas como Top 2/3 (confluência)!
-    const confProjections = computeConfirmationProjections(allResults);
-    for (const cp of confProjections) {
-      if (!cp || !cp.targetDate) continue;
-      const slotKey = Math.floor(cp.targetDate.getTime() / 60000) * 60000;
+    // 2. Projeções das Estratégias: Estratégias "E" desativadas nas confluências.
+    // Ativas apenas as estratégias de soma =17&19 (Soma 19 e Soma 17) atuando como confluência Top 2/3:
+    for (const sp of sumProjections) {
+      if (!sp || !sp.targetDate) continue;
+      const slotKey = Math.floor(sp.targetDate.getTime() / 60000) * 60000;
       if (!timeSlots.has(slotKey)) {
         timeSlots.set(slotKey, { top1: [], top3: [] });
       }
 
       timeSlots.get(slotKey)!.top3.push({
-        strategyKey: cp.strategyCode,
-        strategyLabel: `${cp.strategyCode} · ${cp.name}`,
-        value: cp.strategyId,
+        strategyKey: sp.code,
+        strategyLabel: sp.name,
+        value: parseInt(formatStrategyCode(sp.code), 10) || 1,
         pct: 78.0,
         isTop1: false,
         isPrimary: false,
-        group: "estrategias_e",
-        groupName: "Estratégias de Confirmação (E)",
-        rank: 2, // Considerada como Top 2/3
-        triggerAt: cp.triggerEventDate,
+        group: "estrategias_soma",
+        groupName: sp.sumType,
+        rank: 2,
+        triggerAt: sp.triggerDate,
       });
     }
 
@@ -862,19 +861,7 @@ export default function SignalPercentageValidator() {
 
       const matchingSums = sumMapBySlot.get(slotTime) || [];
       const sumLabels = matchingSums.map((s) => s.code).join(", ");
-      const matchingEstrats = Array.from(
-        new Set(data.top3.filter((p) => p.group === "estrategias_e").map((p) => p.strategyKey)),
-      );
-      const eLabels = matchingEstrats.join(", ");
-
-      let extraLabels = "";
-      if (eLabels && sumLabels) {
-        extraLabels = ` + ${eLabels} + Gatilho ${sumLabels}`;
-      } else if (eLabels) {
-        extraLabels = ` + ${eLabels}`;
-      } else if (sumLabels) {
-        extraLabels = ` + Gatilho ${sumLabels}`;
-      }
+      const extraLabels = sumLabels ? ` + Gatilho ${sumLabels}` : "";
 
       const displayLabel = `${primary.strategyLabel}${extraLabels}`;
 

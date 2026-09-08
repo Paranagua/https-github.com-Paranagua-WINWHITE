@@ -291,10 +291,11 @@ class AutonomousAuditEngine {
 
       // 3. Constrói sinais disparados por estratégias de soma (com confluências obrigatórias)
       // Permite captura autônoma de sinais históricos recentes para auditoria contínua 24/7
+      // Estratégias "E" desativadas nas confluências; apenas soma =17&19 ativas
       const triggeredSignals = buildStrategyTriggeredSignals(
         sumProjections,
         rawCandidates,
-        confProjections,
+        [],
         alertWindow,
         now.getTime(),
         {

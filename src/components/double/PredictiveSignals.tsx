@@ -957,13 +957,12 @@ export function PredictiveSignals() {
       }));
       setActiveRecAlerts(alertWindow);
 
-      // 3. Geração de Sinais: Estratégias de Soma 19, Soma 17 e E1-E15 disparam sinais,
-      // exigindo confluência com Análises ou com Outra Estratégia.
-      // Injeta também tendências 3/3 como fontes válidas de confluência.
+      // 3. Geração de Sinais: Estratégias de Soma 19 e Soma 17 ativas nas confluências.
+      // Estratégias "E" desativadas nas confluências conforme regra do usuário.
       const strategySignals = buildStrategyTriggeredSignals(
         sumProjections,
         rawCandidates,
-        confProjections,
+        [],
         alertWindow,
         now.getTime(),
         undefined,
