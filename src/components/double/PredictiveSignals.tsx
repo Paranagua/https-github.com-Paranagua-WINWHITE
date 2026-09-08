@@ -7,7 +7,7 @@ import {
   type StoredSignal,
   type PredictiveSignal,
 } from "@/lib/signalsStore";
-import { Loader2, Sparkles, Target, Layers, Zap, TrendingUp } from "lucide-react";
+import { Loader2, Sparkles, Target, Layers, Zap, Flame } from "lucide-react";
 import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
 import { parseUtcDate } from "@/lib/utils";
 import { Card } from "@/components/double/Card";
@@ -19,13 +19,14 @@ import {
   mergeSignalsLifecycle,
   buildSignalConfluences,
   buildStrategyTriggeredSignals,
+  buildEmAltaSignals,
   type RawCandidate,
   SignalRank,
   extractSignalStrategies,
   extractSignalAnalyses,
   formatStrategyCode,
 } from "@/lib/signalHierarchy";
-import { buildTendenciasSignals } from "@/lib/tendenciasEngine";
+import { computeAnalysisTendency, type RawTendencyCandidate } from "@/lib/tendencias";
 import { computeAllSumTriggerProjections } from "@/lib/sum19Strategies";
 import { computeConfirmationProjections } from "@/lib/confirmationStrategies";
 import {
@@ -103,7 +104,8 @@ type Mode1Signal = {
   isRare?: boolean;
   isSupreme?: boolean;
   isAlavancagem?: boolean;
-  isTendencias?: boolean;
+  isEmAlta?: boolean;
+  category?: string;
   isNoConfluence?: boolean;
   strategyKey?: string;
   isConsecutive?: boolean;
@@ -129,7 +131,8 @@ type Mode2Signal = {
   isRare?: boolean;
   isSupreme?: boolean;
   isAlavancagem?: boolean;
-  isTendencias?: boolean;
+  isEmAlta?: boolean;
+  category?: string;
   isNoConfluence?: boolean;
   strategyKey?: string;
 
@@ -161,22 +164,12 @@ const getMedalStyles = (
   isTop1: boolean = true,
   category?: string,
   isNoConfluence?: boolean,
-  isTendencias?: boolean,
 ) => {
   if (isNoConfluence || category === "no_confluence") {
     return {
       label: "⚪ Sem Confluência",
       classes: "border-zinc-700/80 bg-zinc-900/90 text-zinc-300 shadow-sm ring-1 ring-zinc-700/40",
       badge: "bg-zinc-800 text-zinc-300 border-zinc-700",
-    };
-  }
-
-  if (category === "tendencias" || isTendencias) {
-    return {
-      label: "📈 TENDÊNCIAS (100% 3/3)",
-      classes:
-        "border-amber-400/80 bg-gradient-to-br from-amber-950/60 via-zinc-900 to-amber-900/30 text-amber-200 shadow-[0_0_25px_rgba(245,158,11,0.25)] ring-1 ring-amber-500/50",
-      badge: "bg-amber-400/20 text-amber-300 border-amber-400/40 font-black",
     };
   }
 
@@ -206,6 +199,15 @@ const getMedalStyles = (
     };
   }
 
+  if (category === "em_alta") {
+    return {
+      label: `🔥 EM ALTA (${count}x Tendência 3/3)`,
+      classes:
+        "border-orange-500/80 bg-gradient-to-br from-orange-950/40 via-card/80 to-card/60 text-orange-200 shadow-orange-500/20 ring-1 ring-orange-500/40",
+      badge: "bg-orange-500/20 text-orange-300 border-orange-500/40",
+    };
+  }
+
   // ⚡ Top 1 & Top 3 (Padrão)
   return {
     label: "⚡ Top 1 & Top 3",
@@ -223,22 +225,15 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
   const top1Sources = (s.sources || []).filter((src: any) => !src.top5);
   const distinctTop1 = new Set(top1Sources.map((src: any) => src.analysis));
   const rank = getSignalRank(s);
-  const isTendencias =
-    !isNoConfluence &&
-    (rank === SignalRank.TENDENCIAS ||
-      s.category === "tendencias" ||
-      s.groupName === "Tendências" ||
-      !!s.isTendencias);
-  const isAlavancagem = !isNoConfluence && !isTendencias && rank === SignalRank.ALAVANCAGEM;
+  const isAlavancagem = !isNoConfluence && rank === SignalRank.ALAVANCAGEM;
 
   const medal = getMedalStyles(
     distinctTop1.size || s.analysisCount || 0,
     s.isConsecutive,
     s.levelOffset || 0,
     isTop1Signal,
-    isTendencias ? "tendencias" : isAlavancagem ? "alavancagem" : s.category,
+    isAlavancagem ? "alavancagem" : s.category,
     isNoConfluence,
-    isTendencias,
   );
 
   const rawAssertivity = s.pct ?? 0;
@@ -277,13 +272,11 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
       className={`rounded-2xl border px-5 py-4 backdrop-blur-sm transition-all duration-300 ${
         isAlavancagem
           ? "border-white bg-white text-slate-950 shadow-[0_0_30px_rgba(255,255,255,0.4)] ring-2 ring-white"
-          : isTendencias
-            ? "border-amber-400/80 bg-gradient-to-br from-amber-950/60 via-zinc-900 to-amber-900/30 text-amber-200 shadow-[0_0_25px_rgba(245,158,11,0.25)] ring-1 ring-amber-500/50"
-            : isNoConfluence
-              ? "border-zinc-700/80 bg-zinc-900/80 text-zinc-300 shadow-md ring-1 ring-zinc-700/40 hover:border-zinc-600"
-              : medal
-                ? medal.classes
-                : "border-white/[0.05] bg-white/[0.02]"
+          : isNoConfluence
+            ? "border-zinc-700/80 bg-zinc-900/80 text-zinc-300 shadow-md ring-1 ring-zinc-700/40 hover:border-zinc-600"
+            : medal
+              ? medal.classes
+              : "border-white/[0.05] bg-white/[0.02]"
       }`}
     >
       <div className="flex items-center justify-between gap-2">
@@ -322,10 +315,6 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
           {isAlavancagem ? (
             <span className="flex items-center gap-0.5 rounded-full bg-slate-950 px-2 py-0.5 text-[8px] font-black text-white border border-slate-800 shadow-sm animate-pulse">
               🚀 ALAVANCAGEM
-            </span>
-          ) : isTendencias ? (
-            <span className="flex items-center gap-0.5 rounded-full bg-amber-500/25 px-1.5 py-0.5 text-[8px] font-black text-amber-300 border border-amber-400/40 shadow-[0_0_12px_rgba(245,158,11,0.25)] animate-pulse">
-              📈 TENDÊNCIAS
             </span>
           ) : s.isSupreme ? (
             <span className="flex items-center gap-0.5 rounded-full bg-purple-500/25 px-1.5 py-0.5 text-[8px] font-black text-purple-300 border border-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.25)] animate-pulse">
@@ -384,13 +373,7 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
       </div>
       <div
         className={`mt-1 text-[11px] tabular-nums font-bold flex items-center gap-1.5 ${
-          isAlavancagem
-            ? "text-slate-900"
-            : isTendencias
-              ? "text-amber-400"
-              : isNoConfluence
-                ? "text-zinc-400"
-                : "text-primary"
+          isAlavancagem ? "text-slate-900" : isNoConfluence ? "text-zinc-400" : "text-primary"
         }`}
       >
         <span>{safeAssertivity}%</span>
@@ -399,20 +382,16 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
           className={
             isAlavancagem
               ? "text-slate-600 font-semibold"
-              : isTendencias
-                ? "text-amber-300/90 font-semibold"
-                : isNoConfluence
-                  ? "text-zinc-400 font-normal"
-                  : "text-white/60"
+              : isNoConfluence
+                ? "text-zinc-400 font-normal"
+                : "text-white/60"
           }
         >
           {isAlavancagem
             ? "Confluência Máxima (4+ Top 1)"
-            : isTendencias
-              ? "Gaps 100% (3/3 Ciclos Anteriores)"
-              : isNoConfluence
-                ? "Aguardando confluência futura"
-                : formatStrategyCode(s.label || "Entrada")}
+            : isNoConfluence
+              ? "Aguardando confluência futura"
+              : formatStrategyCode(s.label || "Entrada")}
         </span>
       </div>
 
@@ -782,8 +761,9 @@ export function PredictiveSignals() {
         return diff >= 0 && diff <= alert.duration;
       });
 
-      // 1. Extração de todos os candidatos brutos das análises elegíveis (mínimo de 5 ciclos totais: 4 passados + 1 gatilho ativo)
+      // 1. Extração de todos os candidatos brutos das análises elegíveis e cálculo de Tendências
       const rawCandidates: RawCandidate[] = [];
+      const tendencyCandidates: RawTendencyCandidate[] = [];
 
       for (const item of active) {
         // Obter todos os ciclos daquela análise para aquele valor
@@ -797,7 +777,40 @@ export function PredictiveSignals() {
             isValidCycle(c),
         );
 
-        // Regra de ciclos para envio de sinais:
+        // TENDÊNCIA: baseada exclusivamente nos 3 ciclos mais recentes daquela mesma análise
+        if (pastValid.length >= 3) {
+          const tendencyResult = computeAnalysisTendency(pastValid, item.open.triggerAt);
+          if (tendencyResult.hasTendency && tendencyResult.tendency) {
+            const t = tendencyResult.tendency;
+            let targetMinutes = t.gap;
+            if ([17, 18].includes(item.analysis)) targetMinutes += 1;
+            const at = addMinutes(item.open.triggerAt, targetMinutes);
+            const targetMs = at.getTime();
+
+            if (targetMs >= now.getTime() - 60_000) {
+              const stratKey =
+                item.analysis >= 50 && item.analysis <= 56
+                  ? `Q${item.analysis - 49}`
+                  : `A${item.analysis}`;
+
+              tendencyCandidates.push({
+                analysis: item.analysis,
+                value: item.value,
+                gap: t.gap,
+                targetDate: at,
+                ratio: t.ratio,
+                count: t.count,
+                pct: t.pct,
+                triggerAt: item.open.triggerAt,
+                cycleKey: `TEND_A${item.analysis}_V${item.value}_T${item.open.triggerAt.getTime()}`,
+                strategyKey: stratKey,
+                label: `Tendência ${t.ratio} (${stratKey}-${item.value})`,
+              });
+            }
+          }
+        }
+
+        // Regra de ciclos para envio de sinais padrão:
         // - Se a análise tem 5 ciclos no total: analisa os 4 ciclos passados e o 5º é o gatilho ativo.
         // - Se a análise tem 6 ciclos no total: analisa os 5 ciclos passados e o 6º é o gatilho ativo.
         // - Se a análise tem 7 ou mais ciclos: analisa os 5 ciclos anteriores mais recentes.
@@ -946,21 +959,33 @@ export function PredictiveSignals() {
 
       // 3. Geração de Sinais: Estratégias de Soma 19, Soma 17 e E1-E15 disparam sinais,
       // exigindo confluência com Análises ou com Outra Estratégia.
+      // Injeta também tendências 3/3 como fontes válidas de confluência.
       const strategySignals = buildStrategyTriggeredSignals(
         sumProjections,
         rawCandidates,
         confProjections,
         alertWindow,
         now.getTime(),
+        undefined,
+        tendencyCandidates,
       );
 
-      // 4. Sinais especiais para o novo grupo "Tendências" (Gaps 100% 3/3 nos 3 ciclos anteriores ao gatilho)
-      const tendenciasSignals = buildTendenciasSignals(active, engine, now.getTime());
+      // 4. Grupo 'EM ALTA':
+      // - Fica abaixo de todos os outros grupos (Alavancagem, Supremo, Raro, Top 1 & Top 3).
+      // - Só recebe sinais da "TENDÊNCIA".
+      // - Regra 3: Apenas tendências com 100% de 3/3 têm poder para enviar sinal no grupo 'EM ALTA'.
+      // - Regra 3: Tendências acima de 60% e abaixo de 100% (2/3) só servem de confluência exclusivamente no grupo 'EM ALTA'.
+      // - Regra 4: Se algum outro grupo mostrar mesmo horário (sinal), o sinal do grupo 'em alta' some.
+      const emAltaSignalsGenerated = buildEmAltaSignals(
+        tendencyCandidates,
+        strategySignals,
+        now.getTime(),
+      );
 
-      const allEligibleSignals = [...strategySignals, ...tendenciasSignals];
+      const allGeneratedSignals = [...strategySignals, ...emAltaSignalsGenerated];
 
       // Constrói lista m1 (sinais elegíveis)
-      const m1: Mode1Signal[] = allEligibleSignals.map((s) => {
+      const m1: Mode1Signal[] = allGeneratedSignals.map((s) => {
         const dt = s.entryDate instanceof Date ? s.entryDate : new Date(s.entryDate || 0);
         const analysisCount = new Set((s.sources || []).map((src) => src.analysis)).size;
 
@@ -989,7 +1014,8 @@ export function PredictiveSignals() {
           isRare: s.isRare,
           isSupreme: s.isSupreme,
           isAlavancagem: s.isAlavancagem,
-          isTendencias: !!s.isTendencias,
+          isEmAlta: s.isEmAlta,
+          category: s.category,
           isNoConfluence: s.isNoConfluence,
           strategyKey: s.strategyKey,
           isConsecutive: s.isConsecutive,
@@ -1059,8 +1085,10 @@ export function PredictiveSignals() {
                   ? "supreme"
                   : s.isRare
                     ? "rare"
-                    : "top1_top3",
-            isTop1: !s.isNoConfluence,
+                    : s.isEmAlta || s.category === "em_alta"
+                      ? "em_alta"
+                      : "top1_top3",
+            isTop1: !s.isNoConfluence && !s.isEmAlta && s.category !== "em_alta",
             times: [s.at],
             entryDate: s.at,
             outcome: "pending" as const,
@@ -1086,18 +1114,14 @@ export function PredictiveSignals() {
         const rank = getSignalRank(s);
         const isNoConf =
           !!s.isNoConfluence || rank === SignalRank.NO_CONFLUENCE || s.category === "no_confluence";
-
-        const isTend =
+        const isEmAlta =
           !isNoConf &&
-          (s.category === "tendencias" ||
-            s.groupName === "Tendências" ||
-            !!(s as any).isTendencias ||
-            rank === SignalRank.TENDENCIAS);
+          (rank === SignalRank.EM_ALTA || s.category === "em_alta" || !!(s as any).isEmAlta);
 
         const category = isNoConf
           ? "no_confluence"
-          : isTend
-            ? "tendencias"
+          : isEmAlta
+            ? "em_alta"
             : rank === SignalRank.ALAVANCAGEM
               ? "alavancagem"
               : rank === SignalRank.SUPREME
@@ -1107,8 +1131,8 @@ export function PredictiveSignals() {
                   : "top1_top3";
         const groupName = isNoConf
           ? "E1–E15 (Sem Confluência)"
-          : isTend
-            ? "Tendências"
+          : isEmAlta
+            ? "Em Alta"
             : rank === SignalRank.ALAVANCAGEM
               ? "Alavancagem"
               : rank === SignalRank.SUPREME
@@ -1124,11 +1148,11 @@ export function PredictiveSignals() {
           category,
           groupName,
           isNoConfluence: isNoConf,
-          isTendencias: isTend,
-          isAlavancagem: !isNoConf && !isTend && rank === SignalRank.ALAVANCAGEM,
-          isSupreme: !isNoConf && !isTend && rank === SignalRank.SUPREME,
-          isRare: !isNoConf && !isTend && rank === SignalRank.RARE,
-          isTop1: !isNoConf,
+          isAlavancagem: !isNoConf && rank === SignalRank.ALAVANCAGEM,
+          isSupreme: !isNoConf && rank === SignalRank.SUPREME,
+          isRare: !isNoConf && rank === SignalRank.RARE,
+          isEmAlta,
+          isTop1: !isNoConf && !isEmAlta,
         };
       })
       .filter((s) => {
@@ -1139,9 +1163,7 @@ export function PredictiveSignals() {
           rank === SignalRank.SUPREME ||
           rank === SignalRank.RARE ||
           rank === SignalRank.TOP1_TOP3 ||
-          rank === SignalRank.TENDENCIAS ||
-          s.category === "tendencias" ||
-          (s as any).isTendencias
+          rank === SignalRank.EM_ALTA
         );
       })
       .sort((a, b) => {
@@ -1154,13 +1176,7 @@ export function PredictiveSignals() {
   // 1. 🚀 ALAVANCAGEM (Rank 4: >= 4x Top 1 + 0 ou mais Top 2/3)
   const alavancagemSignals = useMemo(() => {
     return activeSignals.filter((s) => {
-      if (
-        s.isNoConfluence ||
-        s.category === "no_confluence" ||
-        s.category === "tendencias" ||
-        (s as any).isTendencias
-      )
-        return false;
+      if (s.isNoConfluence || s.category === "no_confluence") return false;
       const rank = getSignalRank(s);
       return rank === SignalRank.ALAVANCAGEM;
     });
@@ -1169,13 +1185,7 @@ export function PredictiveSignals() {
   // 2. 👑 SUPREMO (Rank 3: 2x ou 3x Top 1 + 2 ou mais Top 2/3)
   const supremeSignals = useMemo(() => {
     return activeSignals.filter((s) => {
-      if (
-        s.isNoConfluence ||
-        s.category === "no_confluence" ||
-        s.category === "tendencias" ||
-        (s as any).isTendencias
-      )
-        return false;
+      if (s.isNoConfluence || s.category === "no_confluence") return false;
       const rank = getSignalRank(s);
       return rank === SignalRank.SUPREME;
     });
@@ -1184,44 +1194,27 @@ export function PredictiveSignals() {
   // 3. 💎 RARO (Rank 2: 2x ou 3x Top 1 + 0 ou 1 Top 2/3)
   const rareSignals = useMemo(() => {
     return activeSignals.filter((s) => {
-      if (
-        s.isNoConfluence ||
-        s.category === "no_confluence" ||
-        s.category === "tendencias" ||
-        (s as any).isTendencias
-      )
-        return false;
+      if (s.isNoConfluence || s.category === "no_confluence") return false;
       const rank = getSignalRank(s);
       return rank === SignalRank.RARE;
     });
   }, [activeSignals]);
 
-  // 4. ⚡ TOP 1 & TOP 3 (Rank 1: 1x Top 1 + 1 ou mais Top 2/3)
+  // 4. ⚡ TOP 1 & TOP 3 (Rank 2: 1x Top 1 + 1 ou mais Top 2/3)
   const top1Top3Signals = useMemo(() => {
     return activeSignals.filter((s) => {
-      if (
-        s.isNoConfluence ||
-        s.category === "no_confluence" ||
-        s.category === "tendencias" ||
-        (s as any).isTendencias
-      )
-        return false;
+      if (s.isNoConfluence || s.category === "no_confluence") return false;
       const rank = getSignalRank(s);
       return rank === SignalRank.TOP1_TOP3;
     });
   }, [activeSignals]);
 
-  // 5. 📈 TENDÊNCIAS (Rank 5: Gaps com confluência de 100% 3/3 nos 3 ciclos anteriores ao gatilho)
-  const tendenciasSignals = useMemo(() => {
+  // 5. 🔥 EM ALTA (Rank 1: Sinais exclusivos de Tendência 3/3)
+  const emAltaSignals = useMemo(() => {
     return activeSignals.filter((s) => {
       if (s.isNoConfluence || s.category === "no_confluence") return false;
       const rank = getSignalRank(s);
-      return (
-        rank === SignalRank.TENDENCIAS ||
-        s.category === "tendencias" ||
-        s.groupName === "Tendências" ||
-        !!(s as any).isTendencias
-      );
+      return rank === SignalRank.EM_ALTA || s.category === "em_alta" || !!s.isEmAlta;
     });
   }, [activeSignals]);
 
@@ -1247,19 +1240,16 @@ export function PredictiveSignals() {
           });
 
           const isNoConf =
-            !s.isTendencias &&
-            (!!s.isNoConfluence ||
-              s.category === "no_confluence" ||
-              evalLevel?.category === "no_confluence");
+            !!s.isNoConfluence ||
+            s.category === "no_confluence" ||
+            evalLevel?.category === "no_confluence";
 
-          const isTend =
-            !isNoConf &&
-            (s.category === "tendencias" || s.groupName === "Tendências" || !!s.isTendencias);
+          const isEmAlta = !isNoConf && (s.isEmAlta || s.category === "em_alta");
 
           const category = isNoConf
             ? "no_confluence"
-            : isTend
-              ? "tendencias"
+            : isEmAlta
+              ? "em_alta"
               : s.isAlavancagem
                 ? "alavancagem"
                 : s.isSupreme
@@ -1270,8 +1260,8 @@ export function PredictiveSignals() {
 
           const groupName = isNoConf
             ? "E1–E15 (Sem Confluência)"
-            : isTend
-              ? "Tendências"
+            : isEmAlta
+              ? "Em Alta"
               : s.isAlavancagem
                 ? "Alavancagem"
                 : s.isSupreme
@@ -1282,8 +1272,8 @@ export function PredictiveSignals() {
 
           const medal = isNoConf
             ? "⚪ SEM CONFLUÊNCIA"
-            : isTend
-              ? "📈 TENDÊNCIAS (100% 3/3)"
+            : isEmAlta
+              ? s.medal || s.label || "🔥 EM ALTA (Tendência 3/3)"
               : evalLevel?.medal ||
                 (s.isAlavancagem
                   ? "🚀 ALAVANCAGEM"
@@ -1310,11 +1300,11 @@ export function PredictiveSignals() {
             isVerified: !!s.isVerified,
             category,
             groupName,
-            isTop1: !isNoConf,
-            isTendencias: isTend,
-            isAlavancagem: !isNoConf && !isTend && s.isAlavancagem,
-            isRare: !isNoConf && !isTend && s.isRare,
-            isSupreme: !isNoConf && !isTend && s.isSupreme,
+            isTop1: !isNoConf && !isEmAlta,
+            isAlavancagem: !isNoConf && s.isAlavancagem,
+            isRare: !isNoConf && s.isRare,
+            isSupreme: !isNoConf && s.isSupreme,
+            isEmAlta,
             isNoConfluence: isNoConf,
             strategyKey: s.strategyKey,
             sources: s.sources,
@@ -1346,10 +1336,10 @@ export function PredictiveSignals() {
           outcome: s.outcome || "pending",
           category: s.category,
           groupName: s.groupName,
-          isTendencias: s.isTendencias || s.category === "tendencias",
           isSupreme: s.isSupreme,
           isRare: s.isRare,
           isAlavancagem: s.isAlavancagem,
+          isEmAlta: s.isEmAlta,
           isNoConfluence: s.isNoConfluence,
           isTop1: s.isTop1,
           label: s.label,
@@ -1466,14 +1456,15 @@ export function PredictiveSignals() {
               </section>
             )}
 
-            {/* 5. 📈 TENDÊNCIAS (Gaps 100% 3/3 nos 3 ciclos anteriores ao gatilho) */}
-            {tendenciasSignals.length > 0 && (
+            {/* 5. 🔥 EM ALTA (Tendência 3/3) - Fica abaixo de todos os outros grupos */}
+            {emAltaSignals.length > 0 && (
               <section className="space-y-3">
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-400">
-                  <TrendingUp className="h-3.5 w-3.5" /> 📈 TENDÊNCIAS (Gaps 100% 3/3)
+                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-orange-400">
+                  <Flame className="h-3.5 w-3.5 text-orange-400 animate-pulse" /> 🔥 EM ALTA
+                  (Tendência 3/3)
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {tendenciasSignals.map((s) => (
+                  {emAltaSignals.map((s) => (
                     <SignalCard key={s.key} signal={s} />
                   ))}
                 </div>
@@ -1484,7 +1475,7 @@ export function PredictiveSignals() {
               <p className="text-sm text-muted-foreground text-center py-10">
                 {loading
                   ? "Carregando resultados e calculando sinais..."
-                  : "Sem sinais ativos no momento (aguardando confluências Top 1 & Top 3, Raro, Supremo, Alavancagem ou Tendências)."}
+                  : "Sem sinais ativos no momento (aguardando confluências Top 1 & Top 3, Raro, Supremo, Alavancagem ou Em Alta)."}
               </p>
             )}
           </div>

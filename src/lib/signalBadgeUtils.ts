@@ -20,7 +20,7 @@ export type SignalLike = {
 };
 
 export type SignalTypeInfo = {
-  groupKey: "alavancagem" | "supreme" | "rare" | "top1_top3" | "top3" | "top1";
+  groupKey: "alavancagem" | "supreme" | "rare" | "top1_top3" | "top3" | "top1" | "em_alta";
   name: string;
   short: string;
   icon: string;
@@ -164,6 +164,24 @@ export function getSignalTypeBadge(sig?: SignalLike | null): SignalTypeInfo {
       badgeClass:
         "bg-cyan-500 text-black border border-cyan-300 shadow-[0_2px_8px_rgba(6,182,212,0.4)] font-black",
       cardBadgeClass: "bg-cyan-500 text-black border-cyan-300",
+    };
+  }
+
+  if (
+    (sig as any).isEmAlta ||
+    cat.includes("em_alta") ||
+    cat.includes("alta") ||
+    label.includes("EM ALTA") ||
+    conf.includes("EM ALTA")
+  ) {
+    return {
+      groupKey: "em_alta",
+      name: "Em Alta",
+      short: "Em Alta",
+      icon: "🔥",
+      badgeClass:
+        "bg-orange-500 text-white border border-orange-300 shadow-[0_2px_8px_rgba(249,115,22,0.4)] font-black",
+      cardBadgeClass: "bg-orange-500/20 text-orange-400 border-orange-500/30",
     };
   }
 

@@ -47,10 +47,6 @@ function diffMinutes(a: Date, b: Date) {
   return Math.max(0, minB - minA);
 }
 
-export function addMinutes(date: Date, minutes: number): Date {
-  return new Date(date.getTime() + minutes * 60000);
-}
-
 export function collectGaps(rows: Row[], i: number, dt: Date): number[] {
   const gaps: number[] = [];
   const limit = MAX_ZEROS;
@@ -590,3 +586,5 @@ export function checkHighTendency(cycles: Cycle[] | undefined | null, value: num
 
   return penult?.value === value || antepenult?.value === value;
 }
+
+export * from "./tendencias";

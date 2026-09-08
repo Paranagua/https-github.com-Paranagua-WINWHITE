@@ -36,7 +36,7 @@ interface PrimaryAnalysisMetadataItem {
   analysisId: number;
   name: string;
   shortLabel: string;
-  category: "pedras" | "sequencia" | "somas" | "cores" | "minutos" | "tendencias";
+  category: "pedras" | "sequencia" | "somas" | "cores" | "minutos";
   categoryLabel: string;
   badge: string;
   description: string;
@@ -463,17 +463,6 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
     description: "2ª pedra nos minutos de final 9 (09, 19, 29...)",
     minute: 9,
   },
-  // 6. Tendências (Gaps 100% 3/3 em Confluência)
-  {
-    key: "TENDENCIAS",
-    analysisId: 99,
-    name: "Análise · Tendências (Gaps 100% 3/3)",
-    shortLabel: "TEND",
-    category: "tendencias",
-    categoryLabel: "Tendências",
-    badge: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-    description: "Gaps em 100% de confluência (3/3) nos 3 ciclos anteriores ao gatilho",
-  },
 ];
 
 type Result = {
@@ -655,7 +644,7 @@ function SinaisSectionContent() {
   const [predictiveList, setPredictiveList] = useState<PredictiveSignal[]>(getPredictiveSignals());
   const [auditFilter, setAuditFilter] = useState<"geral" | "hoje">("geral");
   const [primaryTabFilter, setPrimaryTabFilter] = useState<
-    "todas" | "pedras" | "sequencia" | "somas" | "cores" | "minutos" | "tendencias"
+    "todas" | "pedras" | "sequencia" | "somas" | "cores" | "minutos"
   >("todas");
   const [selectedMinuteFilter, setSelectedMinuteFilter] = useState<number | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -853,16 +842,6 @@ function SinaisSectionContent() {
           matchedKeys.add(item.key);
         }
       });
-
-      // Mapeamento de sinais especiais de Tendências
-      if (
-        sig.category === "tendencias" ||
-        (sig as any).isTendencias ||
-        sig.strategyKey === "TENDENCIAS" ||
-        (sig.label && sig.label.toUpperCase().includes("TENDÊNCIA"))
-      ) {
-        matchedKeys.add("TENDENCIAS");
-      }
 
       matchedKeys.forEach((key) => {
         if (countsByKey[key]) {
@@ -1318,21 +1297,6 @@ function SinaisSectionContent() {
                     >
                       Minutos (0 a 9) (
                       {primaryAnalysisStats.filter((s) => s.category === "minutos").length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPrimaryTabFilter("tendencias");
-                        setSelectedMinuteFilter(null);
-                      }}
-                      className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
-                        primaryTabFilter === "tendencias"
-                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                          : "text-amber-400/50 hover:text-amber-300"
-                      }`}
-                    >
-                      Tendências (
-                      {primaryAnalysisStats.filter((s) => s.category === "tendencias").length})
                     </button>
                   </div>
 

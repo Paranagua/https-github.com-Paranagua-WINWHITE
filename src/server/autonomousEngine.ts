@@ -47,11 +47,12 @@ import { computeAllSumTriggerProjections } from "../lib/sum19Strategies";
 import { computeConfirmationProjections } from "../lib/confirmationStrategies";
 import {
   buildStrategyTriggeredSignals,
+  buildEmAltaSignals,
   mergeSignalsLifecycle,
   getCanonicalSignalKey,
   type RawCandidate,
 } from "../lib/signalHierarchy";
-import { buildTendenciasSignals } from "../lib/tendenciasEngine";
+import { computeAnalysisTendency, type RawTendencyCandidate } from "../lib/tendencias";
 import { auditSignalWithRounds, type AuditResultItem } from "../lib/signalAuditEngine";
 import {
   detectAllColorPatternBreaks,
@@ -277,7 +278,7 @@ class AutonomousAuditEngine {
       });
 
       // 2. Extrai candidatos brutos e projeções das estratégias
-      const { rawCandidates, activeList, engine } = this.extractRawCandidates(rows, now);
+      const { rawCandidates, tendencyCandidates } = this.extractRawCandidates(rows, now);
       const sumProjections = computeAllSumTriggerProjections(rows);
       const confProjections = computeConfirmationProjections(rows);
       const recAlerts = buildRecAlerts(rows);
@@ -301,24 +302,21 @@ class AutonomousAuditEngine {
           minTargetTime: now.getTime() - 5 * 3600_000,
           maxTargetTime: undefined, // Sem limite de 60 minutos
         },
+        tendencyCandidates,
       );
 
-      // 3.1 Sinais especiais para o novo grupo "Tendências" (Gaps 100% 3/3 nos 3 ciclos anteriores ao gatilho)
-      const tendenciasSignals = buildTendenciasSignals(activeList, engine, now.getTime(), {
-        allowHistorical: true,
-        minTargetTime: now.getTime() - 5 * 3600_000,
-      });
+      const emAltaSignals = buildEmAltaSignals(tendencyCandidates, triggeredSignals, now.getTime());
 
-      const allEligibleSignals = [...triggeredSignals, ...tendenciasSignals];
+      const allAutonomousSignals = [...triggeredSignals, ...emAltaSignals];
 
       console.log(
-        `[AutonomousEngine] Cycle stats: rows=${rows.length}, sumProjections=${sumProjections.length}, rawCandidates=${rawCandidates.length}, confProjections=${confProjections.length}, triggeredSignals=${triggeredSignals.length}, tendenciasSignals=${tendenciasSignals.length}`,
+        `[AutonomousEngine] Cycle stats: rows=${rows.length}, sumProjections=${sumProjections.length}, rawCandidates=${rawCandidates.length}, tendencyCandidates=${tendencyCandidates.length}, triggeredSignals=${allAutonomousSignals.length}`,
       );
 
       // 4. Mescla o ciclo de vida dos sinais (sem perder estados e respeitando transições)
       const mergedSignals = mergeSignalsLifecycle(
         this.state.activeSignals,
-        allEligibleSignals,
+        allAutonomousSignals,
         rows,
         now.getTime(),
         {
@@ -376,24 +374,17 @@ class AutonomousAuditEngine {
 
         // Executa a conferência estrita de 6 rodadas nas janelas M-1, M, M+1
         const auditRes = auditSignalWithRounds(sig, auditRounds);
-        const isTend =
-          !!(sig as any).isTendencias ||
-          (sig as any).category === "tendencias" ||
-          sig.groupName === "Tendências";
-
         const cat =
           (sig as any).category ||
-          (isTend
-            ? "tendencias"
-            : sig.isAlavancagem
-              ? "alavancagem"
-              : sig.isSupreme
-                ? "supreme"
-                : sig.isRare
-                  ? "rare"
-                  : sig.isTop1
-                    ? "top1_isolated"
-                    : undefined);
+          (sig.isAlavancagem
+            ? "alavancagem"
+            : sig.isSupreme
+              ? "supreme"
+              : sig.isRare
+                ? "rare"
+                : sig.isTop1
+                  ? "top1_isolated"
+                  : undefined);
 
         if (auditRes.outcome === "green") {
           // CAPTURADO: WIN (Branco confirmado)
@@ -424,7 +415,6 @@ class AutonomousAuditEngine {
             isSupreme: sig.isSupreme,
             isRare: sig.isRare,
             isAlavancagem: sig.isAlavancagem,
-            isTendencias: isTend,
             isTop1: sig.isTop1,
           });
 
@@ -458,7 +448,6 @@ class AutonomousAuditEngine {
             isSupreme: sig.isSupreme,
             isRare: sig.isRare,
             isAlavancagem: sig.isAlavancagem,
-            isTendencias: isTend,
             isTop1: sig.isTop1,
           });
 
@@ -490,7 +479,6 @@ class AutonomousAuditEngine {
               isSupreme: sig.isSupreme,
               isRare: sig.isRare,
               isAlavancagem: sig.isAlavancagem,
-              isTendencias: isTend,
               isTop1: sig.isTop1,
             });
             hasStateChanges = true;
@@ -552,7 +540,7 @@ class AutonomousAuditEngine {
     isSupreme?: boolean;
     isRare?: boolean;
     isAlavancagem?: boolean;
-    isTendencias?: boolean;
+    isEmAlta?: boolean;
     isTop1?: boolean;
   }) {
     // Sinais sem confluência (E1-E15 isoladas) NUNCA são contabilizados no painel auditor
@@ -602,7 +590,7 @@ class AutonomousAuditEngine {
       isSupreme: signal.isSupreme,
       isRare: signal.isRare,
       isAlavancagem: signal.isAlavancagem,
-      isTendencias: signal.isTendencias,
+      isEmAlta: signal.isEmAlta,
       isTop1: signal.isTop1,
     };
 
@@ -668,10 +656,6 @@ class AutonomousAuditEngine {
     if (signal.strategyKey && /^[AQ]\d+/i.test(signal.strategyKey)) {
       keysToUpdate.add(signal.strategyKey.toUpperCase());
     }
-    if (signal.isTendencias || signal.category === "tendencias") {
-      keysToUpdate.add("TENDENCIAS");
-      keysToUpdate.add("tendencias");
-    }
 
     keysToUpdate.forEach((k) => {
       const cur = newStats[k] || { green: 0, red: 0, lastUpdated: Date.now() };
@@ -698,12 +682,9 @@ class AutonomousAuditEngine {
   private extractRawCandidates(
     rows: Row[],
     now: Date,
-  ): {
-    rawCandidates: RawCandidate[];
-    activeList: Array<{ analysis: number; value: number; open: Cycle }>;
-    engine: Record<number, Cycle[]>;
-  } {
+  ): { rawCandidates: RawCandidate[]; tendencyCandidates: RawTendencyCandidate[] } {
     const rawCandidates: RawCandidate[] = [];
+    const tendencyCandidates: RawTendencyCandidate[] = [];
 
     const engine: Record<number, Cycle[]> = {
       2: buildA2(rows),
@@ -927,9 +908,38 @@ class AutonomousAuditEngine {
           });
         }
       });
+
+      // 3. TENDÊNCIA baseada exclusivamente nos 3 ciclos mais recentes da mesma análise
+      const tendency = computeAnalysisTendency(item.analysis, item.value, allCycles, item.open);
+      if (tendency && tendency.confluenceRatio >= 2 / 3) {
+        let tm = tendency.projectedGapMinutes;
+        if ([17, 18].includes(item.analysis)) tm += 1;
+        const at = addMinutes(item.open.triggerAt, tm);
+        const t = at.getTime();
+
+        if (t >= now.getTime() - 5 * 3600_000) {
+          const stratKey =
+            item.analysis >= 50 && item.analysis <= 56
+              ? `Q${item.analysis - 49}`
+              : `A${item.analysis}`;
+
+          tendencyCandidates.push({
+            analysis: item.analysis,
+            value: item.value,
+            confluenceRatio: tendency.confluenceRatio,
+            confluentCount: tendency.confluentCount,
+            totalCyclesChecked: tendency.totalCyclesChecked,
+            ratioLabel: tendency.ratioLabel,
+            projectedGapMinutes: tm,
+            targetDate: at,
+            strategyKey: stratKey,
+            cycleKey,
+          });
+        }
+      }
     }
 
-    return { rawCandidates, activeList, engine };
+    return { rawCandidates, tendencyCandidates };
   }
 
   private schedulePersistence() {

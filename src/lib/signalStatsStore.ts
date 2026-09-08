@@ -57,6 +57,7 @@ interface SignalStatsStore {
     isSupreme?: boolean;
     isRare?: boolean;
     isAlavancagem?: boolean;
+    isEmAlta?: boolean;
     isTop1?: boolean;
   }) => void;
   clearStats: () => void;
@@ -147,6 +148,7 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             isSupreme: signal.isSupreme,
             isRare: signal.isRare,
             isAlavancagem: signal.isAlavancagem,
+            isEmAlta: signal.isEmAlta,
             isTop1: signal.isTop1,
           };
 

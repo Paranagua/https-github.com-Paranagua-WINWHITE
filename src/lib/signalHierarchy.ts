@@ -9,6 +9,7 @@ import {
 } from "@/lib/confirmationStrategies";
 import type { SumTriggerProjection } from "@/lib/sum19Strategies";
 import { useSignalStatsStore } from "@/lib/signalStatsStore";
+import type { RawTendencyCandidate } from "@/lib/tendencias";
 
 /**
  * Hierarquia estrita e monotônica dos sinais (do mais forte ao mais fraco):
@@ -21,14 +22,15 @@ import { useSignalStatsStore } from "@/lib/signalStatsStore";
  */
 export enum SignalRank {
   NO_CONFLUENCE = 0,
-  TENDENCIAS = 1,
+  EM_ALTA = 1,
   TOP1_TOP3 = 2,
   RARE = 3,
   SUPREME = 4,
   ALAVANCAGEM = 5,
 }
 
-export type SignalCategory = "top1_top3" | "rare" | "supreme" | "alavancagem" | "tendencias";
+export type SignalCategory =
+  "em_alta" | "top1_top3" | "rare" | "supreme" | "alavancagem" | "no_confluence";
 
 export interface SignalLevelEvaluation {
   rank: SignalRank;
@@ -217,11 +219,11 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
     const cat = sig.toLowerCase();
     if (cat.includes("no_confluence") || cat.includes("sem conflu"))
       return SignalRank.NO_CONFLUENCE;
+    if (cat.includes("em_alta") || cat === "em_alta" || cat.includes("alta"))
+      return SignalRank.EM_ALTA;
     if (cat.includes("alavanc")) return SignalRank.ALAVANCAGEM;
     if (cat.includes("suprem") || cat.includes("winn")) return SignalRank.SUPREME;
     if (cat.includes("rare") || cat.includes("raro")) return SignalRank.RARE;
-    if (cat.includes("top1")) return SignalRank.TOP1_TOP3;
-    if (cat.includes("tendencia")) return SignalRank.TENDENCIAS;
     return SignalRank.TOP1_TOP3;
   }
 
@@ -233,6 +235,17 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
   const label = (sig.label || "").toUpperCase();
   const medal = (sig.medal || "").toUpperCase();
   const conf = (sig.confluence || "").toUpperCase();
+
+  if (
+    (sig as any).isEmAlta ||
+    cat === "em_alta" ||
+    cat.includes("em_alta") ||
+    label.includes("EM ALTA") ||
+    medal.includes("EM ALTA") ||
+    conf.includes("EM ALTA")
+  ) {
+    return SignalRank.EM_ALTA;
+  }
 
   const top1Sources = (sig.sources || []).filter((s: any) => !s.top3 && !s.top5);
   const top3Sources = (sig.sources || []).filter((s: any) => s.top3 || s.top5);
@@ -293,21 +306,6 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
     conf.includes("RARO")
   ) {
     return SignalRank.RARE;
-  }
-
-  if (cat.includes("top1_top3") || (cat.includes("top1") && cat.includes("top3"))) {
-    return SignalRank.TOP1_TOP3;
-  }
-
-  // Sinais do grupo Tendências (quando não confluem com os outros grupos)
-  if (
-    sig.isTendencias ||
-    cat.includes("tendencia") ||
-    label.includes("TENDENCIA") ||
-    medal.includes("TENDENCIA") ||
-    sig.strategyKey === "TENDENCIAS"
-  ) {
-    return SignalRank.TENDENCIAS;
   }
 
   return SignalRank.TOP1_TOP3;
@@ -996,6 +994,7 @@ export function buildStrategyTriggeredSignals(
   activeRecAlerts: Array<{ type: string; start: number; end: number }> = [],
   now: number = Date.now(),
   options?: { allowHistorical?: boolean; minTargetTime?: number; maxTargetTime?: number },
+  tendencyCandidates: RawTendencyCandidate[] = [],
 ): PredictiveSignal[] {
   // 1. Isola candidatos primários elegíveis para GERAR sinais:
   // - Apenas Análises Primárias
@@ -1256,6 +1255,28 @@ export function buildStrategyTriggeredSignals(
       });
     });
 
+    // Regra 3: As tendências com 100% de 3/3 atuam como confluência para os outros grupos
+    const matching3_3Tendencies = (tendencyCandidates || []).filter((tc) => {
+      if (!tc || !tc.targetDate || tc.ratio !== "3/3") return false;
+      const t = tc.targetDate.getTime();
+      return t >= clusterWindowStart && t <= clusterWindowEnd;
+    });
+
+    if (matching3_3Tendencies.length > 0) {
+      matching3_3Tendencies.forEach((tc) => {
+        allSources.push({
+          analysis: tc.analysis,
+          value: tc.value,
+          pct: 100,
+          top3: false,
+          rank: 1,
+          cycleKey: tc.cycleKey,
+        });
+        const code = formatAnalysisCode(tc.analysis);
+        formattedAnalyses.push(`T3/3·${code}-${tc.value}`);
+      });
+    }
+
     // Estratégias confirmadas na janela
     const clusterConfirmed: ConfirmedStrategyInfo[] = [];
     matchingConfProjections.forEach((cp) => {
@@ -1358,6 +1379,147 @@ export function buildStrategyTriggeredSignals(
 }
 
 /**
+ * Grupo 'EM ALTA':
+ * - Fica abaixo de todos os outros grupos (Alavancagem, Supremo, Raro, Top 1 & Top 3).
+ * - Só recebe sinais da "TENDÊNCIA".
+ * - Regra 3: Apenas tendências com 100% de 3/3 têm poder para enviar sinal no grupo 'EM ALTA'.
+ * - Regra 3: Tendências acima de 60% e abaixo de 100% (2/3) só servem de confluência exclusivamente no grupo 'EM ALTA'.
+ * - Regra 4: Se algum outro grupo mostrar o mesmo horário (sinal), o sinal do grupo 'EM ALTA' SOME.
+ * - Regra 5: Confluência e painel de auditoria seguem a mesma lógica para esse novo grupo.
+ */
+export function buildEmAltaSignals(
+  tendencyCandidates: RawTendencyCandidate[],
+  higherTierSignals: PredictiveSignal[],
+  now: number = Date.now(),
+): PredictiveSignal[] {
+  // 1. Horários já ocupados pelos grupos de maior hierarquia
+  const occupiedMinutes = new Set<number>();
+  const occupiedClocks = new Set<string>();
+
+  for (const sig of higherTierSignals || []) {
+    const dt = sig.entryDate instanceof Date ? sig.entryDate : new Date(sig.entryDate || 0);
+    if (!Number.isNaN(dt.getTime())) {
+      const minStart = Math.floor(dt.getTime() / 60_000) * 60_000;
+      occupiedMinutes.add(minStart);
+      occupiedClocks.add(fmtClock(dt));
+    }
+  }
+
+  // 2. Tendências com 100% (3/3): têm poder para gerar sinal no grupo 'EM ALTA'
+  const valid3_3 = (tendencyCandidates || []).filter((tc) => {
+    if (!tc || !tc.targetDate) return false;
+    if (tc.ratio !== "3/3" || tc.pct < 100) return false;
+    const t = tc.targetDate.getTime();
+    return !Number.isNaN(t) && t >= now - 60_000;
+  });
+
+  if (valid3_3.length === 0) return [];
+
+  // 3. Tendências acima de 60% e abaixo de 100% (2/3): confluência exclusiva no grupo 'EM ALTA'
+  const valid2_3 = (tendencyCandidates || []).filter((tc) => {
+    if (!tc || !tc.targetDate) return false;
+    if (tc.ratio !== "2/3") return false;
+    const t = tc.targetDate.getTime();
+    return !Number.isNaN(t) && t >= now - 60_000;
+  });
+
+  // Agrupa tendências 3/3 por minuto
+  const minuteMap = new Map<number, RawTendencyCandidate[]>();
+  for (const cand of valid3_3) {
+    const minStart = Math.floor(cand.targetDate.getTime() / 60_000) * 60_000;
+    const clockStr = fmtClock(cand.targetDate);
+
+    // Regra 4: se algum outro grupo mostrar mesmo horário (sinal), o sinal do grupo 'em alta' some
+    if (occupiedMinutes.has(minStart) || occupiedClocks.has(clockStr)) {
+      continue;
+    }
+
+    const list = minuteMap.get(minStart) || [];
+    list.push(cand);
+    minuteMap.set(minStart, list);
+  }
+
+  const emAltaSignals: PredictiveSignal[] = [];
+
+  for (const [minStart, primaryTendencies] of minuteMap.entries()) {
+    if (primaryTendencies.length === 0) continue;
+
+    const repDate = new Date(minStart);
+    const windowStart = minStart - 60_000;
+    const windowEnd = minStart + 60_000;
+
+    // Confluências de tendências 2/3 no mesmo minuto ou janela
+    const conf2_3 = valid2_3.filter((tc) => {
+      const t = tc.targetDate.getTime();
+      return t >= windowStart && t <= windowEnd;
+    });
+
+    const allClusterTendencies = [...primaryTendencies, ...conf2_3];
+
+    const primaryCodes = Array.from(
+      new Set(primaryTendencies.map((t) => formatAnalysisCode(t.analysis))),
+    );
+    const confCodes = Array.from(
+      new Set(conf2_3.map((t) => `${formatAnalysisCode(t.analysis)} (2/3)`)),
+    );
+
+    const sources = allClusterTendencies.map((t) => ({
+      analysis: t.analysis,
+      value: t.value,
+      pct: t.pct,
+      top3: t.ratio === "2/3",
+      rank: t.ratio === "3/3" ? 1 : 2,
+      cycleKey: t.cycleKey,
+    }));
+
+    const confluenceItems = allClusterTendencies.map(
+      (t) => `${formatAnalysisCode(t.analysis)}-${t.value} (${t.ratio} · Gap ${t.gap}m)`,
+    );
+
+    const canonicalKey = `EM_ALTA_${getCanonicalSignalKey(repDate)}`;
+
+    emAltaSignals.push({
+      key: canonicalKey,
+      time: fmtClock(repDate),
+      pct: 100.0,
+      label: `Tendência 3/3 (${primaryCodes.join("/")})${confCodes.length > 0 ? ` + ${confCodes.join(", ")}` : ""}`,
+      confluence: confluenceItems.join(" · "),
+      strategies: [],
+      medal: `🔥 EM ALTA (${primaryTendencies.length}x Tendência 3/3)`,
+      entryDate: repDate,
+      outcome: "pending" as const,
+      isHighTendency: true,
+      category: "em_alta",
+      groupName: "Em Alta",
+      isEmAlta: true,
+      isTop1: false,
+      isAlavancagem: false,
+      isRare: false,
+      isSupreme: false,
+      isNoConfluence: false,
+      strategyKey: `T_${primaryCodes[0] || "A"}`,
+      sources,
+      clusterTimestamps: [minStart],
+      allowsOscillation: false,
+      isConsecutive: false,
+      levelOffset: 0,
+      confirmedStrategies: [],
+      hasYellowSeal: false,
+      hasBlueSeal: false,
+      isVerified: false,
+    });
+  }
+
+  return emAltaSignals.sort((a, b) => {
+    const tA =
+      a.entryDate instanceof Date ? a.entryDate.getTime() : new Date(a.entryDate || 0).getTime();
+    const tB =
+      b.entryDate instanceof Date ? b.entryDate.getTime() : new Date(b.entryDate || 0).getTime();
+    return tA - tB;
+  });
+}
+
+/**
  * Mescla sinais existentes com novos candidatos gerados garantindo:
  * 1. Congelamento estrito em (sinal - 1 minuto): ao atingir targetTime - 1 min, o sinal não pode mais ser atualizado por novas análises/gerações.
  * 2. Aguarda a verificação de win/loss acontecer.
@@ -1417,9 +1579,9 @@ export function mergeSignalsLifecycle(
         (!sig.isAlavancagem &&
           !sig.isSupreme &&
           !sig.isRare &&
+          !sig.isEmAlta &&
+          cat !== "em_alta" &&
           cat !== "top1_top3" &&
-          cat !== "tendencias" &&
-          !sig.isTendencias &&
           !sig.isNoConfluence &&
           cat !== "no_confluence"))
     ) {
@@ -1457,24 +1619,17 @@ export function mergeSignalsLifecycle(
       existingKey = canonicalKey;
       existing = resultMap.get(canonicalKey);
     } else {
-      // Se o candidato for exclusivo do grupo Tendências, ele NÃO deve ser fundido com minutos adjacentes (±1m) de outros grupos!
-      // Confluência com outro grupo só ocorre quando coincidem no mesmo minuto exato.
-      const isCandTendPure =
-        cand.category === "tendencias" || (cand.isTendencias && !cand.isAlavancagem && !cand.isSupreme && !cand.isRare);
-
-      if (!isCandTendPure) {
-        // Busca sinal pendente existente em janela de ±1 minuto (confluência temporal)
-        for (const [k, s] of resultMap.entries()) {
-          if (!s || !s.entryDate) continue;
-          const sTime =
-            s.entryDate instanceof Date
-              ? s.entryDate.getTime()
-              : parseUtcDate(s.entryDate as any).getTime();
-          if (Math.abs(candTime - sTime) <= 60_000 && s.outcome === "pending") {
-            existingKey = k;
-            existing = s;
-            break;
-          }
+      // Busca sinal pendente existente em janela de ±1 minuto (confluência temporal)
+      for (const [k, s] of resultMap.entries()) {
+        if (!s || !s.entryDate) continue;
+        const sTime =
+          s.entryDate instanceof Date
+            ? s.entryDate.getTime()
+            : parseUtcDate(s.entryDate as any).getTime();
+        if (Math.abs(candTime - sTime) <= 60_000 && s.outcome === "pending") {
+          existingKey = k;
+          existing = s;
+          break;
         }
       }
     }
@@ -1718,14 +1873,6 @@ export function mergeSignalsLifecycle(
     const hasConflict = sourceCycleKeys.some((ck) => claimedCycleKeys.has(ck));
 
     if (hasConflict) {
-      // Se for sinal exclusivo do grupo Tendências, preserva o sinal com suas fontes
-      if (sig.category === "tendencias" || (sig.isTendencias && !sig.isAlavancagem && !sig.isSupreme && !sig.isRare)) {
-        for (const ck of sourceCycleKeys) {
-          claimedCycleKeys.add(ck);
-        }
-        continue;
-      }
-
       // Filtra fontes exclusivas (cujo cycleKey não foi reivindicado)
       const exclusiveSources = currentSources.filter(
         (src) => !claimedCycleKeys.has(getSourceCycleKey(src)),
