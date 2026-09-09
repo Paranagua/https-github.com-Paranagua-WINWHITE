@@ -82,17 +82,27 @@ export function ColorPatternBreaksPanel({ rows, selectedPedra }: ColorPatternBre
     return () => clearTimeout(timer);
   }, [cyclesForStone.length]);
 
-  const pastValidCycles = useMemo(() => {
-    return cyclesForStone.filter((c) => isValidCycle(c));
+  // Ciclo aberto ativo (em andamento) se o mais recente tiver menos de 14 brancos
+  const openCycle = useMemo(() => {
+    if (!cyclesForStone.length) return null;
+    const latest = cyclesForStone[cyclesForStone.length - 1];
+    return latest.gaps.length < 14 ? latest : null;
   }, [cyclesForStone]);
 
-  const validCyclesCount = pastValidCycles.length;
-  const isEligible5Cycles = validCyclesCount >= 5;
+  // Ciclos anteriores válidos (não são o ciclo aberto atual e possuem brancos alcançados)
+  const pastValidCycles = useMemo(() => {
+    return cyclesForStone.filter((c) => c !== openCycle && isValidCycle(c));
+  }, [cyclesForStone, openCycle]);
 
+  const totalCyclesCount = cyclesForStone.length;
+  // Regra dos 4 Ciclos: Mínimo 4 ciclos no total e pelo menos 3 ciclos anteriores válidos
+  const isEligible4Cycles = totalCyclesCount >= 4 && pastValidCycles.length >= 3;
+
+  // Base estatística: Top Tempos Recorrentes dos 3 ciclos anteriores mais recentes
   const calculationBase = useMemo(() => {
-    if (validCyclesCount < 4) return [];
-    return pastValidCycles.slice(-5);
-  }, [validCyclesCount, pastValidCycles]);
+    if (pastValidCycles.length < 3) return [];
+    return pastValidCycles.slice(-3);
+  }, [pastValidCycles]);
 
   const topRows = useMemo(() => {
     if (calculationBase.length === 0) return [];
@@ -341,16 +351,16 @@ export function ColorPatternBreaksPanel({ rows, selectedPedra }: ColorPatternBre
           <div className="flex flex-wrap items-center gap-2">
             <span
               className={`flex items-center gap-1.5 rounded-lg border px-3 py-1 text-[11px] font-bold ${
-                isEligible5Cycles
+                isEligible4Cycles
                   ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
                   : "border-amber-500/30 bg-amber-500/10 text-amber-300"
               }`}
             >
               <ShieldCheck className="h-3.5 w-3.5" />
               <span>
-                {isEligible5Cycles
-                  ? `Apto (${validCyclesCount}/5 Ciclos)`
-                  : `Em Maturação (${validCyclesCount}/5 Ciclos)`}
+                {isEligible4Cycles
+                  ? `Apto (${Math.min(totalCyclesCount, 4)}/4 Ciclos)`
+                  : `Em Maturação (${Math.min(totalCyclesCount, 4)}/4 Ciclos)`}
               </span>
             </span>
 

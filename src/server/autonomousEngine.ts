@@ -817,8 +817,19 @@ class AutonomousAuditEngine {
         }
       }
 
-      if (pastValid.length < 4) continue;
-      const hist = pastValid.slice(-5);
+      // Regra de ciclos para envio de sinais padrão e confluência:
+      // - Análise "Quebra de Padrões de Cores" (IDs 50 a 56):
+      //   Requer no mínimo 4 ciclos no total (3 ciclos anteriores válidos + 1 gatilho ativo).
+      //   Calcula os Top Tempos Recorrentes dos 3 ciclos anteriores (slice(-3)).
+      // - Demais análises padrão:
+      //   Requer no mínimo 4 ciclos anteriores válidos (5 ciclos totais com o gatilho).
+      //   Calcula sobre os 5 ciclos passados mais recentes (slice(-5)).
+      const isColorBreakAnalysis = item.analysis >= 50 && item.analysis <= 56;
+      const minRequiredPastValid = isColorBreakAnalysis ? 3 : 4;
+
+      if (pastValid.length < minRequiredPastValid) continue;
+
+      const hist = isColorBreakAnalysis ? pastValid.slice(-3) : pastValid.slice(-5);
       const candidates = computeTop(hist, CANDIDATE_DEPTH);
       if (!candidates.length) continue;
 

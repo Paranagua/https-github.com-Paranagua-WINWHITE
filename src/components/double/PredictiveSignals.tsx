@@ -770,26 +770,12 @@ export function PredictiveSignals() {
         const allCycles = (engine[item.analysis] || []).filter((c) => c.value === item.value);
 
         // Ciclos anteriores ao gatilho ativo atual (item.open) que já são válidos (gaps.length >= 1)
-        let pastValid = allCycles.filter(
+        const pastValid = allCycles.filter(
           (c) =>
             c !== item.open &&
             c.triggerAt.getTime() <= item.open.triggerAt.getTime() &&
             isValidCycle(c),
         );
-
-        // Quebra de Padrões de Cores (IDs 50 a 56): caso a pedra específica não possua 4 ciclos passados,
-        // recorre a todos os ciclos válidos daquele padrão para calcular projeções/tendências e não perder dados de análise!
-        if (item.analysis >= 50 && item.analysis <= 56 && pastValid.length < 4) {
-          const allPatternCycles = (engine[item.analysis] || []).filter(
-            (c) =>
-              c !== item.open &&
-              c.triggerAt.getTime() <= item.open.triggerAt.getTime() &&
-              isValidCycle(c),
-          );
-          if (allPatternCycles.length >= 3) {
-            pastValid = allPatternCycles;
-          }
-        }
 
         // TENDÊNCIA: baseada exclusivamente nos 3 ciclos mais recentes daquela mesma análise
         if (pastValid.length >= 3) {
@@ -824,15 +810,20 @@ export function PredictiveSignals() {
           }
         }
 
-        // Regra de ciclos para envio de sinais padrão:
-        // - Se a análise tem 5 ciclos no total: analisa os 4 ciclos passados e o 5º é o gatilho ativo.
-        // - Se a análise tem 6 ciclos no total: analisa os 5 ciclos passados e o 6º é o gatilho ativo.
-        // - Se a análise tem 7 ou mais ciclos: analisa os 5 ciclos anteriores mais recentes.
-        // - Se tiver menos de 4 ciclos anteriores válidos (menos de 5 ciclos totais com o gatilho), bloqueia o envio.
-        if (pastValid.length < 4) continue;
+        // Regra de ciclos para envio de sinais padrão e confluência:
+        // - Análise "Quebra de Padrões de Cores" (IDs 50 a 56):
+        //   Requer no mínimo 4 ciclos no total (3 ciclos anteriores válidos + 1 gatilho ativo).
+        //   Calcula os Top Tempos Recorrentes dos 3 ciclos anteriores (slice(-3)).
+        // - Demais análises padrão:
+        //   Requer no mínimo 4 ciclos anteriores válidos (5 ciclos totais com o gatilho).
+        //   Calcula sobre os 5 ciclos passados mais recentes (slice(-5)).
+        const isColorBreakAnalysis = item.analysis >= 50 && item.analysis <= 56;
+        const minRequiredPastValid = isColorBreakAnalysis ? 3 : 4;
 
-        // Janela estatística: 4 ciclos passados (se total for 5) ou 5 ciclos passados mais recentes (se total for 6+)
-        const hist = pastValid.slice(-5);
+        if (pastValid.length < minRequiredPastValid) continue;
+
+        // Janela estatística: 3 ciclos anteriores para Quebra de Padrões de Cores, ou 5 ciclos passados para as demais
+        const hist = isColorBreakAnalysis ? pastValid.slice(-3) : pastValid.slice(-5);
 
         const candidates = computeTop(hist, CANDIDATE_DEPTH);
         if (!candidates.length) continue;
