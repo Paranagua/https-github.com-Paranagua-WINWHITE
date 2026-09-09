@@ -205,8 +205,7 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
     const cat = sig.toLowerCase();
     if (cat.includes("no_confluence") || cat.includes("sem conflu"))
       return SignalRank.NO_CONFLUENCE;
-    if (cat.includes("em_alta") || cat === "em_alta" || cat.includes("alta"))
-      return SignalRank.EM_ALTA;
+    if (cat === "em_alta") return SignalRank.EM_ALTA;
     if (cat.includes("alavanc")) return SignalRank.ALAVANCAGEM;
     if (cat.includes("suprem") || cat.includes("winn")) return SignalRank.SUPREME;
     if (cat.includes("rare") || cat.includes("raro")) return SignalRank.RARE;
@@ -218,17 +217,24 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
   }
 
   const cat = (sig.category || "").toLowerCase();
-  const label = (sig.label || "").toUpperCase();
-  const medal = (sig.medal || "").toUpperCase();
-  const conf = (sig.confluence || "").toUpperCase();
 
+  // 1. Grupos de maior hierarquia avaliados primeiro (precedência absoluta sobre Em Alta)
+  if (sig.isAlavancagem || cat === "alavancagem" || (sig as any).hasYellowSeal) {
+    return SignalRank.ALAVANCAGEM;
+  }
+  if (sig.isSupreme || cat === "supreme" || (sig as any).hasBlueSeal) {
+    return SignalRank.SUPREME;
+  }
+  if (sig.isRare || cat === "rare") {
+    return SignalRank.RARE;
+  }
+
+  // 2. Grupo 'EM ALTA': Recebe EXCLUSIVAMENTE sinais de Tendência gerados pelo módulo de tendências (buildEmAltaSignals)
   if (
-    (sig as any).isEmAlta ||
-    cat === "em_alta" ||
-    cat.includes("em_alta") ||
-    label.includes("EM ALTA") ||
-    medal.includes("EM ALTA") ||
-    conf.includes("EM ALTA")
+    ((sig as any).isEmAlta === true || cat === "em_alta") &&
+    !sig.isAlavancagem &&
+    !sig.isSupreme &&
+    !sig.isRare
   ) {
     return SignalRank.EM_ALTA;
   }
@@ -261,6 +267,10 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
   }
 
   // Fallback por flags/tags
+  const label = (sig.label || "").toUpperCase();
+  const medal = ((sig as any).medal || "").toUpperCase();
+  const conf = (sig.confluence || "").toUpperCase();
+
   if (
     sig.isAlavancagem ||
     cat.includes("alavanc") ||

@@ -770,12 +770,26 @@ export function PredictiveSignals() {
         const allCycles = (engine[item.analysis] || []).filter((c) => c.value === item.value);
 
         // Ciclos anteriores ao gatilho ativo atual (item.open) que já são válidos (gaps.length >= 1)
-        const pastValid = allCycles.filter(
+        let pastValid = allCycles.filter(
           (c) =>
             c !== item.open &&
             c.triggerAt.getTime() <= item.open.triggerAt.getTime() &&
             isValidCycle(c),
         );
+
+        // Quebra de Padrões de Cores (IDs 50 a 56): caso a pedra específica não possua 4 ciclos passados,
+        // recorre a todos os ciclos válidos daquele padrão para calcular projeções/tendências e não perder dados de análise!
+        if (item.analysis >= 50 && item.analysis <= 56 && pastValid.length < 4) {
+          const allPatternCycles = (engine[item.analysis] || []).filter(
+            (c) =>
+              c !== item.open &&
+              c.triggerAt.getTime() <= item.open.triggerAt.getTime() &&
+              isValidCycle(c),
+          );
+          if (allPatternCycles.length >= 3) {
+            pastValid = allPatternCycles;
+          }
+        }
 
         // TENDÊNCIA: baseada exclusivamente nos 3 ciclos mais recentes daquela mesma análise
         if (pastValid.length >= 3) {
@@ -1208,12 +1222,13 @@ export function PredictiveSignals() {
     });
   }, [activeSignals]);
 
-  // 5. 🔥 EM ALTA (Rank 1: Sinais exclusivos de Tendência 3/3)
+  // 5. 🔥 EM ALTA (Rank 1: Sinais exclusivos de Tendência 3/3 gerados pelo módulo de tendências)
   const emAltaSignals = useMemo(() => {
     return activeSignals.filter((s) => {
       if (s.isNoConfluence || s.category === "no_confluence") return false;
+      if (s.isAlavancagem || s.isSupreme || s.isRare) return false;
       const rank = getSignalRank(s);
-      return rank === SignalRank.EM_ALTA || s.category === "em_alta" || !!s.isEmAlta;
+      return rank === SignalRank.EM_ALTA || s.category === "em_alta" || s.isEmAlta === true;
     });
   }, [activeSignals]);
 

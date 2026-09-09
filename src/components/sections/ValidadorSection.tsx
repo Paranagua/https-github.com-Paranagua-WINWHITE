@@ -684,6 +684,53 @@ export default function SignalPercentageValidator() {
 
     for (const strat of strategyEngines) {
       const cycles = strat.fn(allResults);
+
+      // Para estratégias de Quebra de Padrões de Cores (Q1..Q7):
+      // A quebra de padrão é uma propriedade do padrão de cores. Avaliamos os ciclos coletivos do padrão
+      // para garantir a maturidade estatística (mínimo de 5 ciclos válidos) e não perder dados da análise.
+      if (strat.group === "cores") {
+        const validList = cycles.filter(isValidCycle);
+        if (validList.length >= 5) {
+          for (let idx = 4; idx < validList.length; idx++) {
+            const pastCycles = validList.slice(Math.max(0, idx - 5), idx);
+            if (pastCycles.length < 4) continue;
+
+            const currentTrigger = validList[idx];
+            if (!currentTrigger?.triggerAt) continue;
+
+            const topGroups = computeTop(pastCycles, 3);
+            if (topGroups.length === 0) continue;
+
+            topGroups.forEach((group, rankIdx) => {
+              const isRank1 = rankIdx === 0;
+              const targetMinute = currentTrigger.triggerAt.getTime() + group.gap * 60_000;
+              const minuteKey = Math.floor(targetMinute / 60_000) * 60_000;
+
+              if (!timeSlots.has(minuteKey)) {
+                timeSlots.set(minuteKey, { top1: [], top3: [] });
+              }
+
+              const slot = timeSlots.get(minuteKey)!;
+              const item = {
+                analysis: strat.id,
+                value: currentTrigger.value,
+                strategyName: strat.name,
+                pct: group.pct,
+                gap: group.gap,
+                triggerAt: currentTrigger.triggerAt,
+              };
+
+              if (isRank1) {
+                slot.top1.push(item);
+              } else {
+                slot.top3.push(item);
+              }
+            });
+          }
+        }
+        continue;
+      }
+
       const byVal = new Map<number, Cycle[]>();
       for (const c of cycles) {
         if (!byVal.has(c.value)) byVal.set(c.value, []);

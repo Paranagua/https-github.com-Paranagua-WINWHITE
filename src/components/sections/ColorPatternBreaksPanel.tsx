@@ -1,28 +1,20 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   COLOR_PATTERNS,
   detectAllColorPatternBreaks,
   colorBreaksToCycles,
   type ColorPatternType,
-  type ColorBreakResult,
-  type PatternColor,
   getColorLabelPt,
 } from "@/lib/colorPatternBreaks";
 import { Card } from "@/components/double/Card";
+import { Sparkles, ShieldCheck, Clock, Table as TableIcon, LayoutGrid } from "lucide-react";
+import { fmtDateTime } from "@/components/double/types";
+import { computeTop, isValidCycle, type Row, type Cycle } from "@/lib/predictive";
 import {
-  Sparkles,
-  ShieldCheck,
-  Clock,
-  Shuffle,
-  Layers,
-  ChevronRight,
-  Info,
-  Table as TableIcon,
-  LayoutGrid,
-  AlertCircle,
-} from "lucide-react";
-import { fmtTime } from "@/components/double/types";
-import { computeTop, isValidCycle, MAX_ZEROS, type Row } from "@/lib/predictive";
+  fetchPersistedCyclesMap,
+  mergePersistedWithLiveCycles,
+  persistCyclesBatch,
+} from "@/lib/cyclePersistence";
 
 interface ColorPatternBreaksPanelProps {
   rows: Row[];
@@ -30,11 +22,7 @@ interface ColorPatternBreaksPanelProps {
   now: Date;
 }
 
-export function ColorPatternBreaksPanel({
-  rows,
-  selectedPedra,
-  now,
-}: ColorPatternBreaksPanelProps) {
+export function ColorPatternBreaksPanel({ rows, selectedPedra }: ColorPatternBreaksPanelProps) {
   const [activePattern, setActivePattern] = useState<ColorPatternType>("alternados");
 
   // Detecção completa dos 7 padrões
@@ -55,33 +43,44 @@ export function ColorPatternBreaksPanel({
     return activeBreaks.filter((b) => b.breakStone.roll === selectedPedra);
   }, [activeBreaks, selectedPedra]);
 
-  // Estatísticas de quebras do padrão ativo
-  const patternStats = useMemo(() => {
-    let byWhite = 0;
-    let byRed = 0;
-    let byBlack = 0;
-    activeBreaks.forEach((b) => {
-      if (b.breakStone.color === "white" || b.breakStone.roll === 0) byWhite++;
-      else if (b.breakStone.color === "red") byRed++;
-      else if (b.breakStone.color === "black") byBlack++;
-    });
-    return {
-      total: activeBreaks.length,
-      stoneTotal: breaksForSelectedStone.length,
-      byWhite,
-      byRed,
-      byBlack,
-    };
-  }, [activeBreaks, breaksForSelectedStone.length]);
-
   const [cycleViewMode, setCycleViewMode] = useState<"table" | "cards">("table");
   const [showAllCycles, setShowAllCycles] = useState(false);
 
-  // Ciclos convertidos para a pedra selecionada
+  // Ciclos preditivos persistidos do Supabase/Servidor para evitar perda com mudança de data
+  const [persistedColorCycles, setPersistedColorCycles] = useState<Record<number, Cycle[]>>({});
+
+  useEffect(() => {
+    let alive = true;
+    const colorIds = [50, 51, 52, 53, 54, 55, 56];
+    fetchPersistedCyclesMap(colorIds, 50)
+      .then((map) => {
+        if (alive && Object.keys(map).length > 0) {
+          setPersistedColorCycles(map);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Ciclos convertidos apenas para as quebras da pedra selecionada, mesclados com ciclos persistidos
   const cyclesForStone = useMemo(() => {
-    const allCycles = colorBreaksToCycles(activeBreaks, rows);
-    return allCycles.filter((c) => c.value === selectedPedra);
-  }, [activeBreaks, rows, selectedPedra]);
+    const live = colorBreaksToCycles(breaksForSelectedStone, rows);
+    const persisted = (persistedColorCycles[patternDef.analysisId] || []).filter(
+      (c) => c.value === selectedPedra,
+    );
+    return persisted.length > 0 ? mergePersistedWithLiveCycles(persisted, live) : live;
+  }, [breaksForSelectedStone, rows, persistedColorCycles, patternDef.analysisId, selectedPedra]);
+
+  // Salva novos ciclos calculados ao vivo em segundo plano
+  useEffect(() => {
+    if (cyclesForStone.length === 0) return;
+    const timer = setTimeout(() => {
+      persistCyclesBatch(cyclesForStone).catch(() => {});
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [cyclesForStone.length]);
 
   const pastValidCycles = useMemo(() => {
     return cyclesForStone.filter((c) => isValidCycle(c));
@@ -158,17 +157,19 @@ export function ColorPatternBreaksPanel({
                 <span className="text-xs font-bold text-white leading-tight mt-1 line-clamp-1">
                   {pat.shortName}
                 </span>
-                <span className="mt-2 text-[10px] font-black px-1.5 py-0.5 rounded bg-black/40 text-primary border border-primary/20">
-                  {countForStone} {countForStone === 1 ? "quebra" : "quebras"} (P.{selectedPedra})
-                </span>
+                <div className="mt-2 flex flex-col gap-0.5 w-full">
+                  <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-black/40 text-primary border border-primary/20 text-center">
+                    {countForStone} {countForStone === 1 ? "quebra" : "quebras"} (P.{selectedPedra})
+                  </span>
+                </div>
               </button>
             );
           })}
         </div>
 
         {/* Detalhes do Padrão Ativo */}
-        <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4 rounded-xl border border-white/5 bg-black/30 p-4">
-          <div className="md:col-span-2 space-y-1">
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-black/30 p-4">
+          <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-white">{patternDef.name}</span>
               <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-white/10 text-white/70">
@@ -178,48 +179,37 @@ export function ColorPatternBreaksPanel({
             <p className="text-xs text-muted-foreground">{patternDef.description}</p>
           </div>
 
-          <div className="flex items-center justify-end gap-2 text-xs flex-wrap">
-            <div className="text-center px-3 py-1 rounded-lg bg-primary/10 border border-primary/20">
-              <div className="text-[10px] text-primary font-bold">Pedra {selectedPedra}</div>
-              <div className="text-sm font-black text-white">{patternStats.stoneTotal}</div>
-            </div>
-            <div className="text-center px-3 py-1 rounded-lg bg-white/[0.02] border border-white/5">
-              <div className="text-[10px] text-muted-foreground">Total Geral</div>
-              <div className="text-sm font-black text-white">{patternStats.total}</div>
-            </div>
-            <div className="text-center px-3 py-1 rounded-lg bg-red-500/10 border border-red-500/20">
-              <div className="text-[10px] text-red-400">🔴 V</div>
-              <div className="text-sm font-black text-red-300">{patternStats.byRed}</div>
-            </div>
-            <div className="text-center px-3 py-1 rounded-lg bg-zinc-500/10 border border-zinc-500/20">
-              <div className="text-[10px] text-zinc-400">⚫ P</div>
-              <div className="text-sm font-black text-zinc-300">{patternStats.byBlack}</div>
-            </div>
-            <div className="text-center px-3 py-1 rounded-lg bg-white/10 border border-white/20">
-              <div className="text-[10px] text-white">⚪ 0</div>
-              <div className="text-sm font-black text-white">{patternStats.byWhite}</div>
-            </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-muted-foreground">Quebras da Pedra {selectedPedra}:</span>
+            <span className="font-mono font-black text-white px-2 py-0.5 rounded bg-primary/20 text-primary border border-primary/30">
+              {breaksForSelectedStone.length}
+            </span>
+            <span className="text-muted-foreground ml-2">Total do Padrão:</span>
+            <span className="font-mono font-bold text-white/80">{activeBreaks.length}</span>
           </div>
         </div>
       </Card>
 
-      {/* Tabela de Quebras Recentes Registradas — Filtradas pela Pedra Selecionada */}
+      {/* Tabela de Quebras Recentes Registradas para a Pedra Selecionada */}
       <Card className="glass-card p-6 border-white/10">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-primary" />
-            <h4 className="text-sm font-black uppercase tracking-wider text-white font-outfit">
-              Registro de Quebras — Pedra {selectedPedra} ({breaksForSelectedStone.length})
-            </h4>
+            <div>
+              <h4 className="text-sm font-black uppercase tracking-wider text-white font-outfit">
+                Registro de Quebras — Pedra {selectedPedra} ({breaksForSelectedStone.length})
+              </h4>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Exibindo apenas ocorrências em que a pedra {selectedPedra} foi a responsável pela
+                quebra
+              </p>
+            </div>
           </div>
-          <span className="text-[11px] text-muted-foreground">
-            Exibindo apenas ocorrências em que a pedra {selectedPedra} foi a responsável pela quebra
-          </span>
         </div>
 
         {breaksForSelectedStone.length === 0 ? (
           <div className="py-12 text-center text-xs text-muted-foreground">
-            Nenhuma quebra feita pela pedra {selectedPedra} registrada para o padrão{" "}
+            Nenhuma quebra feita pela pedra {selectedPedra} registrada até o momento para o padrão{" "}
             {patternDef.name}.
           </div>
         ) : (
@@ -227,7 +217,7 @@ export function ColorPatternBreaksPanel({
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-white/10 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  <th className="pb-2 pl-2">Horário</th>
+                  <th className="pb-2 pl-2">Data / Hora</th>
                   <th className="pb-2">Casas</th>
                   <th className="pb-2">Sequência Analisada</th>
                   <th className="pb-2">Cor Esperada</th>
@@ -237,17 +227,16 @@ export function ColorPatternBreaksPanel({
               </thead>
               <tbody className="divide-y divide-white/5">
                 {breaksForSelectedStone
-                  .slice(-20)
+                  .slice(-25)
                   .reverse()
                   .map((b, idx) => {
                     const isWhite = b.breakStone.color === "white" || b.breakStone.roll === 0;
                     const isRed = b.breakStone.color === "red";
-                    const isBlack = b.breakStone.color === "black";
 
                     return (
                       <tr key={idx} className="hover:bg-white/[0.02]">
                         <td className="py-2.5 pl-2 font-mono text-muted-foreground whitespace-nowrap">
-                          {fmtTime(b.breakStone.date)}
+                          {fmtDateTime(b.breakStone.date)}
                         </td>
                         <td className="py-2.5 font-bold text-white/70">{b.sequenceLength} casas</td>
                         <td className="py-2.5 font-mono text-xs">
@@ -333,7 +322,7 @@ export function ColorPatternBreaksPanel({
         )}
       </Card>
 
-      {/* Card de Integração: Ciclos de Latência para a Pedra Selecionada */}
+      {/* Card de Integração: Ciclos de Latência até o Branco */}
       <Card className="glass-card p-6 border-white/10">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
           <div>
@@ -344,8 +333,8 @@ export function ColorPatternBreaksPanel({
               Latência até o Branco — Pedra {selectedPedra} ({patternDef.name})
             </h4>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Exibição integral de até 14 resultados de latência de brancos alcançados por quebra
-              efetuada pela pedra {selectedPedra}.
+              Tempo decorrido (em minutos) entre a ocorrência da quebra na pedra {selectedPedra} e
+              as 14 aparições subsequentes do Branco.
             </p>
           </div>
 
@@ -393,22 +382,21 @@ export function ColorPatternBreaksPanel({
               </button>
             </div>
 
-            {cyclesForStone.length > 10 && (
+            {cyclesForStone.length > 6 && (
               <button
                 type="button"
                 onClick={() => setShowAllCycles((prev) => !prev)}
                 className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-bold text-muted-foreground hover:bg-white/10 hover:text-white"
               >
-                {showAllCycles ? "Mostrar Últimos 10" : `Ver Todos (${cyclesForStone.length})`}
+                {showAllCycles ? "Mostrar Últimos 6" : `Ver Todos (${cyclesForStone.length})`}
               </button>
             )}
           </div>
         </div>
 
         {cyclesForStone.length === 0 ? (
-          <div className="py-8 text-center text-xs text-muted-foreground">
+          <div className="py-10 text-center text-xs text-muted-foreground">
             Nenhuma quebra registrada onde a pedra responsável tenha sido o número {selectedPedra}.
-            Selecione outro número no catálogo acima.
           </div>
         ) : (
           <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -421,7 +409,7 @@ export function ColorPatternBreaksPanel({
                   <thead>
                     <tr className="border-b border-white/10 text-[10px] uppercase tracking-wider text-muted-foreground">
                       <th className="pb-2 font-bold w-12">Ciclo</th>
-                      <th className="pb-2 font-bold w-20">Gatilho</th>
+                      <th className="pb-2 font-bold w-28">Data / Gatilho</th>
                       <th className="pb-2 font-bold">Latência até Brancos (Todos os Resultados)</th>
                       <th className="pb-2 text-right font-bold w-28">Status</th>
                     </tr>
@@ -434,8 +422,8 @@ export function ColorPatternBreaksPanel({
                           <td className="py-2.5 font-mono text-muted-foreground font-bold">
                             #{cIdx + 1}
                           </td>
-                          <td className="py-2.5 font-mono font-bold text-white">
-                            {fmtTime(c.triggerAt)}
+                          <td className="py-2.5 font-mono font-bold text-white whitespace-nowrap">
+                            {fmtDateTime(c.triggerAt)}
                           </td>
                           <td className="py-2.5">
                             {c.gaps.length === 0 ? (
@@ -485,7 +473,7 @@ export function ColorPatternBreaksPanel({
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-bold text-white">Ciclo #{cIdx + 1}</span>
                         <span className="font-mono text-muted-foreground text-[11px]">
-                          {fmtTime(c.triggerAt)}
+                          {fmtDateTime(c.triggerAt)}
                         </span>
                       </div>
                       <div className="text-[11px] text-muted-foreground flex items-center justify-between">
@@ -524,7 +512,6 @@ export function ColorPatternBreaksPanel({
               )}
             </div>
 
-            {/* Top 3 Tempos Recorrentes (se houver base estatística) */}
             {topRows.length > 0 && (
               <div className="flex flex-col justify-between rounded-xl border border-white/10 bg-white/[0.02] p-4 lg:col-span-4">
                 <div>

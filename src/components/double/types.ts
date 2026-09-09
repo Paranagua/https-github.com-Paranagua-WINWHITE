@@ -50,6 +50,31 @@ export function fmtTime(iso: string | number | Date | null | undefined): string 
   }).format(d);
 }
 
+export function fmtDateTime(iso: string | number | Date | null | undefined): string {
+  if (iso === null || iso === undefined) return "--:--";
+  let d: Date;
+  if (iso instanceof Date) {
+    d = iso;
+  } else if (typeof iso === "number") {
+    d = new Date(iso);
+  } else {
+    const raw = String(iso).trim();
+    if (!raw) return "--:--";
+    const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(raw);
+    const normalized = hasTz ? raw : `${raw.replace(" ", "T")}Z`;
+    d = new Date(normalized);
+  }
+  if (Number.isNaN(d.getTime())) return "--:--";
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(d);
+}
+
 export function toSpin(r: BlazeRound): Spin {
   return {
     id: r.id,

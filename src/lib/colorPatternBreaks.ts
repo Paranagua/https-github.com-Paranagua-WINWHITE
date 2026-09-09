@@ -287,7 +287,8 @@ export function detectAlternados(rows: Row[]): ColorBreakResult[] {
       }
     }
 
-    i = Math.max(i + 1, k);
+    // Se não atingiu o mínimo de 6 casas (5 de padrão + quebra), avança normalmente para não perder nenhum início de padrão
+    i++;
   }
 
   return breaks;
@@ -831,17 +832,70 @@ export function detectColorPatternBreaksById(
     rows = (rowsOrId as Row[]) || [];
   }
 
-  // Mapeamento e normalização de aliases
-  if (id === "alt_continuos_2x2" || id === "alternados_continuos")
+  // Mapeamento e normalização abrangente de IDs e aliases (50..56, Q1..Q7, A50..A56, nomes)
+  const norm = String(id || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^a/, "")
+    .replace(/[-_ ]/g, "");
+
+  if (
+    norm === "51" ||
+    norm === "q2" ||
+    norm === "altcontinuos2x2" ||
+    norm === "alternadoscontinuos" ||
+    norm === "2x2"
+  ) {
     return detectAlternadosContinuos(rows);
-  if (id === "alt_continuos_1n" || id === "alternados_continuos_1n")
+  }
+
+  if (
+    norm === "52" ||
+    norm === "q3" ||
+    norm === "altcontinuos1n" ||
+    norm === "alternadoscontinuos1n" ||
+    norm === "3x3"
+  ) {
     return detectAlternadosContinuos1N(rows);
-  if (id === "alt_continuos_2n" || id === "alternados_continuos_2n")
+  }
+
+  if (
+    norm === "53" ||
+    norm === "q4" ||
+    norm === "altcontinuos2n" ||
+    norm === "alternadoscontinuos2n" ||
+    norm === "4x4"
+  ) {
     return detectAlternadosContinuos2N(rows);
-  if (id === "continuos_5x" || id === "continuos") return detectContinuos(rows);
-  if (id === "continuos_n1") return detectContinuosN1(rows);
-  if (id === "continuos_n2") return detectContinuosN2(rows);
-  if (id === "alternados") return detectAlternados(rows);
+  }
+
+  if (
+    norm === "54" ||
+    norm === "q5" ||
+    norm === "continuos5x" ||
+    norm === "continuos" ||
+    norm === "5x"
+  ) {
+    return detectContinuos(rows);
+  }
+
+  if (norm === "55" || norm === "q6" || norm === "continuosn1" || norm === "6x") {
+    return detectContinuosN1(rows);
+  }
+
+  if (norm === "56" || norm === "q7" || norm === "continuosn2" || norm === "7x") {
+    return detectContinuosN2(rows);
+  }
+
+  if (
+    norm === "50" ||
+    norm === "q1" ||
+    norm === "alternados" ||
+    norm === "1x1" ||
+    norm === "alternado"
+  ) {
+    return detectAlternados(rows);
+  }
 
   return [];
 }

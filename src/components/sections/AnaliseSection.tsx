@@ -12,6 +12,7 @@ import {
   Palette,
 } from "lucide-react";
 import { ColorPatternBreaksPanel } from "@/components/sections/ColorPatternBreaksPanel";
+import { detectAllColorPatternBreaks, colorBreaksToCycles } from "@/lib/colorPatternBreaks";
 import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
 import { Card } from "@/components/double/Card";
 import {
@@ -51,6 +52,11 @@ import {
   type Cycle as EngineCycle,
   type Row,
 } from "@/lib/predictive";
+import {
+  fetchPersistedCyclesMap,
+  mergePersistedWithLiveCycles,
+  persistCyclesBatch,
+} from "@/lib/cyclePersistence";
 
 type UiCycle = {
   index: number;
@@ -82,6 +88,20 @@ function fmtTime(d: Date | string | null | undefined): string {
   if (Number.isNaN(date.getTime())) return "--:--";
   return date.toLocaleTimeString("pt-BR", {
     timeZone: BRAZIL_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function fmtDateTime(d: Date | string | null | undefined): string {
+  if (!d) return "--:--";
+  const date = d instanceof Date ? d : parseUtcDate(d);
+  if (Number.isNaN(date.getTime())) return "--:--";
+  return date.toLocaleString("pt-BR", {
+    timeZone: BRAZIL_TIME_ZONE,
+    day: "2-digit",
+    month: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -160,7 +180,7 @@ function AnalysisPanel({
       return {
         index: i + 1,
         triggerAt: dt,
-        triggerLabel: fmtTime(dt),
+        triggerLabel: fmtDateTime(dt),
         triggerDetail: detailFormatter
           ? detailFormatter(c)
           : `minuto ${String(dt.getMinutes()).padStart(2, "0")}`,
@@ -231,7 +251,7 @@ function AnalysisPanel({
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-white/10 text-[10px] uppercase tracking-wider text-muted-foreground">
-                  <th className="pb-2 font-bold">Gatilho</th>
+                  <th className="pb-2 font-bold">Data / Gatilho</th>
                   <th className="pb-2 font-bold">Detalhe</th>
                   <th className="pb-2 font-bold">Latência até Brancos (min)</th>
                   <th className="pb-2 text-right font-bold">Status</th>
@@ -249,7 +269,7 @@ function AnalysisPanel({
                           : "hover:bg-white/[0.02] opacity-75"
                     }`}
                   >
-                    <td className="py-2.5 font-mono font-bold text-white flex items-center gap-1.5">
+                    <td className="py-2.5 font-mono font-bold text-white flex items-center gap-1.5 whitespace-nowrap">
                       {c.triggerLabel}
                       {c.isOpenTrigger && (
                         <span className="rounded bg-primary/20 px-1 py-0.2 text-[8px] font-black text-primary animate-pulse">
@@ -457,45 +477,298 @@ export default function AnaliseSection() {
     };
   }, []);
 
-  // Análises calculadas em memória com base em blaze_results
+  // Ciclos preditivos persistidos do Supabase/Servidor para evitar perda de dados nas mudanças de data/dia
+  const [persistedCycles, setPersistedCycles] = useState<Record<number, EngineCycle[]>>({});
+
+  useEffect(() => {
+    let alive = true;
+    const mainIds = [
+      2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+      30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
+    ];
+
+    const loadCycles = async () => {
+      try {
+        const map = await fetchPersistedCyclesMap(mainIds, 50);
+        if (alive && Object.keys(map).length > 0) {
+          setPersistedCycles(map);
+        }
+      } catch {
+        // Fallback silencioso para cálculo ao vivo
+      }
+    };
+
+    loadCycles();
+    const interval = setInterval(loadCycles, 60000);
+    return () => {
+      alive = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Análises calculadas em memória com base em blaze_results mescladas com histórico persistido
   // 1. Minutos (0 a 9 em ordem cronológica)
-  const a4Cycles = useMemo(() => buildA4(rows), [rows]);
-  const a5Cycles = useMemo(() => buildA5(rows), [rows]);
-  const a1Min1Cycles = useMemo(() => buildA1Minuto1(rows), [rows]);
-  const a2Min1Cycles = useMemo(() => buildA2Minuto1(rows), [rows]);
-  const a1Min2Cycles = useMemo(() => buildA1Minuto2(rows), [rows]);
-  const a2Min2Cycles = useMemo(() => buildA2Minuto2(rows), [rows]);
-  const a1Min3Cycles = useMemo(() => buildA1Minuto3(rows), [rows]);
-  const a2Min3Cycles = useMemo(() => buildA2Minuto3(rows), [rows]);
-  const a1Min4Cycles = useMemo(() => buildA1Minuto4(rows), [rows]);
-  const a2Min4Cycles = useMemo(() => buildA2Minuto4(rows), [rows]);
-  const a1Min5Cycles = useMemo(() => buildA1Minuto5(rows), [rows]);
-  const a2Min5Cycles = useMemo(() => buildA2Minuto5(rows), [rows]);
-  const a1Min6Cycles = useMemo(() => buildA1Minuto6(rows), [rows]);
-  const a2Min6Cycles = useMemo(() => buildA2Minuto6(rows), [rows]);
-  const a1Min7Cycles = useMemo(() => buildA1Minuto7(rows), [rows]);
-  const a2Min7Cycles = useMemo(() => buildA2Minuto7(rows), [rows]);
-  const a1Min8Cycles = useMemo(() => buildA1Minuto8(rows), [rows]);
-  const a2Min8Cycles = useMemo(() => buildA2Minuto8(rows), [rows]);
-  const a1Min9Cycles = useMemo(() => buildA1Minuto9(rows), [rows]);
-  const a3Cycles = useMemo(() => buildA3(rows), [rows]);
+  const a4Cycles = useMemo(() => {
+    const live = buildA4(rows);
+    return persistedCycles[4]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[4], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a5Cycles = useMemo(() => {
+    const live = buildA5(rows);
+    return persistedCycles[5]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[5], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a1Min1Cycles = useMemo(() => {
+    const live = buildA1Minuto1(rows);
+    return persistedCycles[22]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[22], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a2Min1Cycles = useMemo(() => {
+    const live = buildA2Minuto1(rows);
+    return persistedCycles[23]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[23], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a1Min2Cycles = useMemo(() => {
+    const live = buildA1Minuto2(rows);
+    return persistedCycles[24]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[24], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a2Min2Cycles = useMemo(() => {
+    const live = buildA2Minuto2(rows);
+    return persistedCycles[25]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[25], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a1Min3Cycles = useMemo(() => {
+    const live = buildA1Minuto3(rows);
+    return persistedCycles[26]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[26], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a2Min3Cycles = useMemo(() => {
+    const live = buildA2Minuto3(rows);
+    return persistedCycles[27]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[27], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a1Min4Cycles = useMemo(() => {
+    const live = buildA1Minuto4(rows);
+    return persistedCycles[28]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[28], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a2Min4Cycles = useMemo(() => {
+    const live = buildA2Minuto4(rows);
+    return persistedCycles[29]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[29], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a1Min5Cycles = useMemo(() => {
+    const live = buildA1Minuto5(rows);
+    return persistedCycles[17]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[17], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a2Min5Cycles = useMemo(() => {
+    const live = buildA2Minuto5(rows);
+    return persistedCycles[18]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[18], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a1Min6Cycles = useMemo(() => {
+    const live = buildA1Minuto6(rows);
+    return persistedCycles[30]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[30], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a2Min6Cycles = useMemo(() => {
+    const live = buildA2Minuto6(rows);
+    return persistedCycles[31]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[31], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a1Min7Cycles = useMemo(() => {
+    const live = buildA1Minuto7(rows);
+    return persistedCycles[32]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[32], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a2Min7Cycles = useMemo(() => {
+    const live = buildA2Minuto7(rows);
+    return persistedCycles[33]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[33], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a1Min8Cycles = useMemo(() => {
+    const live = buildA1Minuto8(rows);
+    return persistedCycles[34]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[34], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a2Min8Cycles = useMemo(() => {
+    const live = buildA2Minuto8(rows);
+    return persistedCycles[35]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[35], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a1Min9Cycles = useMemo(() => {
+    const live = buildA1Minuto9(rows);
+    return persistedCycles[36]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[36], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a3Cycles = useMemo(() => {
+    const live = buildA3(rows);
+    return persistedCycles[3]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[3], live)
+      : live;
+  }, [rows, persistedCycles]);
 
   // 2. Padrões de Pedra
-  const a2Cycles = useMemo(() => buildA2(rows), [rows]);
-  const aSandwichPontasCycles = useMemo(() => buildASandwichPontas(rows), [rows]);
-  const aSandwichMeioCycles = useMemo(() => buildASandwichMeio(rows), [rows]);
+  const a2Cycles = useMemo(() => {
+    const live = buildA2(rows);
+    return persistedCycles[2]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[2], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const aSandwichPontasCycles = useMemo(() => {
+    const live = buildASandwichPontas(rows);
+    return persistedCycles[19]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[19], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const aSandwichMeioCycles = useMemo(() => {
+    const live = buildASandwichMeio(rows);
+    return persistedCycles[20]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[20], live)
+      : live;
+  }, [rows, persistedCycles]);
 
   // 3. Gatilhos & Sequências
-  const a8_11Cycles = useMemo(() => buildA8_11(rows), [rows]);
-  const a11_11Cycles = useMemo(() => buildA11_11(rows), [rows]);
-  const a4_11Cycles = useMemo(() => buildA4_11(rows), [rows]);
-  const a4_14Cycles = useMemo(() => buildA4_14(rows), [rows]);
-  const a7_11Cycles = useMemo(() => buildA7_11(rows), [rows]);
+  const a8_11Cycles = useMemo(() => {
+    const live = buildA8_11(rows);
+    return persistedCycles[10]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[10], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a11_11Cycles = useMemo(() => {
+    const live = buildA11_11(rows);
+    return persistedCycles[11]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[11], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a4_11Cycles = useMemo(() => {
+    const live = buildA4_11(rows);
+    return persistedCycles[12]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[12], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a4_14Cycles = useMemo(() => {
+    const live = buildA4_14(rows);
+    return persistedCycles[13]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[13], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const a7_11Cycles = useMemo(() => {
+    const live = buildA7_11(rows);
+    return persistedCycles[21]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[21], live)
+      : live;
+  }, [rows, persistedCycles]);
 
   // 4. Somas Consecutivas
-  const aSoma17Cycles = useMemo(() => buildASoma17(rows), [rows]);
-  const aSoma19Cycles = useMemo(() => buildASoma19(rows), [rows]);
-  const aSoma21Cycles = useMemo(() => buildASoma21(rows), [rows]);
+  const aSoma17Cycles = useMemo(() => {
+    const live = buildASoma17(rows);
+    return persistedCycles[14]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[14], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const aSoma19Cycles = useMemo(() => {
+    const live = buildASoma19(rows);
+    return persistedCycles[15]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[15], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  const aSoma21Cycles = useMemo(() => {
+    const live = buildASoma21(rows);
+    return persistedCycles[16]?.length
+      ? mergePersistedWithLiveCycles(persistedCycles[16], live)
+      : live;
+  }, [rows, persistedCycles]);
+
+  // Persiste novos ciclos calculados ao vivo em segundo plano
+  useEffect(() => {
+    if (rows.length === 0) return;
+    const timer = setTimeout(() => {
+      const allLive: EngineCycle[] = [
+        ...a4Cycles,
+        ...a5Cycles,
+        ...a1Min1Cycles,
+        ...a2Min1Cycles,
+        ...a1Min2Cycles,
+        ...a2Min2Cycles,
+        ...a1Min3Cycles,
+        ...a2Min3Cycles,
+        ...a1Min4Cycles,
+        ...a2Min4Cycles,
+        ...a1Min5Cycles,
+        ...a2Min5Cycles,
+        ...a1Min6Cycles,
+        ...a2Min6Cycles,
+        ...a1Min7Cycles,
+        ...a2Min7Cycles,
+        ...a1Min8Cycles,
+        ...a2Min8Cycles,
+        ...a1Min9Cycles,
+        ...a3Cycles,
+        ...a2Cycles,
+        ...aSandwichPontasCycles,
+        ...aSandwichMeioCycles,
+        ...a8_11Cycles,
+        ...a11_11Cycles,
+        ...a4_11Cycles,
+        ...a4_14Cycles,
+        ...a7_11Cycles,
+        ...aSoma17Cycles,
+        ...aSoma19Cycles,
+        ...aSoma21Cycles,
+      ];
+      persistCyclesBatch(allLive).catch(() => {});
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [rows.length]);
 
   // Estatísticas agregadas para o seletor superior de pedras 0..14
   const stats = useMemo(() => {
@@ -537,6 +810,10 @@ export default function AnaliseSection() {
       aSoma17Cycles,
       aSoma19Cycles,
       aSoma21Cycles,
+      // 7 Quebras de Padrões de Cores (IDs 50 a 56)
+      ...Object.values(detectAllColorPatternBreaks(rows)).map((brks) =>
+        colorBreaksToCycles(brks, rows),
+      ),
     ];
 
     allStoneLists.forEach((list) => {
@@ -595,6 +872,7 @@ export default function AnaliseSection() {
     aSoma17Cycles,
     aSoma19Cycles,
     aSoma21Cycles,
+    rows,
   ]);
 
   const categories = [
