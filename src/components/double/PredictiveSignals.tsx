@@ -201,10 +201,10 @@ const getMedalStyles = (
 
   if (category === "em_alta") {
     return {
-      label: `🔥 EM ALTA (${count}x Tendência 3/3)`,
+      label: `🥈 EM ALTA (${count}x Tendência 3/3)`,
       classes:
-        "border-orange-500/80 bg-gradient-to-br from-orange-950/40 via-card/80 to-card/60 text-orange-200 shadow-orange-500/20 ring-1 ring-orange-500/40",
-      badge: "bg-orange-500/20 text-orange-300 border-orange-500/40",
+        "border-slate-300/80 bg-gradient-to-br from-slate-400/20 via-zinc-800/85 to-zinc-900/90 text-slate-100 shadow-[0_0_25px_rgba(203,213,225,0.25)] ring-1 ring-slate-300/60",
+      badge: "bg-slate-300/20 text-slate-100 border-slate-300/50",
     };
   }
 
@@ -248,21 +248,27 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
     displayTime = s.times.map((t: any) => fmtClock(t)).join(" / ");
   }
 
-  const cardStrategies = extractSignalStrategies(s);
+  const cardStrategies = extractSignalStrategies(s).filter((st) => !/^T[_-]/i.test(st));
   const cardAnalyses = extractSignalAnalyses(s);
 
   const primarySources = (s.sources || []).filter((src: any) => {
     const a = src.analysis;
     return [2, 19, 20, 10, 11, 12, 13, 21, 14, 15, 16, 50, 51, 52, 53, 54, 55, 56].includes(a);
   });
-  const primaryCodes = Array.from(
-    new Set(
+  const primaryCodes: string[] = Array.from(
+    new Set<string>(
       primarySources.map((src: any) =>
         src.analysis >= 50 && src.analysis <= 56 ? `Q${src.analysis - 49}` : `A${src.analysis}`,
       ),
     ),
-  );
-  if (primaryCodes.length === 0 && s.strategyKey && /^[AQ]\d+/i.test(s.strategyKey)) {
+  ).filter((code) => !/^T[_-]/i.test(code));
+  if (
+    primaryCodes.length === 0 &&
+    s.strategyKey &&
+    typeof s.strategyKey === "string" &&
+    /^[AQ]\d+/i.test(s.strategyKey) &&
+    !/^T[_-]/i.test(s.strategyKey)
+  ) {
     primaryCodes.push(s.strategyKey.toUpperCase());
   }
 
@@ -430,23 +436,46 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
           );
         })}
 
-        {/* 2. Análises (ex: A1-5 88%) */}
+        {/* 2. Análises (ex: A1-5 88%, A18-2 100%...) */}
         {cardAnalyses.map((ana, idx) => {
           const isTop3Secondary = !!ana.top3;
+          // Tendência A18-2 100% (ou qualquer análise de tendência A18 / 100%) em laranja
+          const isA18Tendency =
+            (ana.text.startsWith("A18") || ana.analysis === 18) &&
+            (ana.isTendency ||
+              (ana.pct && ana.pct.includes("100%")) ||
+              s.isEmAlta ||
+              s.category === "em_alta" ||
+              s.isHighTendency);
+          const isOtherTendency =
+            !isA18Tendency && (ana.isTendency || s.isEmAlta || s.category === "em_alta");
+
           return (
             <span
               key={`ana-${idx}`}
               className={`rounded-md border px-2 py-0.5 text-[9.5px] font-black tabular-nums shadow-xs flex items-center gap-1 ${
                 isAlavancagem
                   ? "border-slate-300 bg-slate-100 text-slate-900 font-bold"
-                  : isTop3Secondary
-                    ? "border-indigo-500/30 bg-indigo-500/10 text-indigo-300"
-                    : "border-white/15 bg-white/[0.07] text-white/90"
+                  : isA18Tendency
+                    ? "border-orange-500/80 bg-orange-500/25 text-orange-200 ring-1 ring-orange-500/40 shadow-[0_0_10px_rgba(249,115,22,0.35)] font-black"
+                    : isOtherTendency
+                      ? "border-orange-500/60 bg-orange-500/15 text-orange-300 font-bold"
+                      : isTop3Secondary
+                        ? "border-indigo-500/30 bg-indigo-500/10 text-indigo-300"
+                        : "border-white/15 bg-white/[0.07] text-white/90"
               }`}
               title={`Análise ${ana.text} ${ana.pct ? `(${ana.pct})` : ""}`}
             >
               <span>{ana.text}</span>
-              {ana.pct && <span className="opacity-80 font-bold text-[9px]">{ana.pct}</span>}
+              {ana.pct && (
+                <span
+                  className={`font-bold text-[9px] ${
+                    isA18Tendency ? "text-orange-300 opacity-100" : "opacity-80"
+                  }`}
+                >
+                  {ana.pct}
+                </span>
+              )}
             </span>
           );
         })}

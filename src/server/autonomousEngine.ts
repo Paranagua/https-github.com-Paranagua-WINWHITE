@@ -117,6 +117,7 @@ class AutonomousAuditEngine {
   private realtimeChannel: any = null;
   private persistedCyclesCache: Record<number, Cycle[]> = {};
   private lastCycleRefreshAt = 0;
+  private activeCandidateSignals: PredictiveSignal[] = [];
 
   private state: AutonomousAuditState = {
     status: "idle",

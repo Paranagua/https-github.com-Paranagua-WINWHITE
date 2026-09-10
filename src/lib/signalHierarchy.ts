@@ -6,6 +6,7 @@ import {
   mergeConfirmedStrategies,
   applyConfirmationStrategies,
   type StrategyProjection,
+  type ConfirmedStrategyInfo,
 } from "@/lib/confirmationStrategies";
 import type { SumTriggerProjection } from "@/lib/sum19Strategies";
 import { useSignalStatsStore } from "@/lib/signalStatsStore";
@@ -88,9 +89,9 @@ export function extractSignalStrategies(sig: any): string[] {
     });
   }
 
-  // 4. strategyKey (se não for análise pura tipo A1)
+  // 4. strategyKey (se não for análise pura tipo A1 ou prefixo de tendência tipo T_A18)
   if (sig.strategyKey && typeof sig.strategyKey === "string") {
-    if (!/^A\d+$/i.test(sig.strategyKey)) {
+    if (!/^[AQ]\d+$/i.test(sig.strategyKey) && !/^T[_-]/i.test(sig.strategyKey)) {
       list.push(formatStrategyCode(sig.strategyKey));
     }
   }
@@ -105,13 +106,19 @@ export function extractSignalStrategies(sig: any): string[] {
     }
   }
 
-  // Deduplica mantendo valores únicos e filtra qualquer estratégia "E" (desativadas nas confluências)
+  // Deduplica mantendo valores únicos, filtra estratégias "E" e remove tags de tendência (T_A18...)
   const seen = new Set<string>();
   const result: string[] = [];
   for (const item of list) {
     if (/^E\d+$/i.test(item)) continue; // Estratégias "E" desativadas nas confluências
+    if (/^T[_-]/i.test(item)) continue; // Remove tags de tendência como T_A18
     const formatted = formatStrategyCode(item);
-    if (formatted && !/^E\d+$/i.test(formatted) && !seen.has(formatted)) {
+    if (
+      formatted &&
+      !/^E\d+$/i.test(formatted) &&
+      !/^T[_-]/i.test(formatted) &&
+      !seen.has(formatted)
+    ) {
       seen.add(formatted);
       result.push(formatted);
     }
@@ -129,6 +136,7 @@ export interface SignalAnalysisItem {
   analysis?: number;
   value?: number;
   top3?: boolean;
+  isTendency?: boolean;
 }
 
 /**
@@ -138,6 +146,11 @@ export function extractSignalAnalyses(sig: any): SignalAnalysisItem[] {
   if (!sig) return [];
   const results: SignalAnalysisItem[] = [];
 
+  const isSignalEmAlta =
+    !!sig.isEmAlta ||
+    (sig.category || "").toLowerCase() === "em_alta" ||
+    (typeof sig.label === "string" && sig.label.toLowerCase().includes("tendência"));
+
   if (Array.isArray(sig.sources) && sig.sources.length > 0) {
     sig.sources.forEach((src: any) => {
       if (!src) return;
@@ -146,12 +159,22 @@ export function extractSignalAnalyses(sig: any): SignalAnalysisItem[] {
       const pctStr = typeof src.pct === "number" && src.pct > 0 ? `${Math.round(src.pct)}%` : "";
       const code =
         src.analysis >= 50 && src.analysis <= 56 ? `Q${src.analysis - 49}` : `A${src.analysis}`;
+
+      const isTend =
+        !!src.isTendency ||
+        isSignalEmAlta ||
+        src.ratio === "3/3" ||
+        src.ratio === "2/3" ||
+        (typeof src.cycleKey === "string" && src.cycleKey.startsWith("TEND_")) ||
+        (code === "A18" && (pctStr.includes("100") || isSignalEmAlta));
+
       results.push({
         text: `${code}-${src.value}`,
         pct: pctStr,
         analysis: src.analysis,
         value: src.value,
         top3: !!src.top3,
+        isTendency: isTend,
       });
     });
     return results;
@@ -167,11 +190,15 @@ export function extractSignalAnalyses(sig: any): SignalAnalysisItem[] {
     const analysisId = isQ ? aNum + 49 : aNum;
     const val = parseInt(match[2], 10);
     const pct = match[3] ? `${match[3]}%` : "";
+    const code = isQ ? `Q${aNum}` : `A${aNum}`;
+    const isTend = isSignalEmAlta || (code === "A18" && (pct.includes("100") || isSignalEmAlta));
+
     results.push({
-      text: `${isQ ? `Q${aNum}` : `A${aNum}`}-${val}`,
+      text: `${code}-${val}`,
       pct,
       analysis: analysisId,
       value: val,
+      isTendency: isTend,
     });
   }
 
@@ -1572,7 +1599,7 @@ export function buildEmAltaSignals(
       label: `Tendência 3/3 (${primaryCodes.join("/")})${confCodes.length > 0 ? ` + ${confCodes.join(", ")}` : ""}`,
       confluence: confluenceItems.join(" · "),
       strategies: [],
-      medal: `🔥 EM ALTA (${primaryTendencies.length}x Tendência 3/3)`,
+      medal: `🥈 EM ALTA (${primaryTendencies.length}x Tendência 3/3)`,
       entryDate: repDate,
       outcome: "pending" as const,
       isHighTendency: true,
@@ -1584,7 +1611,7 @@ export function buildEmAltaSignals(
       isRare: false,
       isSupreme: false,
       isNoConfluence: false,
-      strategyKey: `T_${primaryCodes[0] || "A"}`,
+      strategyKey: primaryCodes[0] || "A",
       sources,
       clusterTimestamps: [minStart],
       allowsOscillation: false,
@@ -1852,9 +1879,10 @@ export function mergeSignalsLifecycle(
       // - 1 horário único: horário fixo.
       const allowsOscillation = cand.allowsOscillation ?? existing.allowsOscillation ?? false;
 
-      const targetEntryDate: Date | string = allowsOscillation
-        ? cand.entryDate || existing.entryDate
-        : existing.entryDate || cand.entryDate;
+      const targetEntryDate: Date | string =
+        (allowsOscillation
+          ? cand.entryDate || existing.entryDate
+          : existing.entryDate || cand.entryDate) || new Date();
 
       const targetTime =
         targetEntryDate instanceof Date ? fmtClock(targetEntryDate) : cand.time || existing.time;
@@ -1999,7 +2027,7 @@ export function mergeSignalsLifecycle(
   const claimedCycleKeys = new Set<string>();
 
   for (const sig of pendingSignals) {
-    const sigKey = sig.key || getCanonicalSignalKey(sig.entryDate);
+    const sigKey = sig.key || getCanonicalSignalKey(sig.entryDate || new Date());
     const currentSources = sig.sources || [];
     const sourceCycleKeys = currentSources.map((s) => getSourceCycleKey(s));
 
@@ -2189,7 +2217,7 @@ export function mergeSignalsLifecycle(
           looser = s1;
         }
 
-        const looserKey = looser.key || getCanonicalSignalKey(looser.entryDate);
+        const looserKey = looser.key || getCanonicalSignalKey(looser.entryDate || new Date());
 
         if (looser.isEmAlta || (looser.category || "").toLowerCase() === "em_alta") {
           resultMap.delete(looserKey);

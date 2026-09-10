@@ -1169,7 +1169,7 @@ function SinaisSectionContent() {
                       const resetSignals = (current || []).map((s) => ({
                         ...s,
                         outcome: "pending" as const,
-                        label: undefined,
+                        label: s.label || "",
                         resultTime: undefined,
                         completedAt: undefined,
                       }));

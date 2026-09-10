@@ -61,6 +61,7 @@ import {
   type Cycle,
   type Row,
 } from "@/lib/predictive";
+import { formatStrategyCode } from "@/lib/signalHierarchy";
 import { computeAllSumTriggerProjections } from "@/lib/sum19Strategies";
 import { computeConfirmationProjections } from "@/lib/confirmationStrategies";
 import { useSignalStatsStore } from "@/lib/signalStatsStore";
@@ -686,14 +687,15 @@ export default function SignalPercentageValidator() {
       const cycles = strat.fn(allResults);
 
       // Para estratégias de Quebra de Padrões de Cores (Q1..Q7):
-      // A quebra de padrão é uma propriedade do padrão de cores. Avaliamos os ciclos coletivos do padrão
-      // para garantir a maturidade estatística (mínimo de 5 ciclos válidos) e não perder dados da análise.
+      // A quebra de padrão é uma propriedade do padrão de cores.
+      // Requer no mínimo 4 ciclos (3 ciclos anteriores válidos + 1 gatilho ativo).
+      // Calcula os Top Tempos Recorrentes dos 3 ciclos anteriores.
       if (strat.group === "cores") {
         const validList = cycles.filter(isValidCycle);
-        if (validList.length >= 5) {
-          for (let idx = 4; idx < validList.length; idx++) {
-            const pastCycles = validList.slice(Math.max(0, idx - 5), idx);
-            if (pastCycles.length < 4) continue;
+        if (validList.length >= 4) {
+          for (let idx = 3; idx < validList.length; idx++) {
+            const pastCycles = validList.slice(Math.max(0, idx - 3), idx);
+            if (pastCycles.length < 3) continue;
 
             const currentTrigger = validList[idx];
             if (!currentTrigger?.triggerAt) continue;
@@ -703,27 +705,38 @@ export default function SignalPercentageValidator() {
 
             topGroups.forEach((group, rankIdx) => {
               const isRank1 = rankIdx === 0;
-              const targetMinute = currentTrigger.triggerAt.getTime() + group.gap * 60_000;
-              const minuteKey = Math.floor(targetMinute / 60_000) * 60_000;
+              if (isRank1 && (group.pct < 80 || group.pct > 100)) return;
+              if (!isRank1 && (group.pct < 75 || group.pct > 79.99)) return;
+
+              const isTop1 = strat.isTop1 && isRank1;
+              const targetMinute = group.m;
+              const projectedDate = new Date(
+                currentTrigger.triggerAt.getTime() + targetMinute * 60000,
+              );
+              const minuteKey = Math.floor(projectedDate.getTime() / 60000) * 60000;
 
               if (!timeSlots.has(minuteKey)) {
                 timeSlots.set(minuteKey, { top1: [], top3: [] });
               }
 
               const slot = timeSlots.get(minuteKey)!;
-              const item = {
-                analysis: strat.id,
+              const payload = {
+                strategyKey: strat.key,
+                strategyLabel: strat.label,
                 value: currentTrigger.value,
-                strategyName: strat.name,
                 pct: group.pct,
-                gap: group.gap,
+                isTop1,
+                isPrimary: strat.isPrimary,
+                group: strat.group,
+                groupName: strat.groupName,
+                rank: isTop1 ? 1 : rankIdx + 1,
                 triggerAt: currentTrigger.triggerAt,
               };
 
-              if (isRank1) {
-                slot.top1.push(item);
+              if (isTop1) {
+                slot.top1.push(payload);
               } else {
-                slot.top3.push(item);
+                slot.top3.push(payload);
               }
             });
           }
@@ -875,7 +888,8 @@ export default function SignalPercentageValidator() {
           ? Math.round((allPcts.reduce((a, b) => a + b, 0) / allPcts.length) * 10) / 10
           : 0;
 
-      const primary = data.top1.find((p) => p.isPrimary) || primaryCandidates[0];
+      const primary = data.top1.find((p) => p.isPrimary) || data.top1[0];
+      if (!primary) continue;
       const slotDate = new Date(slotTime);
 
       // Verificação de alta precisão: Janela de 3 minutos completos (6 casas / 2 casas por minuto)
@@ -922,7 +936,7 @@ export default function SignalPercentageValidator() {
         predictedMinute: slotDate.getMinutes(),
         projectedPct: avgPct,
         category,
-        sourcesCount: totalSources,
+        sourcesCount: distinctTop1.size + distinctTop3.size,
         top1Count: distinctTop1.size,
         status,
         matchedRoll,

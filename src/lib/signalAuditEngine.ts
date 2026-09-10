@@ -11,6 +11,8 @@ export type AuditResultItem = {
   inserted_at?: string;
 };
 
+export type ResultItemInput = AuditResultItem;
+
 export function getResultIso(r: any): string {
   if (!r) return "";
   return String(r.createdAt || r.created_at || r.inserted_at || "").trim();
@@ -283,7 +285,7 @@ export function auditSignalWithRounds(
     auditedAt: now,
   };
 
-  const hasChanged = outcome !== "pending" && outcome !== signal.outcome;
+  const hasChanged = outcome !== "pending" && (outcome as string) !== (signal.outcome as string);
 
   return {
     outcome,

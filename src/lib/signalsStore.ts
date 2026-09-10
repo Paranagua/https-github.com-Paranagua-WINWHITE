@@ -135,7 +135,7 @@ export type PredictiveSignal = {
   key: string;
   time: string;
   pct: number;
-  label: string;
+  label?: string;
   confluence: string;
   strategies?: string[];
   medal?: string;
@@ -154,6 +154,12 @@ export type PredictiveSignal = {
   isTop1?: boolean;
   isNoConfluence?: boolean;
   isLocked?: boolean;
+  isRecAlert?: boolean;
+  isConsecutive?: boolean;
+  levelOffset?: number;
+  windowLabel?: string;
+  checkedResults?: number;
+  winningResultCreatedAt?: string;
   category?: string;
   groupName?: string;
   completedAt?: number;
@@ -168,6 +174,10 @@ export type PredictiveSignal = {
     pct?: number;
     top3?: boolean;
     top5?: boolean;
+    cycleKey?: string;
+    rank?: number;
+    isTendency?: boolean;
+    ratio?: string;
   }>;
 };
 

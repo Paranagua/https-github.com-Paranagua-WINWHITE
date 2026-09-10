@@ -23,6 +23,7 @@ export interface SignalHistoryEntry {
   isSupreme?: boolean;
   isRare?: boolean;
   isAlavancagem?: boolean;
+  isEmAlta?: boolean;
   isTop1?: boolean;
 }
 
@@ -286,18 +287,9 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
                 signalMap.set(incoming.key, incoming);
               } else {
                 // Se qualquer um dos dois (local ou servidor) comprovou WIN ("green"), prevalece "green" (WIN)!
-                const resolvedOutcome =
-                  existing.outcome === "green" || incoming.outcome === "green"
-                    ? "green"
-                    : existing.outcome === "red" || incoming.outcome === "red"
-                      ? "red"
-                      : "pending";
-                const resolvedLabel =
-                  resolvedOutcome === "green"
-                    ? "WIN"
-                    : resolvedOutcome === "red"
-                      ? "LOSS"
-                      : "PENDING";
+                const resolvedOutcome: "green" | "red" =
+                  existing.outcome === "green" || incoming.outcome === "green" ? "green" : "red";
+                const resolvedLabel = resolvedOutcome === "green" ? "WIN" : "LOSS";
 
                 signalMap.set(incoming.key, {
                   ...incoming,
