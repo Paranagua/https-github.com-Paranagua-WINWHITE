@@ -10,11 +10,7 @@ import { Card } from "@/components/double/Card";
 import { Sparkles, ShieldCheck, Clock, Table as TableIcon, LayoutGrid } from "lucide-react";
 import { fmtDateTime } from "@/components/double/types";
 import { computeTop, isValidCycle, type Row, type Cycle } from "@/lib/predictive";
-import {
-  fetchPersistedCyclesMap,
-  mergePersistedWithLiveCycles,
-  persistCyclesBatch,
-} from "@/lib/cyclePersistence";
+import { fetchPersistedCyclesMap, mergePersistedWithLiveCycles } from "@/lib/cyclePersistence";
 
 interface ColorPatternBreaksPanelProps {
   rows: Row[];
@@ -72,15 +68,6 @@ export function ColorPatternBreaksPanel({ rows, selectedPedra }: ColorPatternBre
     );
     return persisted.length > 0 ? mergePersistedWithLiveCycles(persisted, live) : live;
   }, [breaksForSelectedStone, rows, persistedColorCycles, patternDef.analysisId, selectedPedra]);
-
-  // Salva novos ciclos calculados ao vivo em segundo plano
-  useEffect(() => {
-    if (cyclesForStone.length === 0) return;
-    const timer = setTimeout(() => {
-      persistCyclesBatch(cyclesForStone).catch(() => {});
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [cyclesForStone.length]);
 
   // Ciclo aberto ativo (em andamento) se o mais recente tiver menos de 14 brancos
   const openCycle = useMemo(() => {

@@ -81,9 +81,13 @@ export function recordToCycle(record: PersistedCycleRecord): Cycle {
   };
 }
 
+// Assinaturas de ciclos já persistidos com sucesso (cycle_key -> signature)
+const persistedSignatures = new Map<string, string>();
+
 /**
  * Persiste um lote de ciclos no Supabase e no cache local.
  * Utiliza chave de idempotência (cycle_key) para atualizar gaps de ciclos existentes sem duplicar.
+ * Descarta automaticamente ciclos cujo estado (gaps e status) não sofreu alteração.
  */
 export async function persistCyclesBatch(
   cycles: Cycle[],
@@ -97,6 +101,12 @@ export async function persistCyclesBatch(
     if (!c.triggerAt) continue;
     const meta = metadataMap?.[c.analysis];
     const rec = cycleToRecord(c, meta?.code, meta?.name);
+
+    // Assinatura do estado do ciclo: chave + total de gaps + status
+    const sig = `${rec.cycle_key}_${rec.gaps.length}_${rec.status}`;
+    if (persistedSignatures.get(rec.cycle_key) === sig) {
+      continue; // Ciclo inalterado já salvo, pula persistência redundante
+    }
 
     // Se já vimos este ciclo no lote, mantemos a versão com mais gaps
     const existing = payloadMap.get(rec.cycle_key);
@@ -131,6 +141,9 @@ export async function persistCyclesBatch(
     if (res.ok) {
       const data = await res.json();
       savedCount = data.saved ?? records.length;
+      for (const rec of records) {
+        persistedSignatures.set(rec.cycle_key, `${rec.cycle_key}_${rec.gaps.length}_${rec.status}`);
+      }
       return savedCount;
     }
   } catch {
@@ -145,6 +158,9 @@ export async function persistCyclesBatch(
 
     if (!error) {
       savedCount = records.length;
+      for (const rec of records) {
+        persistedSignatures.set(rec.cycle_key, `${rec.cycle_key}_${rec.gaps.length}_${rec.status}`);
+      }
     }
   } catch {
     // Falha silenciosa tolerada (cache em memória e fallback já retêm os dados)

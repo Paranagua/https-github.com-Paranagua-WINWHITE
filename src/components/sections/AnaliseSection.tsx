@@ -1,5 +1,5 @@
 import { parseUtcDate } from "@/lib/utils";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Loader2,
   Sparkles,
@@ -15,48 +15,9 @@ import { ColorPatternBreaksPanel } from "@/components/sections/ColorPatternBreak
 import { detectAllColorPatternBreaks, colorBreaksToCycles } from "@/lib/colorPatternBreaks";
 import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
 import { Card } from "@/components/double/Card";
-import {
-  buildA2,
-  buildA3,
-  buildA4,
-  buildA5,
-  buildA8_11,
-  buildA11_11,
-  buildA4_11,
-  buildA4_14,
-  buildASoma17,
-  buildASoma19,
-  buildASoma21,
-  buildA1Minuto5,
-  buildA2Minuto5,
-  buildA1Minuto1,
-  buildA2Minuto1,
-  buildA1Minuto2,
-  buildA2Minuto2,
-  buildA1Minuto3,
-  buildA2Minuto3,
-  buildA1Minuto4,
-  buildA2Minuto4,
-  buildA1Minuto6,
-  buildA2Minuto6,
-  buildA1Minuto7,
-  buildA2Minuto7,
-  buildA1Minuto8,
-  buildA2Minuto8,
-  buildA1Minuto9,
-  buildASandwichPontas,
-  buildASandwichMeio,
-  buildA7_11,
-  computeTop,
-  isValidCycle,
-  type Cycle as EngineCycle,
-  type Row,
-} from "@/lib/predictive";
-import {
-  fetchPersistedCyclesMap,
-  mergePersistedWithLiveCycles,
-  persistCyclesBatch,
-} from "@/lib/cyclePersistence";
+import { computeTop, isValidCycle, type Cycle as EngineCycle, type Row } from "@/lib/predictive";
+import { IncrementalPredictiveEngine } from "@/lib/incrementalPredictiveEngine";
+import { fetchPersistedCyclesMap, mergePersistedWithLiveCycles } from "@/lib/cyclePersistence";
 
 type UiCycle = {
   index: number;
@@ -424,6 +385,12 @@ export default function AnaliseSection() {
     return () => clearInterval(timer);
   }, []);
 
+  // Ciclos preditivos mantidos de forma incremental em memória e sincronizados com a persistência
+  const [cyclesMap, setCyclesMap] = useState<Record<number, EngineCycle[]>>({});
+  const incrementalEngineRef = useRef<IncrementalPredictiveEngine>(
+    new IncrementalPredictiveEngine(),
+  );
+
   useEffect(() => {
     let alive = true;
 
@@ -434,13 +401,15 @@ export default function AnaliseSection() {
           .from("blaze_results")
           .select("id, roll, color, created_at")
           .order("id", { ascending: false })
-          .limit(3000);
+          .limit(500);
 
         if (error) throw error;
         if (!alive) return;
 
         const sorted = (data || []).slice().sort((a, b) => a.id - b.id);
         setRows(sorted);
+        incrementalEngineRef.current.processBatch(sorted);
+        setCyclesMap(incrementalEngineRef.current.getAllCyclesMap());
       } catch (e: any) {
         if (!alive) return;
         setErr(e?.message || "Erro ao carregar dados");
@@ -463,13 +432,16 @@ export default function AnaliseSection() {
             const ids = new Set(prev.map((r) => r.id));
             const fresh = data.filter((r) => !ids.has(r.id)).reverse();
             if (fresh.length === 0) return prev;
-            return [...prev, ...fresh];
+            incrementalEngineRef.current.processBatch(fresh);
+            setCyclesMap(incrementalEngineRef.current.getAllCyclesMap());
+            const updated = [...prev, ...fresh];
+            return updated.length > 500 ? updated.slice(-500) : updated;
           });
         }
       } catch {
         // silencioso
       }
-    }, 4000);
+    }, 5000);
 
     return () => {
       alive = false;
@@ -477,9 +449,7 @@ export default function AnaliseSection() {
     };
   }, []);
 
-  // Ciclos preditivos persistidos do Supabase/Servidor para evitar perda de dados nas mudanças de data/dia
-  const [persistedCycles, setPersistedCycles] = useState<Record<number, EngineCycle[]>>({});
-
+  // Ciclos preditivos persistidos do Supabase/Servidor para sincronização contínua
   useEffect(() => {
     let alive = true;
     const mainIds = [
@@ -491,7 +461,9 @@ export default function AnaliseSection() {
       try {
         const map = await fetchPersistedCyclesMap(mainIds, 50);
         if (alive && Object.keys(map).length > 0) {
-          setPersistedCycles(map);
+          const allList = Object.values(map).flat();
+          incrementalEngineRef.current.loadPersistedCycles(allList);
+          setCyclesMap(incrementalEngineRef.current.getAllCyclesMap());
         }
       } catch {
         // Fallback silencioso para cálculo ao vivo
@@ -506,269 +478,41 @@ export default function AnaliseSection() {
     };
   }, []);
 
-  // Análises calculadas em memória com base em blaze_results mescladas com histórico persistido
-  // 1. Minutos (0 a 9 em ordem cronológica)
-  const a4Cycles = useMemo(() => {
-    const live = buildA4(rows);
-    return persistedCycles[4]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[4], live)
-      : live;
-  }, [rows, persistedCycles]);
+  // Análises obtidas em O(1) diretamente do motor incremental persistido
+  const a4Cycles = cyclesMap[4] || [];
+  const a5Cycles = cyclesMap[5] || [];
+  const a1Min1Cycles = cyclesMap[22] || [];
+  const a2Min1Cycles = cyclesMap[23] || [];
+  const a1Min2Cycles = cyclesMap[24] || [];
+  const a2Min2Cycles = cyclesMap[25] || [];
+  const a1Min3Cycles = cyclesMap[26] || [];
+  const a2Min3Cycles = cyclesMap[27] || [];
+  const a1Min4Cycles = cyclesMap[28] || [];
+  const a2Min4Cycles = cyclesMap[29] || [];
+  const a1Min5Cycles = cyclesMap[17] || [];
+  const a2Min5Cycles = cyclesMap[18] || [];
+  const a1Min6Cycles = cyclesMap[30] || [];
+  const a2Min6Cycles = cyclesMap[31] || [];
+  const a1Min7Cycles = cyclesMap[32] || [];
+  const a2Min7Cycles = cyclesMap[33] || [];
+  const a1Min8Cycles = cyclesMap[34] || [];
+  const a2Min8Cycles = cyclesMap[35] || [];
+  const a1Min9Cycles = cyclesMap[36] || [];
+  const a3Cycles = cyclesMap[3] || [];
 
-  const a5Cycles = useMemo(() => {
-    const live = buildA5(rows);
-    return persistedCycles[5]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[5], live)
-      : live;
-  }, [rows, persistedCycles]);
+  const a2Cycles = cyclesMap[2] || [];
+  const aSandwichPontasCycles = cyclesMap[19] || [];
+  const aSandwichMeioCycles = cyclesMap[20] || [];
 
-  const a1Min1Cycles = useMemo(() => {
-    const live = buildA1Minuto1(rows);
-    return persistedCycles[22]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[22], live)
-      : live;
-  }, [rows, persistedCycles]);
+  const a8_11Cycles = cyclesMap[10] || [];
+  const a11_11Cycles = cyclesMap[11] || [];
+  const a4_11Cycles = cyclesMap[12] || [];
+  const a4_14Cycles = cyclesMap[13] || [];
+  const a7_11Cycles = cyclesMap[21] || [];
 
-  const a2Min1Cycles = useMemo(() => {
-    const live = buildA2Minuto1(rows);
-    return persistedCycles[23]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[23], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a1Min2Cycles = useMemo(() => {
-    const live = buildA1Minuto2(rows);
-    return persistedCycles[24]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[24], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a2Min2Cycles = useMemo(() => {
-    const live = buildA2Minuto2(rows);
-    return persistedCycles[25]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[25], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a1Min3Cycles = useMemo(() => {
-    const live = buildA1Minuto3(rows);
-    return persistedCycles[26]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[26], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a2Min3Cycles = useMemo(() => {
-    const live = buildA2Minuto3(rows);
-    return persistedCycles[27]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[27], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a1Min4Cycles = useMemo(() => {
-    const live = buildA1Minuto4(rows);
-    return persistedCycles[28]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[28], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a2Min4Cycles = useMemo(() => {
-    const live = buildA2Minuto4(rows);
-    return persistedCycles[29]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[29], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a1Min5Cycles = useMemo(() => {
-    const live = buildA1Minuto5(rows);
-    return persistedCycles[17]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[17], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a2Min5Cycles = useMemo(() => {
-    const live = buildA2Minuto5(rows);
-    return persistedCycles[18]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[18], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a1Min6Cycles = useMemo(() => {
-    const live = buildA1Minuto6(rows);
-    return persistedCycles[30]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[30], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a2Min6Cycles = useMemo(() => {
-    const live = buildA2Minuto6(rows);
-    return persistedCycles[31]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[31], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a1Min7Cycles = useMemo(() => {
-    const live = buildA1Minuto7(rows);
-    return persistedCycles[32]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[32], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a2Min7Cycles = useMemo(() => {
-    const live = buildA2Minuto7(rows);
-    return persistedCycles[33]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[33], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a1Min8Cycles = useMemo(() => {
-    const live = buildA1Minuto8(rows);
-    return persistedCycles[34]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[34], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a2Min8Cycles = useMemo(() => {
-    const live = buildA2Minuto8(rows);
-    return persistedCycles[35]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[35], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a1Min9Cycles = useMemo(() => {
-    const live = buildA1Minuto9(rows);
-    return persistedCycles[36]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[36], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a3Cycles = useMemo(() => {
-    const live = buildA3(rows);
-    return persistedCycles[3]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[3], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  // 2. Padrões de Pedra
-  const a2Cycles = useMemo(() => {
-    const live = buildA2(rows);
-    return persistedCycles[2]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[2], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const aSandwichPontasCycles = useMemo(() => {
-    const live = buildASandwichPontas(rows);
-    return persistedCycles[19]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[19], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const aSandwichMeioCycles = useMemo(() => {
-    const live = buildASandwichMeio(rows);
-    return persistedCycles[20]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[20], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  // 3. Gatilhos & Sequências
-  const a8_11Cycles = useMemo(() => {
-    const live = buildA8_11(rows);
-    return persistedCycles[10]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[10], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a11_11Cycles = useMemo(() => {
-    const live = buildA11_11(rows);
-    return persistedCycles[11]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[11], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a4_11Cycles = useMemo(() => {
-    const live = buildA4_11(rows);
-    return persistedCycles[12]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[12], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a4_14Cycles = useMemo(() => {
-    const live = buildA4_14(rows);
-    return persistedCycles[13]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[13], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const a7_11Cycles = useMemo(() => {
-    const live = buildA7_11(rows);
-    return persistedCycles[21]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[21], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  // 4. Somas Consecutivas
-  const aSoma17Cycles = useMemo(() => {
-    const live = buildASoma17(rows);
-    return persistedCycles[14]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[14], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const aSoma19Cycles = useMemo(() => {
-    const live = buildASoma19(rows);
-    return persistedCycles[15]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[15], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  const aSoma21Cycles = useMemo(() => {
-    const live = buildASoma21(rows);
-    return persistedCycles[16]?.length
-      ? mergePersistedWithLiveCycles(persistedCycles[16], live)
-      : live;
-  }, [rows, persistedCycles]);
-
-  // Persiste novos ciclos calculados ao vivo em segundo plano
-  useEffect(() => {
-    if (rows.length === 0) return;
-    const timer = setTimeout(() => {
-      const allLive: EngineCycle[] = [
-        ...a4Cycles,
-        ...a5Cycles,
-        ...a1Min1Cycles,
-        ...a2Min1Cycles,
-        ...a1Min2Cycles,
-        ...a2Min2Cycles,
-        ...a1Min3Cycles,
-        ...a2Min3Cycles,
-        ...a1Min4Cycles,
-        ...a2Min4Cycles,
-        ...a1Min5Cycles,
-        ...a2Min5Cycles,
-        ...a1Min6Cycles,
-        ...a2Min6Cycles,
-        ...a1Min7Cycles,
-        ...a2Min7Cycles,
-        ...a1Min8Cycles,
-        ...a2Min8Cycles,
-        ...a1Min9Cycles,
-        ...a3Cycles,
-        ...a2Cycles,
-        ...aSandwichPontasCycles,
-        ...aSandwichMeioCycles,
-        ...a8_11Cycles,
-        ...a11_11Cycles,
-        ...a4_11Cycles,
-        ...a4_14Cycles,
-        ...a7_11Cycles,
-        ...aSoma17Cycles,
-        ...aSoma19Cycles,
-        ...aSoma21Cycles,
-      ];
-      persistCyclesBatch(allLive).catch(() => {});
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [rows.length]);
+  const aSoma17Cycles = cyclesMap[14] || [];
+  const aSoma19Cycles = cyclesMap[15] || [];
+  const aSoma21Cycles = cyclesMap[16] || [];
 
   // Estatísticas agregadas para o seletor superior de pedras 0..14
   const stats = useMemo(() => {
@@ -779,37 +523,7 @@ export default function AnaliseSection() {
     ALL_NUMBERS.forEach((n) => (s[n] = { total: 0, fullyCompleted: 0, totalGaps: 0, sumGaps: 0 }));
 
     const allStoneLists = [
-      a4Cycles,
-      a5Cycles,
-      a1Min1Cycles,
-      a2Min1Cycles,
-      a1Min2Cycles,
-      a2Min2Cycles,
-      a1Min3Cycles,
-      a2Min3Cycles,
-      a1Min4Cycles,
-      a2Min4Cycles,
-      a1Min5Cycles,
-      a2Min5Cycles,
-      a1Min6Cycles,
-      a2Min6Cycles,
-      a1Min7Cycles,
-      a2Min7Cycles,
-      a1Min8Cycles,
-      a2Min8Cycles,
-      a1Min9Cycles,
-      a3Cycles,
-      a2Cycles,
-      aSandwichPontasCycles,
-      aSandwichMeioCycles,
-      a8_11Cycles,
-      a11_11Cycles,
-      a4_11Cycles,
-      a4_14Cycles,
-      a7_11Cycles,
-      aSoma17Cycles,
-      aSoma19Cycles,
-      aSoma21Cycles,
+      ...Object.values(cyclesMap),
       // 7 Quebras de Padrões de Cores (IDs 50 a 56)
       ...Object.values(detectAllColorPatternBreaks(rows)).map((brks) =>
         colorBreaksToCycles(brks, rows),
@@ -840,40 +554,7 @@ export default function AnaliseSection() {
       };
     });
     return finalStats;
-  }, [
-    a4Cycles,
-    a5Cycles,
-    a1Min1Cycles,
-    a2Min1Cycles,
-    a1Min2Cycles,
-    a2Min2Cycles,
-    a1Min3Cycles,
-    a2Min3Cycles,
-    a1Min4Cycles,
-    a2Min4Cycles,
-    a1Min5Cycles,
-    a2Min5Cycles,
-    a1Min6Cycles,
-    a2Min6Cycles,
-    a1Min7Cycles,
-    a2Min7Cycles,
-    a1Min8Cycles,
-    a2Min8Cycles,
-    a1Min9Cycles,
-    a3Cycles,
-    a2Cycles,
-    aSandwichPontasCycles,
-    aSandwichMeioCycles,
-    a8_11Cycles,
-    a11_11Cycles,
-    a4_11Cycles,
-    a4_14Cycles,
-    a7_11Cycles,
-    aSoma17Cycles,
-    aSoma19Cycles,
-    aSoma21Cycles,
-    rows,
-  ]);
+  }, [cyclesMap, rows]);
 
   const categories = [
     { id: "all", label: "Todas as Análises", icon: Sparkles },

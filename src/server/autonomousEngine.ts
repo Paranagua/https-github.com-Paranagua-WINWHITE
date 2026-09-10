@@ -3,38 +3,6 @@ import fs from "fs/promises";
 import path from "path";
 import { parseUtcDate } from "../lib/utils";
 import {
-  buildA2,
-  buildA3,
-  buildA4,
-  buildA5,
-  buildA8_11,
-  buildA11_11,
-  buildA4_11,
-  buildA4_14,
-  buildASoma17,
-  buildASoma19,
-  buildASoma21,
-  buildA1Minuto5,
-  buildA2Minuto5,
-  buildA1Minuto1,
-  buildA2Minuto1,
-  buildA1Minuto2,
-  buildA2Minuto2,
-  buildA1Minuto3,
-  buildA2Minuto3,
-  buildA1Minuto4,
-  buildA2Minuto4,
-  buildA1Minuto6,
-  buildA2Minuto6,
-  buildA1Minuto7,
-  buildA2Minuto7,
-  buildA1Minuto8,
-  buildA2Minuto8,
-  buildA1Minuto9,
-  buildASandwichPontas,
-  buildASandwichMeio,
-  buildA7_11,
-  buildSecondary,
   buildRecAlerts,
   checkHighTendency,
   computeTop,
@@ -43,6 +11,7 @@ import {
   type Cycle,
   type Row,
 } from "../lib/predictive";
+import { IncrementalPredictiveEngine } from "../lib/incrementalPredictiveEngine";
 import { computeAllSumTriggerProjections } from "../lib/sum19Strategies";
 import { computeConfirmationProjections } from "../lib/confirmationStrategies";
 import {
@@ -54,16 +23,11 @@ import {
 } from "../lib/signalHierarchy";
 import { computeAnalysisTendency, type RawTendencyCandidate } from "../lib/tendencias";
 import { auditSignalWithRounds, type AuditResultItem } from "../lib/signalAuditEngine";
-import {
-  detectAllColorPatternBreaks,
-  colorBreaksToCycles,
-  COLOR_PATTERNS,
-} from "../lib/colorPatternBreaks";
 import type { PredictiveSignal } from "../lib/signalsStore";
 import type { SignalHistoryEntry, AnalysisStat } from "../lib/signalStatsStore";
 import {
   persistCyclesBatch,
-  mergePersistedWithLiveCycles,
+  fetchPersistedCycles,
   fetchPersistedCyclesMap,
 } from "../lib/cyclePersistence";
 
@@ -119,6 +83,11 @@ class AutonomousAuditEngine {
   private lastCycleRefreshAt = 0;
   private activeCandidateSignals: PredictiveSignal[] = [];
 
+  // Motor preditivo incremental e buffer deslizante de rodadas recentes
+  private incrementalEngine = new IncrementalPredictiveEngine();
+  private lastProcessedId: number | null = null;
+  private rowsBuffer: Row[] = [];
+
   private state: AutonomousAuditState = {
     status: "idle",
     lastRunAt: null,
@@ -137,8 +106,16 @@ class AutonomousAuditEngine {
     this.refreshPersistedCycles().catch(() => {});
   }
 
+  public getCyclesMap(): Record<number, Cycle[]> {
+    return this.incrementalEngine.getAllCyclesMap();
+  }
+
   private async refreshPersistedCycles(): Promise<void> {
     try {
+      const persisted = await fetchPersistedCycles({ limit: 3000 }).catch(() => []);
+      if (persisted && persisted.length > 0) {
+        this.incrementalEngine.loadPersistedCycles(persisted);
+      }
       const mainIds = [
         2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
         30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
@@ -246,28 +223,70 @@ class AutonomousAuditEngine {
     this.isProcessing = true;
 
     try {
-      // 1. Carrega os últimos 3000 resultados da Blaze (ordem cronológica: mais antigo -> mais recente)
-      const { data, error } = await this.supabaseClient
-        .from("blaze_results")
-        .select("id, roll, color, created_at")
-        .order("id", { ascending: false })
-        .limit(3000);
+      let rowsToProcess: Row[] = [];
+      const now = new Date();
 
-      if (error) {
-        throw new Error(`blaze_results query failed: ${error.message}`);
+      if (this.lastProcessedId === null) {
+        // Inicialização: carrega os últimos 1500 resultados para aquecer o motor incremental
+        const { data, error } = await this.supabaseClient
+          .from("blaze_results")
+          .select("id, roll, color, created_at")
+          .order("id", { ascending: false })
+          .limit(1500);
+
+        if (error) {
+          throw new Error(`blaze_results initial query failed: ${error.message}`);
+        }
+        if (!data || data.length === 0) {
+          return;
+        }
+
+        const initialRows = (data as Row[]).slice().sort((a, b) => a.id - b.id);
+        const { dirtyCycles } = this.incrementalEngine.processBatch(initialRows);
+        if (dirtyCycles.length > 0) {
+          await persistCyclesBatch(dirtyCycles).catch(() => {});
+        }
+        this.lastProcessedId = initialRows[initialRows.length - 1].id;
+        this.rowsBuffer = initialRows.slice(-300);
+        rowsToProcess = initialRows;
+      } else {
+        // Modo incremental: consulta apenas novos giros com id > lastProcessedId
+        const { data, error } = await this.supabaseClient
+          .from("blaze_results")
+          .select("id, roll, color, created_at")
+          .gt("id", this.lastProcessedId)
+          .order("id", { ascending: true })
+          .limit(100);
+
+        if (error) {
+          throw new Error(`blaze_results incremental query failed: ${error.message}`);
+        }
+
+        if (data && data.length > 0) {
+          const newRows = data as Row[];
+          const { dirtyCycles } = this.incrementalEngine.processBatch(newRows);
+          if (dirtyCycles.length > 0) {
+            await persistCyclesBatch(dirtyCycles).catch(() => {});
+          }
+          this.lastProcessedId = newRows[newRows.length - 1].id;
+          this.rowsBuffer.push(...newRows);
+          if (this.rowsBuffer.length > 300) {
+            this.rowsBuffer.splice(0, this.rowsBuffer.length - 300);
+          }
+        }
+        rowsToProcess = this.rowsBuffer;
       }
-      if (!data || data.length === 0) {
+
+      if (rowsToProcess.length === 0) {
         return;
       }
 
-      const rows: Row[] = data.slice().sort((a, b) => a.id - b.id);
-      const latestRow = rows[rows.length - 1];
+      const engine = this.incrementalEngine.getAllCyclesMap();
+      const latestRow = rowsToProcess[rowsToProcess.length - 1];
       const highestId = latestRow ? latestRow.id : null;
 
-      const now = new Date();
-
       // Converte para formato de auditoria
-      const auditRounds: AuditResultItem[] = rows.map((r) => {
+      const auditRounds: AuditResultItem[] = rowsToProcess.map((r) => {
         const colorVal =
           String(r.color) === "0" ? "white" : String(r.color) === "1" ? "red" : "black";
         return {
@@ -279,10 +298,14 @@ class AutonomousAuditEngine {
       });
 
       // 2. Extrai candidatos brutos e projeções das estratégias
-      const { rawCandidates, tendencyCandidates } = this.extractRawCandidates(rows, now);
-      const sumProjections = computeAllSumTriggerProjections(rows);
-      const confProjections = computeConfirmationProjections(rows);
-      const recAlerts = buildRecAlerts(rows);
+      const { rawCandidates, tendencyCandidates } = this.extractRawCandidates(
+        engine,
+        rowsToProcess,
+        now,
+      );
+      const sumProjections = computeAllSumTriggerProjections(rowsToProcess);
+      const confProjections = computeConfirmationProjections(rowsToProcess);
+      const recAlerts = buildRecAlerts(rowsToProcess);
 
       const alertWindow = recAlerts.map((a) => ({
         type: a.type,
@@ -312,14 +335,14 @@ class AutonomousAuditEngine {
       const allAutonomousSignals = [...triggeredSignals, ...emAltaSignals];
 
       console.log(
-        `[AutonomousEngine] Cycle stats: rows=${rows.length}, sumProjections=${sumProjections.length}, rawCandidates=${rawCandidates.length}, tendencyCandidates=${tendencyCandidates.length}, triggeredSignals=${allAutonomousSignals.length}`,
+        `[AutonomousEngine] Cycle stats: rows=${rowsToProcess.length}, sumProjections=${sumProjections.length}, rawCandidates=${rawCandidates.length}, tendencyCandidates=${tendencyCandidates.length}, triggeredSignals=${allAutonomousSignals.length}`,
       );
 
       // 4. Mescla o ciclo de vida dos sinais (sem perder estados e respeitando transições)
       const mergedSignals = mergeSignalsLifecycle(
         this.state.activeSignals,
         allAutonomousSignals,
-        rows,
+        rowsToProcess,
         now.getTime(),
         {
           allowHistorical: true,
@@ -497,7 +520,7 @@ class AutonomousAuditEngine {
       this.state.lastRunAt = now.toISOString();
       this.state.error = null;
       this.state.debugInfo = {
-        rowsCount: rows.length,
+        rowsCount: rowsToProcess.length,
         sumProjectionsCount: sumProjections.length,
         rawCandidatesCount: rawCandidates.length,
         confProjectionsCount: confProjections.length,
@@ -682,55 +705,12 @@ class AutonomousAuditEngine {
   }
 
   private extractRawCandidates(
+    engine: Record<number, Cycle[]>,
     rows: Row[],
     now: Date,
   ): { rawCandidates: RawCandidate[]; tendencyCandidates: RawTendencyCandidate[] } {
     const rawCandidates: RawCandidate[] = [];
     const tendencyCandidates: RawTendencyCandidate[] = [];
-
-    const engine: Record<number, Cycle[]> = {
-      2: buildA2(rows),
-      3: buildA3(rows),
-      4: buildA4(rows),
-      5: buildA5(rows),
-      10: buildA8_11(rows),
-      11: buildA11_11(rows),
-      12: buildA4_11(rows),
-      13: buildA4_14(rows),
-      14: buildASoma17(rows),
-      15: buildASoma19(rows),
-      16: buildASoma21(rows),
-      17: buildA1Minuto5(rows),
-      18: buildA2Minuto5(rows),
-      19: buildASandwichPontas(rows),
-      20: buildASandwichMeio(rows),
-      21: buildA7_11(rows),
-      22: buildA1Minuto1(rows),
-      23: buildA2Minuto1(rows),
-      24: buildA1Minuto2(rows),
-      25: buildA2Minuto2(rows),
-      26: buildA1Minuto3(rows),
-      27: buildA2Minuto3(rows),
-      28: buildA1Minuto4(rows),
-      29: buildA2Minuto4(rows),
-      30: buildA1Minuto6(rows),
-      31: buildA2Minuto6(rows),
-      32: buildA1Minuto7(rows),
-      33: buildA2Minuto7(rows),
-      34: buildA1Minuto8(rows),
-      35: buildA2Minuto8(rows),
-      36: buildA1Minuto9(rows),
-    };
-
-    for (let i = 1; i <= 9; i++) {
-      engine[100 + i] = buildSecondary(rows, i);
-    }
-
-    const colorBreakCyclesMap = detectAllColorPatternBreaks(rows);
-    COLOR_PATTERNS.forEach((p) => {
-      const brks = colorBreakCyclesMap[p.id] || [];
-      engine[p.analysisId] = colorBreaksToCycles(brks, rows);
-    });
 
     const recAlerts = buildRecAlerts(rows);
 
@@ -739,14 +719,6 @@ class AutonomousAuditEngine {
       2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
       30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
     ];
-
-    // Mescla com ciclos persistidos prévios (mantendo cálculo em tempo real como fallback)
-    mainIds.forEach((a) => {
-      const persisted = this.persistedCyclesCache[a];
-      if (persisted && persisted.length > 0) {
-        engine[a] = mergePersistedWithLiveCycles(persisted, engine[a] || []);
-      }
-    });
 
     mainIds.forEach((a) => {
       const cycles = engine[a] || [];
@@ -763,18 +735,6 @@ class AutonomousAuditEngine {
         activeList.push({ analysis: a, value, open });
       });
     });
-
-    // Salva ciclos recentes e abertos de forma idempotente
-    const cyclesToPersist: Cycle[] = [];
-    mainIds.forEach((a) => {
-      const list = engine[a];
-      if (list && list.length > 0) {
-        cyclesToPersist.push(...list.slice(-10));
-      }
-    });
-    if (cyclesToPersist.length > 0) {
-      persistCyclesBatch(cyclesToPersist).catch(() => {});
-    }
 
     for (const item of activeList) {
       const allCycles = (engine[item.analysis] || []).filter((c) => c.value === item.value);
