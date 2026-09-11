@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
 import { type Cycle, MAX_ZEROS, TIMEOUT_MINUTES } from "@/lib/predictive";
 
 export type PersistedCycleRecord = {
@@ -174,6 +174,7 @@ export async function persistCyclesBatch(
  */
 export async function fetchPersistedCycles(options?: {
   analysis?: number;
+  analyses?: number[];
   value?: number;
   limit?: number;
 }): Promise<Cycle[]> {
@@ -185,6 +186,8 @@ export async function fetchPersistedCycles(options?: {
     const base = isNode ? "http://localhost:3000" : "";
     const params = new URLSearchParams();
     if (options?.analysis !== undefined) params.set("analysis", String(options.analysis));
+    if (options?.analyses && options.analyses.length > 0)
+      params.set("analyses", options.analyses.join(","));
     if (options?.value !== undefined) params.set("value", String(options.value));
     params.set("limit", String(limit));
 
@@ -200,22 +203,36 @@ export async function fetchPersistedCycles(options?: {
   }
 
   try {
-    let query = (supabase as any)
-      .from("predictive_cycles")
-      .select("*")
-      .order("trigger_at", { ascending: false })
-      .limit(limit);
+    let offset = 0;
+    const PAGE_SIZE = 1000;
+    const allFetched: PersistedCycleRecord[] = [];
 
-    if (options?.analysis !== undefined) {
-      query = query.eq("analysis", options.analysis);
-    }
-    if (options?.value !== undefined) {
-      query = query.eq("value", options.value);
+    while (allFetched.length < limit) {
+      const pageSize = Math.min(PAGE_SIZE, limit - allFetched.length);
+      let query = (supabase as any)
+        .from("predictive_cycles")
+        .select("*")
+        .order("trigger_at", { ascending: false })
+        .range(offset, offset + pageSize - 1);
+
+      if (options?.analysis !== undefined) {
+        query = query.eq("analysis", options.analysis);
+      } else if (options?.analyses && options.analyses.length > 0) {
+        query = query.in("analysis", options.analyses);
+      }
+      if (options?.value !== undefined) {
+        query = query.eq("value", options.value);
+      }
+
+      const { data, error } = await query;
+      if (error || !data || data.length === 0) break;
+      allFetched.push(...(data as PersistedCycleRecord[]));
+      offset += data.length;
+      if (data.length < pageSize) break;
     }
 
-    const { data, error } = await query;
-    if (!error && Array.isArray(data) && data.length > 0) {
-      return (data as PersistedCycleRecord[]).map(recordToCycle);
+    if (allFetched.length > 0) {
+      return allFetched.map(recordToCycle);
     }
   } catch {
     // Retorna do cache em memória se disponível
@@ -225,6 +242,8 @@ export async function fetchPersistedCycles(options?: {
   const fromCache: Cycle[] = [];
   memoryCyclesCache.forEach((c) => {
     if (options?.analysis !== undefined && c.analysis !== options.analysis) return;
+    if (options?.analyses && options.analyses.length > 0 && !options.analyses.includes(c.analysis))
+      return;
     if (options?.value !== undefined && c.value !== options.value) return;
     fromCache.push(c);
   });
@@ -236,7 +255,7 @@ export async function fetchPersistedCycles(options?: {
  */
 export async function fetchPersistedCyclesMap(
   analysisIds: number[],
-  limitPerAnalysis = 50,
+  limitPerAnalysis = 100,
 ): Promise<Record<number, Cycle[]>> {
   const result: Record<number, Cycle[]> = {};
   for (const id of analysisIds) {
@@ -244,7 +263,10 @@ export async function fetchPersistedCyclesMap(
   }
 
   try {
-    const list = await fetchPersistedCycles({ limit: analysisIds.length * limitPerAnalysis });
+    const list = await fetchPersistedCycles({
+      analyses: analysisIds,
+      limit: Math.max(5000, analysisIds.length * limitPerAnalysis),
+    });
     for (const c of list) {
       if (result[c.analysis]) {
         result[c.analysis].push(c);

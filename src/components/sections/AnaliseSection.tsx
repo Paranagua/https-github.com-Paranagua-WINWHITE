@@ -397,6 +397,23 @@ export default function AnaliseSection() {
     async function loadData() {
       try {
         setLoading(true);
+        // 1. Carrega ciclos históricos da fonte de verdade (Supabase) antes dos giros
+        const mainAnalysisIds = [
+          2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+          29, 30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
+        ];
+        try {
+          const map = await fetchPersistedCyclesMap(mainAnalysisIds, 100);
+          if (alive && Object.keys(map).length > 0) {
+            const allList = Object.values(map).flat();
+            incrementalEngineRef.current.loadPersistedCycles(allList);
+            setCyclesMap(incrementalEngineRef.current.getAllCyclesMap());
+          }
+        } catch {
+          // Fallback silencioso para prosseguir com o carregamento dos giros
+        }
+
+        // 2. Carrega os últimos 500 resultados para alimentação incremental da janela viva
         const { data, error } = await supabase
           .from("blaze_results")
           .select("id, roll, color, created_at")

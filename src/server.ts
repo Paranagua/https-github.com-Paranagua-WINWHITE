@@ -80,6 +80,8 @@ export default {
       }
 
       if (url.pathname === "/api/public/predictive-cycles") {
+        const { blazeSupabase } = await import("./integrations/supabase/blaze-client");
+
         if (request.method === "POST") {
           let saved = 0;
           try {
@@ -87,18 +89,60 @@ export default {
               .clone()
               .json()
               .catch(() => null);
-            if (body && Array.isArray(body.records)) {
-              saved = predictiveCyclesStore.upsertBatch(body.records);
-              // Tenta persistir no Supabase via admin/client
-              try {
-                const { supabaseAdmin } = await import("./integrations/supabase/client.server");
-                if (supabaseAdmin) {
-                  await (supabaseAdmin as any)
-                    .from("predictive_cycles")
-                    .upsert(body.records, { onConflict: "cycle_key" });
+            const rawRecords: any[] = Array.isArray(body)
+              ? body
+              : Array.isArray(body?.records)
+                ? body.records
+                : [];
+
+            if (rawRecords.length > 0) {
+              const validRecords = rawRecords
+                .filter(
+                  (r) =>
+                    r &&
+                    typeof r.cycle_key === "string" &&
+                    r.cycle_key.length > 0 &&
+                    r.analysis !== undefined &&
+                    r.value !== undefined,
+                )
+                .map((r) => ({
+                  cycle_key: String(r.cycle_key),
+                  analysis: Number(r.analysis),
+                  analysis_code: r.analysis_code ? String(r.analysis_code) : `A${r.analysis}`,
+                  analysis_name: r.analysis_name
+                    ? String(r.analysis_name)
+                    : `Análise ${r.analysis}`,
+                  value: Number(r.value),
+                  trigger_at: new Date(r.trigger_at).toISOString(),
+                  gaps: Array.isArray(r.gaps) ? r.gaps.map(Number) : [],
+                  total_whites: Array.isArray(r.gaps) ? r.gaps.length : Number(r.total_whites) || 0,
+                  first_white_gap:
+                    Array.isArray(r.gaps) && r.gaps.length > 0
+                      ? Number(r.gaps[0])
+                      : r.first_white_gap !== undefined
+                        ? Number(r.first_white_gap)
+                        : null,
+                  status: r.status === "concluido" || r.status === "timeout" ? r.status : "aberto",
+                  updated_at: new Date().toISOString(),
+                }));
+
+              if (validRecords.length > 0) {
+                // 1. Persistência na fonte de verdade (Supabase: public.predictive_cycles)
+                const { error } = await blazeSupabase
+                  .from("predictive_cycles")
+                  .upsert(validRecords, { onConflict: "cycle_key" });
+
+                if (!error) {
+                  saved = validRecords.length;
+                } else {
+                  console.warn(
+                    "[Server] Error upserting to Supabase predictive_cycles:",
+                    error.message,
+                  );
                 }
-              } catch {
-                // Silencioso se migration ainda não foi executada no banco remoto
+
+                // 2. Atualiza cache em memória
+                predictiveCyclesStore.upsertBatch(validRecords);
               }
             }
           } catch (e) {
@@ -117,41 +161,66 @@ export default {
         const analysis = url.searchParams.get("analysis")
           ? Number(url.searchParams.get("analysis"))
           : undefined;
+        const analysesParam = url.searchParams.get("analyses");
+        const analyses = analysesParam
+          ? analysesParam
+              .split(",")
+              .map(Number)
+              .filter((n) => !Number.isNaN(n))
+          : undefined;
         const value = url.searchParams.get("value")
           ? Number(url.searchParams.get("value"))
           : undefined;
-        const limit = url.searchParams.get("limit") ? Number(url.searchParams.get("limit")) : 300;
+        const limitParam = url.searchParams.get("limit");
+        const limit = limitParam ? Math.min(Math.max(1, Number(limitParam)), 50000) : 5000;
 
-        let cycles = predictiveCyclesStore.getCycles({ analysis, value, limit });
+        let cycles: any[] = [];
 
-        // Se cache em memória estiver vazio, tenta carregar do Supabase
-        if (cycles.length === 0) {
-          try {
-            const { supabaseAdmin } = await import("./integrations/supabase/client.server");
-            if (supabaseAdmin) {
-              let q = (supabaseAdmin as any)
-                .from("predictive_cycles")
-                .select("*")
-                .order("trigger_at", { ascending: false })
-                .limit(limit);
-              if (analysis !== undefined) q = q.eq("analysis", analysis);
-              if (value !== undefined) q = q.eq("value", value);
-              const { data } = await q;
-              if (data && Array.isArray(data)) {
-                predictiveCyclesStore.upsertBatch(data);
-                cycles = data;
-              }
+        // 1. Consulta primeiro a fonte de verdade (Supabase)
+        try {
+          let offset = 0;
+          const PAGE_SIZE = 1000;
+
+          while (cycles.length < limit) {
+            const pageSize = Math.min(PAGE_SIZE, limit - cycles.length);
+            let q = blazeSupabase
+              .from("predictive_cycles")
+              .select("*")
+              .order("trigger_at", { ascending: false })
+              .range(offset, offset + pageSize - 1);
+
+            if (analysis !== undefined && !Number.isNaN(analysis)) {
+              q = q.eq("analysis", analysis);
+            } else if (analyses && analyses.length > 0) {
+              q = q.in("analysis", analyses);
             }
-          } catch {
-            // Ignora se tabela ainda não existir no remoto
+            if (value !== undefined && !Number.isNaN(value)) q = q.eq("value", value);
+
+            const { data, error } = await q;
+            if (error || !data || data.length === 0) break;
+
+            cycles.push(...data);
+            offset += data.length;
+            if (data.length < pageSize) break;
           }
+
+          if (cycles.length > 0) {
+            predictiveCyclesStore.upsertBatch(cycles);
+          }
+        } catch {
+          // fallback para memória
+        }
+
+        // 2. Fallback para cache em memória se Supabase não retornou dados
+        if (cycles.length === 0) {
+          cycles = predictiveCyclesStore.getCycles({ analysis, value, limit });
         }
 
         return new Response(JSON.stringify(cycles), {
           status: 200,
           headers: {
             "Content-Type": "application/json",
-            "Cache-Control": "public, max-age=5",
+            "Cache-Control": "no-store, no-cache, must-revalidate",
             "Access-Control-Allow-Origin": "*",
           },
         });

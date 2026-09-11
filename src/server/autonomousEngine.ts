@@ -100,10 +100,26 @@ class AutonomousAuditEngine {
   };
 
   constructor() {
-    this.loadPersistedState().catch((err) => {
-      console.warn("[AutonomousEngine] Could not load persisted state:", err.message);
+    // Inicialização assíncrona protegida por initPromise
+    this.initialize().catch((err) => {
+      console.warn("[AutonomousEngine] Initialization error:", err);
     });
-    this.refreshPersistedCycles().catch(() => {});
+  }
+
+  private initPromise: Promise<void> | null = null;
+
+  public async initialize(): Promise<void> {
+    if (!this.initPromise) {
+      this.initPromise = (async () => {
+        // 1. Carrega estado persistido
+        await this.loadPersistedState().catch((err) => {
+          console.warn("[AutonomousEngine] Could not load persisted state:", err.message);
+        });
+        // 2. Carrega ciclos persistidos do Supabase e reidrata o IncrementalPredictiveEngine
+        await this.refreshPersistedCycles();
+      })();
+    }
+    return this.initPromise;
   }
 
   public getCyclesMap(): Record<number, Cycle[]> {
@@ -112,15 +128,18 @@ class AutonomousAuditEngine {
 
   private async refreshPersistedCycles(): Promise<void> {
     try {
-      const persisted = await fetchPersistedCycles({ limit: 3000 }).catch(() => []);
+      const persisted = await fetchPersistedCycles({ limit: 10000 }).catch(() => []);
       if (persisted && persisted.length > 0) {
         this.incrementalEngine.loadPersistedCycles(persisted);
+        console.log(
+          `[AutonomousEngine] Rehydrated IncrementalPredictiveEngine with ${persisted.length} persisted cycles.`,
+        );
       }
       const mainIds = [
         2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
         30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
       ];
-      this.persistedCyclesCache = await fetchPersistedCyclesMap(mainIds, 40);
+      this.persistedCyclesCache = await fetchPersistedCyclesMap(mainIds, 100);
       this.lastCycleRefreshAt = Date.now();
     } catch (err) {
       console.warn("[AutonomousEngine] Could not refresh persisted cycles:", err);
@@ -168,6 +187,11 @@ class AutonomousAuditEngine {
     this.isRunning = true;
     this.state.status = "running";
     console.log("[AutonomousEngine] Starting autonomous signal & audit worker...");
+
+    // Garante inicialização completa antes de executar o primeiro ciclo
+    await this.initialize().catch((err) => {
+      console.error("[AutonomousEngine] Initialize error on start:", err);
+    });
 
     // Execute first cycle immediately
     await this.runCycle().catch((err) => {
@@ -223,6 +247,8 @@ class AutonomousAuditEngine {
     this.isProcessing = true;
 
     try {
+      await this.initialize().catch(() => {});
+
       let rowsToProcess: Row[] = [];
       const now = new Date();
 
