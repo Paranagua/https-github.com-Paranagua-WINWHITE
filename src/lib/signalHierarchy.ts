@@ -96,9 +96,12 @@ export function extractSignalStrategies(sig: any): string[] {
     }
   }
 
-  // 5. Escaneia confluence e label para capturar pares de soma (14-5, 10-7, etc.) — estratégias "E" desativadas nas confluências
+  // 5. Escaneia confluence e label para capturar F2 e pares de soma (14-5, 10-7, etc.) — estratégias "E" desativadas nas confluências
   const textToScan = `${sig.confluence || ""} ${sig.label || ""}`;
   if (textToScan) {
+    if (/\bF2\b/i.test(textToScan)) {
+      list.push("F2");
+    }
     // Procura por pares de soma como 14-5, 10-9, 11-8, 12-7, 6-13, 8-11, 10-7, 8-9, 11-6, 5-12, 13-4, 14-3
     const sumMatches = textToScan.match(/\b\d+-\d+\b/g);
     if (sumMatches) {
@@ -124,8 +127,12 @@ export function extractSignalStrategies(sig: any): string[] {
     }
   }
 
-  // Ordena somas numéricas (ex: 89, 107, 109, 145...)
-  result.sort((a, b) => a.localeCompare(b));
+  // Ordena F2 primeiro e depois somas numéricas (ex: F2, 89, 107, 109, 145...)
+  result.sort((a, b) => {
+    if (a === "F2") return -1;
+    if (b === "F2") return 1;
+    return a.localeCompare(b);
+  });
 
   return result;
 }
@@ -966,6 +973,8 @@ export const PRIMARY_SIGNAL_ANALYSIS_IDS = new Set<number>([
   14, 15, 16,
   // Quebra de Padrões de Cores
   50, 51, 52, 53, 54, 55, 56,
+  // Estratégia F2
+  202,
 ]);
 
 export function isPrimarySignalAnalysis(analysisId: number): boolean {
@@ -973,6 +982,9 @@ export function isPrimarySignalAnalysis(analysisId: number): boolean {
 }
 
 export function getAnalysisGroupName(analysisId: number): string {
+  if (analysisId === 202) {
+    return "Estratégia F2";
+  }
   if (analysisId === 2 || analysisId === 19 || analysisId === 20) {
     return "Padrões de Pedra";
   }
@@ -998,6 +1010,9 @@ export function getAnalysisGroupName(analysisId: number): string {
 }
 
 export function formatAnalysisCode(analysisId: number): string {
+  if (analysisId === 202) {
+    return "F2";
+  }
   if (analysisId >= 101 && analysisId <= 115) {
     return `E${analysisId - 100}`;
   }
@@ -1283,18 +1298,29 @@ export function buildStrategyTriggeredSignals(
     }));
 
     // Regra do Usuário: Estratégias "E" desativadas nas confluências.
-    // Apenas as estratégias de soma =17&19 (Soma 17 e Soma 19) atuam como confluência Top 2/3:
+    // Ativas as estratégias de soma =17&19 (Soma 17 e Soma 19) e a Estratégia F2 como confluência:
     matchingSumProjections.forEach((sp, sIdx) => {
-      const numericCode = parseInt(formatStrategyCode(sp.code), 10) || sIdx + 1;
-      const sumBase = sp.sumType === "Soma 17" ? 20000 : 30000;
-      allSources.push({
-        analysis: sumBase + numericCode,
-        value: numericCode,
-        pct: 78.0,
-        top3: true,
-        rank: 2,
-        cycleKey: sp.id || `SUM_${sp.code}_T${sp.targetTimestamp}`,
-      });
+      if (sp.code === "F2" || sp.sumType === "F2") {
+        allSources.push({
+          analysis: 202,
+          value: (sp as any).pProx || 4,
+          pct: 95.0,
+          top3: true,
+          rank: 1,
+          cycleKey: sp.id || `F2_${sp.targetTimestamp}`,
+        });
+      } else {
+        const numericCode = parseInt(formatStrategyCode(sp.code), 10) || sIdx + 1;
+        const sumBase = sp.sumType === "Soma 17" ? 20000 : 30000;
+        allSources.push({
+          analysis: sumBase + numericCode,
+          value: numericCode,
+          pct: 78.0,
+          top3: true,
+          rank: 2,
+          cycleKey: sp.id || `SUM_${sp.code}_T${sp.targetTimestamp}`,
+        });
+      }
     });
 
     // Estratégias confirmadas na janela: vazio pois estratégias "E" estão desativadas nas confluências

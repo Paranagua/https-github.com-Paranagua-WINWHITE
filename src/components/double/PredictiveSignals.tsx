@@ -28,6 +28,7 @@ import {
 } from "@/lib/signalHierarchy";
 import { computeAnalysisTendency, type RawTendencyCandidate } from "@/lib/tendencias";
 import { computeAllSumTriggerProjections } from "@/lib/sum19Strategies";
+import { computeF2TriggerProjections, buildF2Signals } from "@/lib/f2Strategy";
 import { computeConfirmationProjections } from "@/lib/confirmationStrategies";
 import {
   detectAllColorPatternBreaks,
@@ -219,12 +220,16 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
 
   const primarySources = (s.sources || []).filter((src: any) => {
     const a = src.analysis;
-    return [2, 19, 20, 10, 11, 12, 13, 21, 14, 15, 16, 50, 51, 52, 53, 54, 55, 56].includes(a);
+    return [2, 19, 20, 10, 11, 12, 13, 21, 14, 15, 16, 50, 51, 52, 53, 54, 55, 56, 202].includes(a);
   });
   const primaryCodes: string[] = Array.from(
     new Set<string>(
       primarySources.map((src: any) =>
-        src.analysis >= 50 && src.analysis <= 56 ? `Q${src.analysis - 49}` : `A${src.analysis}`,
+        src.analysis === 202
+          ? "F2"
+          : src.analysis >= 50 && src.analysis <= 56
+            ? `Q${src.analysis - 49}`
+            : `A${src.analysis}`,
       ),
     ),
   ).filter((code) => !/^T[_-]/i.test(code));
@@ -232,7 +237,7 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
     primaryCodes.length === 0 &&
     s.strategyKey &&
     typeof s.strategyKey === "string" &&
-    /^[AQ]\d+/i.test(s.strategyKey) &&
+    (/^[AQ]\d+/i.test(s.strategyKey) || s.strategyKey.toUpperCase() === "F2") &&
     !/^T[_-]/i.test(s.strategyKey)
   ) {
     primaryCodes.push(s.strategyKey.toUpperCase());
@@ -922,7 +927,15 @@ export function PredictiveSignals() {
         now.getTime(),
       );
 
-      const allGeneratedSignals = [...strategySignals, ...emAltaSignalsGenerated];
+      // 5. Geração de Sinais da Estratégia F2 (com suporte total a confluências e sem duplicação)
+      const f2Projections = computeF2TriggerProjections(rows);
+      const f2Signals = buildF2Signals(f2Projections, rows, now.getTime(), {
+        existingSignals: strategySignals,
+        sumProjections,
+        confluenceCandidates: rawCandidates,
+      });
+
+      const allGeneratedSignals = [...strategySignals, ...emAltaSignalsGenerated, ...f2Signals];
 
       // Constrói lista m1 (sinais elegíveis)
       const m1: Mode1Signal[] = allGeneratedSignals.map((s) => {

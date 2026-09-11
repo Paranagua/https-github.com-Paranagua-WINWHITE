@@ -185,11 +185,13 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             if (clean === "13-4") keysToUpdate.add("S17_13-4");
             if (clean === "4-13") keysToUpdate.add("S17_4-13");
             if (clean === "3-14" || clean === "14-3") keysToUpdate.add("S17_14-3");
+            if (clean === "F2") keysToUpdate.add("F2");
           }
           if (Array.isArray(signal.confirmedStrategies)) {
             signal.confirmedStrategies.forEach((cs) => {
               if (cs && cs.code) {
                 keysToUpdate.add(cs.code);
+                if (cs.code === "F2") keysToUpdate.add("F2");
               }
             });
           }
@@ -197,7 +199,9 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             signal.sources.forEach((src) => {
               if (src && src.analysis) {
                 let code = "";
-                if (src.analysis >= 101 && src.analysis <= 115) {
+                if (src.analysis === 202) {
+                  code = "F2";
+                } else if (src.analysis >= 101 && src.analysis <= 115) {
                   code = `E${src.analysis - 100}`;
                 } else if (src.analysis >= 50 && src.analysis <= 56) {
                   code = `Q${src.analysis - 49}`;

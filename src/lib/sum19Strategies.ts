@@ -1,11 +1,12 @@
 import { parseUtcDate } from "./utils";
 import type { ResultItemInput } from "./signalAuditEngine";
+import { computeF2TriggerProjections, type F2TriggerProjection } from "./f2Strategy";
 
 export interface SumTriggerProjection {
   id: string;
-  code: string; // "10-9", "9-10", "11-8", "8-11", "12-7", "7-12", "6-13", "13-6", "14-5", "5-14", "10-7", "7-10", "8-9", "9-8"
+  code: string; // "10-9", "9-10", "11-8", "8-11", "12-7", "7-12", "6-13", "13-6", "14-5", "5-14", "10-7", "7-10", "8-9", "9-8", "F2"
   name: string;
-  sumType: "Soma 19" | "Soma 17";
+  sumType: "Soma 19" | "Soma 17" | "F2" | string;
   description: string;
   triggerDate: Date;
   targetDate: Date;
@@ -15,6 +16,8 @@ export interface SumTriggerProjection {
   previousRolls?: number[];
   baseMinuteText: string;
   sumFormulaText: string;
+  pProx?: number;
+  giros?: number;
 }
 
 export type Sum19TriggerProjection = SumTriggerProjection;
@@ -672,12 +675,13 @@ export function computeSum17TriggerProjections(
 }
 
 /**
- * Calcula todas as projeções de estratégias de soma de gatilho (Soma 19 + Soma 17).
+ * Calcula todas as projeções de estratégias de gatilho (Soma 19 + Soma 17 + F2).
  */
 export function computeAllSumTriggerProjections(
   results: ResultItemInput[] | any[],
 ): SumTriggerProjection[] {
   const sum19 = computeSum19TriggerProjections(results);
   const sum17 = computeSum17TriggerProjections(results);
-  return [...sum19, ...sum17];
+  const f2 = computeF2TriggerProjections(results);
+  return [...sum19, ...sum17, ...f2];
 }

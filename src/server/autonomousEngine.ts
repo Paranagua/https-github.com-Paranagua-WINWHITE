@@ -13,6 +13,7 @@ import {
 } from "../lib/predictive";
 import { IncrementalPredictiveEngine } from "../lib/incrementalPredictiveEngine";
 import { computeAllSumTriggerProjections } from "../lib/sum19Strategies";
+import { computeF2TriggerProjections, buildF2Signals } from "../lib/f2Strategy";
 import { computeConfirmationProjections } from "../lib/confirmationStrategies";
 import {
   buildStrategyTriggeredSignals,
@@ -358,10 +359,20 @@ class AutonomousAuditEngine {
 
       const emAltaSignals = buildEmAltaSignals(tendencyCandidates, triggeredSignals, now.getTime());
 
-      const allAutonomousSignals = [...triggeredSignals, ...emAltaSignals];
+      // 4. Constrói sinais disparados pela Estratégia F2 para envio autônomo (com suporte a confluências)
+      const f2Projections = computeF2TriggerProjections(rowsToProcess);
+      const f2Signals = buildF2Signals(f2Projections, rowsToProcess, now.getTime(), {
+        allowHistorical: true,
+        minTargetTime: now.getTime() - 5 * 3600_000,
+        existingSignals: triggeredSignals,
+        sumProjections,
+        confluenceCandidates: rawCandidates,
+      });
+
+      const allAutonomousSignals = [...triggeredSignals, ...emAltaSignals, ...f2Signals];
 
       console.log(
-        `[AutonomousEngine] Cycle stats: rows=${rowsToProcess.length}, sumProjections=${sumProjections.length}, rawCandidates=${rawCandidates.length}, tendencyCandidates=${tendencyCandidates.length}, triggeredSignals=${allAutonomousSignals.length}`,
+        `[AutonomousEngine] Cycle stats: rows=${rowsToProcess.length}, sumProjections=${sumProjections.length}, f2Projections=${f2Projections.length}, rawCandidates=${rawCandidates.length}, tendencyCandidates=${tendencyCandidates.length}, triggeredSignals=${allAutonomousSignals.length}`,
       );
 
       // 4. Mescla o ciclo de vida dos sinais (sem perder estados e respeitando transições)
@@ -677,11 +688,15 @@ class AutonomousAuditEngine {
       if (clean === "13-4") keysToUpdate.add("S17_13-4");
       if (clean === "4-13") keysToUpdate.add("S17_4-13");
       if (clean === "3-14" || clean === "14-3") keysToUpdate.add("S17_14-3");
+      if (clean === "F2") keysToUpdate.add("F2");
     }
 
     if (Array.isArray(signal.confirmedStrategies)) {
       signal.confirmedStrategies.forEach((cs) => {
-        if (cs && cs.code) keysToUpdate.add(cs.code);
+        if (cs && cs.code) {
+          keysToUpdate.add(cs.code);
+          if (cs.code === "F2") keysToUpdate.add("F2");
+        }
       });
     }
 
@@ -689,7 +704,9 @@ class AutonomousAuditEngine {
       signal.sources.forEach((src) => {
         if (src && src.analysis) {
           let code = "";
-          if (src.analysis >= 101 && src.analysis <= 115) {
+          if (src.analysis === 202) {
+            code = "F2";
+          } else if (src.analysis >= 101 && src.analysis <= 115) {
             code = `E${src.analysis - 100}`;
           } else if (src.analysis >= 50 && src.analysis <= 56) {
             code = `Q${src.analysis - 49}`;
