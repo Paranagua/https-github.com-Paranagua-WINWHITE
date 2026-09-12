@@ -33,14 +33,15 @@ import type { Row } from "@/lib/predictive";
 
 interface PrimaryAnalysisMetadataItem {
   key: string;
-  analysisId: number;
+  analysisId?: number;
   name: string;
   shortLabel: string;
-  category: "pedras" | "sequencia" | "somas" | "cores" | "minutos";
+  category: "pedras" | "sequencia" | "somas" | "cores" | "minutos" | "estrategias";
   categoryLabel: string;
   badge: string;
   description: string;
   minute?: number;
+  strategyGroup?: "f2" | "soma19" | "soma17" | "confirmacao";
 }
 
 const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
@@ -463,6 +464,308 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
     description: "2ª pedra nos minutos de final 9 (09, 19, 29...)",
     minute: 9,
   },
+
+  // 6. Estratégias Ativas (F2, Somas 19, Somas 17, Confirmações E1 a E15)
+  // Estratégia F2
+  {
+    key: "F2",
+    analysisId: 202,
+    name: "Estratégia F2 · Virada de Cor",
+    shortLabel: "F2",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Disparo automático após quebra de fluxo com 2 cores consecutivas alternadas.",
+    strategyGroup: "f2",
+  },
+  // Somas 19
+  {
+    key: "S19_10-9",
+    name: "Soma 19 · 10-9 / 9-10",
+    shortLabel: "10-9",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Gatilho de soma 19 pelo par consecutivo 10 e 9.",
+    strategyGroup: "soma19",
+  },
+  {
+    key: "S19_11-8",
+    name: "Soma 19 · 11-8",
+    shortLabel: "11-8",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Gatilho de soma 19 pelo par consecutivo 11 e 8.",
+    strategyGroup: "soma19",
+  },
+  {
+    key: "S19_8-11",
+    name: "Soma 19 · 8-11",
+    shortLabel: "8-11",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Gatilho de soma 19 pelo par consecutivo 8 e 11.",
+    strategyGroup: "soma19",
+  },
+  {
+    key: "S19_12-7",
+    name: "Soma 19 · 12-7 / 7-12",
+    shortLabel: "12-7",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Gatilho de soma 19 pelo par consecutivo 12 e 7.",
+    strategyGroup: "soma19",
+  },
+  {
+    key: "S19_6-13",
+    name: "Soma 19 · 6-13 / 13-6",
+    shortLabel: "6-13",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Gatilho de soma 19 pelo par consecutivo 6 e 13.",
+    strategyGroup: "soma19",
+  },
+  {
+    key: "S19_14-5",
+    name: "Soma 19 · 14-5 / 5-14",
+    shortLabel: "14-5",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Gatilho de soma 19 pelo par consecutivo 14 e 5.",
+    strategyGroup: "soma19",
+  },
+  // Somas 17
+  {
+    key: "S17_10-7",
+    name: "Soma 17 · 10-7 / 7-10",
+    shortLabel: "10-7",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Gatilho de soma 17 pelo par consecutivo 10 e 7.",
+    strategyGroup: "soma17",
+  },
+  {
+    key: "S17_8-9",
+    name: "Soma 17 · 8-9 / 9-8",
+    shortLabel: "8-9",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Gatilho de soma 17 pelo par consecutivo 8 e 9.",
+    strategyGroup: "soma17",
+  },
+  {
+    key: "S17_11-6",
+    name: "Soma 17 · 11-6",
+    shortLabel: "11-6",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Gatilho de soma 17 pelo par consecutivo 11 e 6.",
+    strategyGroup: "soma17",
+  },
+  {
+    key: "S17_5-12",
+    name: "Soma 17 · 5-12",
+    shortLabel: "5-12",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Gatilho de soma 17 pelo par consecutivo 5 e 12.",
+    strategyGroup: "soma17",
+  },
+  {
+    key: "S17_13-4",
+    name: "Soma 17 · 13-4",
+    shortLabel: "13-4",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Gatilho de soma 17 pelo par consecutivo 13 e 4.",
+    strategyGroup: "soma17",
+  },
+  {
+    key: "S17_14-3",
+    name: "Soma 17 · 14-3",
+    shortLabel: "14-3",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Gatilho de soma 17 pelo par consecutivo 14 e 3.",
+    strategyGroup: "soma17",
+  },
+  // Confirmações E1 a E15
+  {
+    key: "E1",
+    analysisId: 101,
+    name: "Estratégia E1 · Pedras 3-5-6-7",
+    shortLabel: "E1",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Confirmação ativa para as pedras 3, 5, 6 e 7.",
+    strategyGroup: "confirmacao",
+  },
+  {
+    key: "E2",
+    analysisId: 102,
+    name: "Estratégia E2 · Pedras 2-3-4-8-11",
+    shortLabel: "E2",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Confirmação ativa para as pedras 2, 3, 4, 8 e 11.",
+    strategyGroup: "confirmacao",
+  },
+  {
+    key: "E3",
+    analysisId: 103,
+    name: "Estratégia E3 · Pedras 1-2-6-8-9",
+    shortLabel: "E3",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Confirmação ativa para as pedras 1, 2, 6, 8 e 9.",
+    strategyGroup: "confirmacao",
+  },
+  {
+    key: "E4",
+    analysisId: 104,
+    name: "Estratégia E4 · Pedras 2-5-7-10-13",
+    shortLabel: "E4",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Confirmação ativa para as pedras 2, 5, 7, 10 e 13.",
+    strategyGroup: "confirmacao",
+  },
+  {
+    key: "E5",
+    analysisId: 105,
+    name: "Estratégia E5 · Pedras 1-5-6-8-9",
+    shortLabel: "E5",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Confirmação ativa para as pedras 1, 5, 6, 8 e 9.",
+    strategyGroup: "confirmacao",
+  },
+  {
+    key: "E6",
+    analysisId: 106,
+    name: "Estratégia E6 · Pedras 1-4-8-12-13",
+    shortLabel: "E6",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Confirmação ativa para as pedras 1, 4, 8, 12 e 13.",
+    strategyGroup: "confirmacao",
+  },
+  {
+    key: "E7",
+    analysisId: 107,
+    name: "Estratégia E7 · Pedras 3-5-7-8-14",
+    shortLabel: "E7",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Confirmação ativa para as pedras 3, 5, 7, 8 e 14.",
+    strategyGroup: "confirmacao",
+  },
+  {
+    key: "E8",
+    analysisId: 108,
+    name: "Estratégia E8 · Pedras 2-4-8-9-11",
+    shortLabel: "E8",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Confirmação ativa para as pedras 2, 4, 8, 9 e 11.",
+    strategyGroup: "confirmacao",
+  },
+  {
+    key: "E9",
+    analysisId: 109,
+    name: "Estratégia E9 · Pedras 2-4-6-10-14",
+    shortLabel: "E9",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Confirmação ativa para as pedras 2, 4, 6, 10 e 14.",
+    strategyGroup: "confirmacao",
+  },
+  {
+    key: "E10",
+    analysisId: 110,
+    name: "Estratégia E10 · Pedras 2-5-9-10-13",
+    shortLabel: "E10",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Confirmação ativa para as pedras 2, 5, 9, 10 e 13.",
+    strategyGroup: "confirmacao",
+  },
+  {
+    key: "E11",
+    analysisId: 111,
+    name: "Estratégia E11 · Pedras 3-5-6-7-10",
+    shortLabel: "E11",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Confirmação ativa para as pedras 3, 5, 6, 7 e 10.",
+    strategyGroup: "confirmacao",
+  },
+  {
+    key: "E12",
+    analysisId: 112,
+    name: "Estratégia E12 · Pedras 1-2-6-8-11",
+    shortLabel: "E12",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Confirmação ativa para as pedras 1, 2, 6, 8 e 11.",
+    strategyGroup: "confirmacao",
+  },
+  {
+    key: "E13",
+    analysisId: 113,
+    name: "Estratégia E13 · Pedras 4-6-7-8-12",
+    shortLabel: "E13",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Confirmação ativa para as pedras 4, 6, 7, 8 e 12.",
+    strategyGroup: "confirmacao",
+  },
+  {
+    key: "E14",
+    analysisId: 114,
+    name: "Estratégia E14 · Pedras 1-3-4-7-13",
+    shortLabel: "E14",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Confirmação ativa para as pedras 1, 3, 4, 7 e 13.",
+    strategyGroup: "confirmacao",
+  },
+  {
+    key: "E15",
+    analysisId: 115,
+    name: "Estratégia E15 · Pedras 2-4-6-9-11",
+    shortLabel: "E15",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: "Confirmação ativa para as pedras 2, 4, 6, 9 e 11.",
+    strategyGroup: "confirmacao",
+  },
 ];
 
 type Result = {
@@ -505,6 +808,7 @@ function getSignalTypeBadge(sig: {
   isSupreme?: boolean;
   isRare?: boolean;
   isAlavancagem?: boolean;
+  isEmAlta?: boolean;
   isTop1?: boolean;
   confluence?: string;
   label?: string;
@@ -519,6 +823,25 @@ function getSignalTypeBadge(sig: {
   const cat = (sig.category || "").toLowerCase();
   const label = (sig.label || "").toUpperCase();
   const conf = (sig.confluence || "").toUpperCase();
+
+  // 🔥 Grupo EM ALTA (Recebe sinais exclusivos de Tendência 3/3)
+  if (
+    sig.isEmAlta ||
+    cat === "em_alta" ||
+    cat.includes("em_alta") ||
+    cat.includes("alta") ||
+    label.includes("EM ALTA") ||
+    conf.includes("EM ALTA") ||
+    (typeof sig.key === "string" && sig.key.startsWith("EM_ALTA_")) ||
+    label.startsWith("TENDÊNCIA 3/3")
+  ) {
+    return {
+      name: "Em Alta",
+      short: "Em Alta",
+      icon: "🔥",
+      badgeClass: "bg-orange-500/20 border-orange-500/40 text-orange-400 font-black",
+    };
+  }
 
   const top1Sources = (sig.sources || []).filter((s: any) => !s.top3 && !s.top5);
   const top3Sources = (sig.sources || []).filter((s: any) => s.top3 || s.top5);
@@ -644,9 +967,12 @@ function SinaisSectionContent() {
   const [predictiveList, setPredictiveList] = useState<PredictiveSignal[]>(getPredictiveSignals());
   const [auditFilter, setAuditFilter] = useState<"geral" | "hoje">("geral");
   const [primaryTabFilter, setPrimaryTabFilter] = useState<
-    "todas" | "pedras" | "sequencia" | "somas" | "cores" | "minutos"
+    "todas" | "pedras" | "sequencia" | "somas" | "cores" | "minutos" | "estrategias"
   >("todas");
   const [selectedMinuteFilter, setSelectedMinuteFilter] = useState<number | null>(null);
+  const [selectedStrategyGroup, setSelectedStrategyGroup] = useState<
+    "todas" | "f2" | "soma19" | "soma17" | "confirmacao"
+  >("todas");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [selectedAnalysisForDetail, setSelectedAnalysisForDetail] =
     useState<PrimaryAnalysisInfo | null>(null);
@@ -792,9 +1118,9 @@ function SinaisSectionContent() {
     };
   }, []);
 
-  // Estatísticas de Visão Geral: alimentadas em tempo real agrupadas pelas 18 ANÁLISES PRIMÁRIAS
+  // Estatísticas de Visão Geral: alimentadas em tempo real agrupadas pelas 18 ANÁLISES PRIMÁRIAS + ESTRATÉGIAS
   const primaryAnalysisStats = useMemo(() => {
-    // Agrega a partir de recentSignals para contagem exata por análise primária
+    // Agrega a partir de recentSignals para contagem exata por análise primária ou estratégia
     const countsByKey: Record<string, { wins: number; losses: number }> = {};
 
     ALL_PRIMARY_ANALYSES_METADATA.forEach((m) => {
@@ -832,14 +1158,58 @@ function SinaisSectionContent() {
         if (direct) matchedKeys.add(direct.key);
       }
 
+      // Mapeamento via sig.strategies (array de códigos)
+      if (Array.isArray((sig as any).strategies)) {
+        (sig as any).strategies.forEach((st: string) => {
+          if (!st) return;
+          const stUpper = st.toUpperCase();
+          const m = ALL_PRIMARY_ANALYSES_METADATA.find(
+            (item) =>
+              item.category === "estrategias" &&
+              (item.key.toUpperCase() === stUpper ||
+                item.shortLabel.toUpperCase() === stUpper ||
+                item.key.replace(/^(S19_|S17_)/, "").toUpperCase() === stUpper),
+          );
+          if (m) matchedKeys.add(m.key);
+        });
+      }
+
+      // Mapeamento via sig.confirmedStrategies
+      if (Array.isArray(sig.confirmedStrategies)) {
+        sig.confirmedStrategies.forEach((cs: any) => {
+          const code = (cs?.code || cs?.name || "").toUpperCase();
+          if (code) {
+            const m = ALL_PRIMARY_ANALYSES_METADATA.find(
+              (item) =>
+                item.category === "estrategias" &&
+                (item.key.toUpperCase() === code || item.shortLabel.toUpperCase() === code),
+            );
+            if (m) matchedKeys.add(m.key);
+          }
+        });
+      }
+
       // Mapeamento via sig.confluence ou sig.label
       const confText = `${sig.confluence || ""} ${sig.label || ""}`.toUpperCase();
       ALL_PRIMARY_ANALYSES_METADATA.forEach((item) => {
-        const code = item.key.toUpperCase();
-        const altCode = `A${item.analysisId}`;
-        const re = new RegExp(`\\b(${code}|${altCode})\\b`, "i");
-        if (re.test(confText)) {
-          matchedKeys.add(item.key);
+        if (item.category === "estrategias") {
+          const code = item.key.toUpperCase();
+          const cleanCode = item.key.replace(/^(S19_|S17_)/, "").toUpperCase();
+          const shortCode = item.shortLabel.toUpperCase();
+          if (
+            confText.includes(code) ||
+            confText.includes(cleanCode) ||
+            confText.includes(shortCode)
+          ) {
+            matchedKeys.add(item.key);
+          }
+        } else {
+          const code = item.key.toUpperCase();
+          const altCode = `A${item.analysisId}`;
+          const re = new RegExp(`\\b(${code}|${altCode})\\b`, "i");
+          if (re.test(confText)) {
+            matchedKeys.add(item.key);
+          }
         }
       });
 
@@ -855,10 +1225,17 @@ function SinaisSectionContent() {
     return ALL_PRIMARY_ANALYSES_METADATA.map((m) => {
       const fromRecent = countsByKey[m.key] || { wins: 0, losses: 0 };
       const s = stats[m.key];
-      const sAlt = stats[`A${m.analysisId}`];
+      const sAlt = m.analysisId ? stats[`A${m.analysisId}`] : undefined;
+      const sClean = stats[m.key.replace(/^(S19_|S17_)/, "")];
+      const sShort = stats[m.shortLabel];
 
-      const storeWins = (s?.green || 0) + (sAlt && sAlt !== s ? sAlt.green : 0);
-      const storeLosses = (s?.red || 0) + (sAlt && sAlt !== s ? sAlt.red : 0);
+      const storeWins = Math.max(
+        s?.green || 0,
+        sAlt?.green || 0,
+        sClean?.green || 0,
+        sShort?.green || 0,
+      );
+      const storeLosses = Math.max(s?.red || 0, sAlt?.red || 0, sClean?.red || 0, sShort?.red || 0);
 
       const wins = Math.max(fromRecent.wins, storeWins);
       const losses = Math.max(fromRecent.losses, storeLosses);
@@ -875,6 +1252,7 @@ function SinaisSectionContent() {
         badge: m.badge,
         description: m.description,
         minute: m.minute,
+        strategyGroup: m.strategyGroup,
         assertividade,
         wins,
         losses,
@@ -891,8 +1269,11 @@ function SinaisSectionContent() {
     if (primaryTabFilter === "minutos" && selectedMinuteFilter !== null) {
       list = list.filter((s) => s.minute === selectedMinuteFilter);
     }
+    if (primaryTabFilter === "estrategias" && selectedStrategyGroup !== "todas") {
+      list = list.filter((s) => s.strategyGroup === selectedStrategyGroup);
+    }
     return list;
-  }, [primaryAnalysisStats, primaryTabFilter, selectedMinuteFilter]);
+  }, [primaryAnalysisStats, primaryTabFilter, selectedMinuteFilter, selectedStrategyGroup]);
 
   const primaryOverallSummary = useMemo(() => {
     let totalWins = 0;
@@ -931,6 +1312,52 @@ function SinaisSectionContent() {
     );
   }, [selectedAnalysisForDetail, primaryAnalysisStats]);
 
+  function extractSignalStrategies(sig: any): string[] {
+    const list = new Set<string>();
+    if (Array.isArray(sig.strategies)) {
+      sig.strategies.forEach((st: string) => {
+        if (typeof st === "string" && st.trim()) list.add(st.trim());
+      });
+    }
+    if (Array.isArray(sig.confirmedStrategies)) {
+      sig.confirmedStrategies.forEach((cs: any) => {
+        const code = cs?.code || cs?.name;
+        if (typeof code === "string" && code.trim()) list.add(code.trim());
+      });
+    }
+    if (typeof sig.strategyKey === "string" && sig.strategyKey.trim()) {
+      list.add(sig.strategyKey.trim());
+    }
+    const text = `${sig.label || ""} ${sig.confluence || ""}`.toUpperCase();
+    for (let i = 1; i <= 15; i++) {
+      const re = new RegExp(`\\bE${i}\\b`);
+      if (re.test(text)) list.add(`E${i}`);
+    }
+    if (/\bF2\b/.test(text)) list.add("F2");
+    const sums19 = ["10-9", "9-10", "11-8", "8-11", "12-7", "7-12", "6-13", "13-6", "14-5", "5-14"];
+    sums19.forEach((pair) => {
+      if (text.includes(pair)) list.add(pair);
+    });
+    const sums17 = [
+      "10-7",
+      "7-10",
+      "8-9",
+      "9-8",
+      "11-6",
+      "6-11",
+      "5-12",
+      "12-5",
+      "13-4",
+      "4-13",
+      "14-3",
+      "3-14",
+    ];
+    sums17.forEach((pair) => {
+      if (text.includes(pair)) list.add(pair);
+    });
+    return Array.from(list);
+  }
+
   // Auditoria dos sinais preditivos contra os resultados reais (Regra rigorosa de 6 rodadas: M-1, M, M+1)
   useEffect(() => {
     try {
@@ -962,22 +1389,33 @@ function SinaisSectionContent() {
 
             // Executa a conferência matemática estrita das 6 rodadas
             const auditResult = auditSignalWithRounds(s, resultsForValidation || []);
-            const cat =
-              (s as any).category ||
-              (s.isAlavancagem
-                ? "alavancagem"
-                : s.isSupreme
-                  ? "supreme"
-                  : s.isRare
-                    ? "rare"
-                    : s.isTop1
-                      ? "top1_isolated"
-                      : undefined);
+            const isEmAltaSignal =
+              (s as any).isEmAlta === true ||
+              (s as any).category === "em_alta" ||
+              (typeof s.key === "string" && s.key.startsWith("EM_ALTA_")) ||
+              (typeof s.label === "string" &&
+                (s.label.toUpperCase().includes("EM ALTA") ||
+                  s.label.startsWith("Tendência 3/3"))) ||
+              (typeof s.confluence === "string" && s.confluence.toUpperCase().includes("EM ALTA"));
+
+            const cat = isEmAltaSignal
+              ? "em_alta"
+              : (s as any).category ||
+                (s.isAlavancagem
+                  ? "alavancagem"
+                  : s.isSupreme
+                    ? "supreme"
+                    : s.isRare
+                      ? "rare"
+                      : s.isTop1
+                        ? "top1_isolated"
+                        : undefined);
 
             const isNoConf =
-              (s as any).isNoConfluence ||
-              cat === "no_confluence" ||
-              (s.confluence && s.confluence.includes("Sem Confluência"));
+              !isEmAltaSignal &&
+              ((s as any).isNoConfluence ||
+                cat === "no_confluence" ||
+                (s.confluence && s.confluence.includes("Sem Confluência")));
 
             if (auditResult.outcome === "green") {
               if (s.outcome !== "green") {
@@ -992,6 +1430,7 @@ function SinaisSectionContent() {
                     resultTime: auditResult.resultTime,
                     strategyKey: s.strategyKey,
                     confirmedStrategies: s.confirmedStrategies,
+                    strategies: extractSignalStrategies(s),
                     targetTime: s.time,
                     windowLabel: auditResult.audit.windowLabel,
                     checkedResults: auditResult.audit.checkedResults,
@@ -1000,10 +1439,11 @@ function SinaisSectionContent() {
                     audit: auditResult.audit,
                     sources: s.sources,
                     category: cat,
-                    isSupreme: s.isSupreme,
-                    isRare: s.isRare,
-                    isAlavancagem: s.isAlavancagem,
-                    isTop1: s.isTop1,
+                    isSupreme: isEmAltaSignal ? false : s.isSupreme,
+                    isRare: isEmAltaSignal ? false : s.isRare,
+                    isAlavancagem: isEmAltaSignal ? false : s.isAlavancagem,
+                    isEmAlta: isEmAltaSignal,
+                    isTop1: isEmAltaSignal ? false : s.isTop1,
                   });
                 }
               }
@@ -1030,6 +1470,7 @@ function SinaisSectionContent() {
                     confluence: s.confluence,
                     strategyKey: s.strategyKey,
                     confirmedStrategies: s.confirmedStrategies,
+                    strategies: extractSignalStrategies(s),
                     targetTime: s.time,
                     windowLabel: auditResult.audit.windowLabel,
                     checkedResults: auditResult.audit.checkedResults,
@@ -1038,10 +1479,11 @@ function SinaisSectionContent() {
                     audit: auditResult.audit,
                     sources: s.sources,
                     category: cat,
-                    isSupreme: s.isSupreme,
-                    isRare: s.isRare,
-                    isAlavancagem: s.isAlavancagem,
-                    isTop1: s.isTop1,
+                    isSupreme: isEmAltaSignal ? false : s.isSupreme,
+                    isRare: isEmAltaSignal ? false : s.isRare,
+                    isAlavancagem: isEmAltaSignal ? false : s.isAlavancagem,
+                    isEmAlta: isEmAltaSignal,
+                    isTop1: isEmAltaSignal ? false : s.isTop1,
                   });
                 }
               }
@@ -1203,14 +1645,41 @@ function SinaisSectionContent() {
 
               <div className="flex bg-black/40 p-1 rounded-lg border border-white/5">
                 <button
-                  onClick={() => setAuditFilter("geral")}
-                  className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-md transition-all ${auditFilter === "geral" ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-white/40 hover:text-white/60"}`}
+                  onClick={() => {
+                    setAuditFilter("geral");
+                    if (primaryTabFilter === "estrategias") {
+                      setPrimaryTabFilter("todas");
+                    }
+                  }}
+                  className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-md transition-all ${
+                    auditFilter === "geral" && primaryTabFilter !== "estrategias"
+                      ? "bg-primary text-white shadow-lg shadow-primary/20"
+                      : "text-white/40 hover:text-white/60"
+                  }`}
                 >
                   Visão Geral
                 </button>
                 <button
+                  onClick={() => {
+                    setAuditFilter("geral");
+                    setPrimaryTabFilter("estrategias");
+                    setSelectedStrategyGroup("todas");
+                  }}
+                  className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-md transition-all ${
+                    auditFilter === "geral" && primaryTabFilter === "estrategias"
+                      ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30"
+                      : "text-white/40 hover:text-white/60"
+                  }`}
+                >
+                  Estratégias
+                </button>
+                <button
                   onClick={() => setAuditFilter("hoje")}
-                  className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-md transition-all ${auditFilter === "hoje" ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-white/40 hover:text-white/60"}`}
+                  className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-md transition-all ${
+                    auditFilter === "hoje"
+                      ? "bg-primary text-white shadow-lg shadow-primary/20"
+                      : "text-white/40 hover:text-white/60"
+                  }`}
                 >
                   Rodadas Atuais (10 Sinais)
                 </button>
@@ -1298,6 +1767,21 @@ function SinaisSectionContent() {
                       Minutos (0 a 9) (
                       {primaryAnalysisStats.filter((s) => s.category === "minutos").length})
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPrimaryTabFilter("estrategias");
+                        setSelectedStrategyGroup("todas");
+                      }}
+                      className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                        primaryTabFilter === "estrategias"
+                          ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                          : "text-purple-400/50 hover:text-purple-300"
+                      }`}
+                    >
+                      Estratégias (
+                      {primaryAnalysisStats.filter((s) => s.category === "estrategias").length})
+                    </button>
                   </div>
 
                   {/* Resumo consolidado de todas as análises primárias */}
@@ -1374,6 +1858,71 @@ function SinaisSectionContent() {
                   </div>
                 )}
 
+                {/* Subfiltro de Grupos de Estratégia quando a aba Estratégias estiver ativa */}
+                {primaryTabFilter === "estrategias" && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1 pb-1">
+                    <span className="text-[10px] uppercase font-bold text-purple-400/70 tracking-wider mr-1">
+                      Grupo:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedStrategyGroup("todas")}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
+                        selectedStrategyGroup === "todas"
+                          ? "bg-purple-500/30 text-purple-200 border border-purple-500/40"
+                          : "bg-white/5 text-white/50 hover:text-white/80"
+                      }`}
+                    >
+                      Todas (
+                      {primaryAnalysisStats.filter((s) => s.category === "estrategias").length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedStrategyGroup("f2")}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
+                        selectedStrategyGroup === "f2"
+                          ? "bg-purple-500/30 text-purple-200 border border-purple-500/40"
+                          : "bg-white/5 text-white/50 hover:text-white/80"
+                      }`}
+                    >
+                      F2 (1)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedStrategyGroup("soma19")}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
+                        selectedStrategyGroup === "soma19"
+                          ? "bg-purple-500/30 text-purple-200 border border-purple-500/40"
+                          : "bg-white/5 text-white/50 hover:text-white/80"
+                      }`}
+                    >
+                      Soma 19 (6)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedStrategyGroup("soma17")}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
+                        selectedStrategyGroup === "soma17"
+                          ? "bg-purple-500/30 text-purple-200 border border-purple-500/40"
+                          : "bg-white/5 text-white/50 hover:text-white/80"
+                      }`}
+                    >
+                      Soma 17 (6)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedStrategyGroup("confirmacao")}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
+                        selectedStrategyGroup === "confirmacao"
+                          ? "bg-purple-500/30 text-purple-200 border border-purple-500/40"
+                          : "bg-white/5 text-white/50 hover:text-white/80"
+                      }`}
+                    >
+                      Confirmações E1-E15 (15)
+                    </button>
+                  </div>
+                )}
+
                 {/* Dica interativa para o usuário */}
                 <div className="flex items-center justify-between px-1 text-[11px] text-muted-foreground/80">
                   <span className="flex items-center gap-1.5">
@@ -1416,7 +1965,9 @@ function SinaisSectionContent() {
                                     ? "Somas"
                                     : s.category === "cores"
                                       ? "Quebra Cores"
-                                      : "Minutos"}
+                                      : s.category === "estrategias"
+                                        ? "Estratégia"
+                                        : "Minutos"}
                             </span>
                             <span className="text-[10px] font-mono font-black text-white/60">
                               {s.shortLabel}

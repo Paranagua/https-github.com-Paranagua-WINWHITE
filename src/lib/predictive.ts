@@ -444,12 +444,16 @@ export function buildA7_11(rows: Row[]): Cycle[] {
 }
 
 /**
- * ALERTA "POSSÍVEL REC": 7-14, 4-7, 5-14
+ * ALERTA "POSSÍVEL REC":
+ * 1) Padrões específicos de pedras: 7-14, 4-7, 5-14
+ * 2) Espaço com mais de 24 giros seguidos sem o zero
  */
 export function buildRecAlerts(
   rows: Row[],
 ): Array<{ type: string; triggerAt: Date; duration: number }> {
   const alerts: Array<{ type: string; triggerAt: Date; duration: number }> = [];
+
+  // 1) Padrões específicos de pedras
   for (let i = 1; i < rows.length; i++) {
     const p1 = Number(rows[i - 1].roll);
     const p2 = Number(rows[i].roll);
@@ -459,6 +463,60 @@ export function buildRecAlerts(
     if (p1 === 4 && p2 === 7) alerts.push({ type: "4-7", triggerAt: dt, duration: 9 });
     if (p1 === 5 && p2 === 14) alerts.push({ type: "5-14", triggerAt: dt, duration: 14 });
   }
+
+  // 2) Espaço com mais de 24 giros seguidos sem o zero
+  let nonZeroCount = 0;
+  let streakTriggerIdx = -1;
+
+  for (let i = 0; i < rows.length; i++) {
+    const roll = Number(rows[i].roll);
+    const isZero = roll === 0 || rows[i].color === "white";
+
+    if (!isZero) {
+      nonZeroCount++;
+      if (nonZeroCount === 25) {
+        // Marca o gatilho a partir do 25º giro sem zero (espaço com mais de 24 giros)
+        streakTriggerIdx = i;
+      }
+    } else {
+      // Encontrou o zero! Fecha a janela do alerta se ultrapassou 24 giros
+      if (nonZeroCount > 24 && streakTriggerIdx >= 0) {
+        const triggerAt = parseUtcDate(rows[streakTriggerIdx].created_at);
+        const endDt = parseUtcDate(rows[i].created_at);
+        if (!Number.isNaN(triggerAt.getTime()) && !Number.isNaN(endDt.getTime())) {
+          const durationMinutes = Math.max(
+            1,
+            Math.ceil((endDt.getTime() - triggerAt.getTime()) / 60000),
+          );
+          alerts.push({
+            type: ">24-sem-zero",
+            triggerAt,
+            duration: durationMinutes,
+          });
+        }
+      }
+      nonZeroCount = 0;
+      streakTriggerIdx = -1;
+    }
+  }
+
+  // Se o histórico termina com sequência aberta com mais de 24 giros sem zero (alerta em vigor no momento):
+  if (nonZeroCount > 24 && streakTriggerIdx >= 0 && rows.length > 0) {
+    const triggerAt = parseUtcDate(rows[streakTriggerIdx].created_at);
+    const lastDt = parseUtcDate(rows[rows.length - 1].created_at);
+    if (!Number.isNaN(triggerAt.getTime()) && !Number.isNaN(lastDt.getTime())) {
+      const elapsedMinutes = Math.max(
+        0,
+        Math.ceil((lastDt.getTime() - triggerAt.getTime()) / 60000),
+      );
+      alerts.push({
+        type: ">24-sem-zero",
+        triggerAt,
+        duration: elapsedMinutes + 30,
+      });
+    }
+  }
+
   return alerts;
 }
 

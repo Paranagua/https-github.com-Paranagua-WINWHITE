@@ -61,10 +61,10 @@ import {
 
 export interface PrimaryAnalysisInfo {
   key: string;
-  analysisId: number;
+  analysisId?: number;
   name: string;
   shortLabel: string;
-  category: "pedras" | "sequencia" | "somas" | "cores" | "minutos";
+  category: "pedras" | "sequencia" | "somas" | "cores" | "minutos" | "estrategias";
   categoryLabel: string;
   badge: string;
   description: string;
@@ -102,7 +102,7 @@ interface AnalysisStonesModalProps {
   stats: Record<string, AnalysisStat>;
 }
 
-function getCyclesForAnalysis(key: string, id: number, rows: Row[]): Cycle[] {
+function getCyclesForAnalysis(key: string, id: number | undefined, rows: Row[]): Cycle[] {
   if (!rows || rows.length === 0) return [];
   try {
     switch (key) {
@@ -207,7 +207,7 @@ function getCyclesForAnalysis(key: string, id: number, rows: Row[]): Cycle[] {
         if (id === 35) return buildA2Minuto8(rows);
         if (id === 36) return buildA1Minuto9(rows);
         if (id === 3) return buildA3(rows);
-        if (id >= 50 && id <= 56) {
+        if (typeof id === "number" && id >= 50 && id <= 56) {
           const map: Record<number, string> = {
             50: "alternados",
             51: "alt_continuos_2x2",
@@ -405,6 +405,51 @@ export function AnalysisStonesModal({
     });
   }, [stoneStats, filterMode]);
 
+  // Sinais auditados específicos para a estratégia ativa selecionada
+  const strategySignals = useMemo(() => {
+    if (!analysis || analysis.category !== "estrategias") return [];
+    const keyClean = analysis.key.replace(/^(S19_|S17_)/, "").toUpperCase();
+    const altClean = keyClean.replace("-", "");
+    const shortClean = (analysis.shortLabel || "").toUpperCase();
+    return recentSignals.filter((sig) => {
+      if (sig.outcome !== "green" && sig.outcome !== "red") return false;
+      const strats = (sig.strategies || []).map((s) => s.toUpperCase());
+      if (
+        strats.includes(keyClean) ||
+        strats.includes(altClean) ||
+        (shortClean && strats.includes(shortClean))
+      ) {
+        return true;
+      }
+      if (
+        sig.strategyKey?.toUpperCase() === keyClean ||
+        sig.strategyKey?.toUpperCase() === altClean ||
+        (shortClean && sig.strategyKey?.toUpperCase() === shortClean)
+      ) {
+        return true;
+      }
+      if (Array.isArray(sig.confirmedStrategies)) {
+        if (
+          sig.confirmedStrategies.some((cs: any) => {
+            const c = (cs?.code || cs?.name || "").toUpperCase();
+            return c === keyClean || c === altClean || (shortClean && c === shortClean);
+          })
+        ) {
+          return true;
+        }
+      }
+      const txt = `${sig.label || ""} ${sig.confluence || ""}`.toUpperCase();
+      if (
+        txt.includes(keyClean) ||
+        txt.includes(altClean) ||
+        (shortClean && txt.includes(shortClean))
+      ) {
+        return true;
+      }
+      return false;
+    });
+  }, [analysis, recentSignals]);
+
   if (!analysis) return null;
 
   return (
@@ -424,15 +469,16 @@ export function AnalysisStonesModal({
                   {analysis.shortLabel}
                 </span>
                 <span className="text-[11px] text-muted-foreground">
-                  Assertividade das 14 Pedras & Branco (0 a 14)
+                  {analysis.category === "estrategias"
+                    ? "Auditoria Detalhada de Estratégia Ativa"
+                    : "Assertividade das 14 Pedras & Branco (0 a 14)"}
                 </span>
               </div>
               <DialogTitle className="text-xl sm:text-2xl font-black font-outfit text-white tracking-tight">
                 {analysis.name}
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                {analysis.description} • Auditoria de sinais enviados e percentual preditivo por
-                pedra
+                {analysis.description} • Auditoria de sinais enviados e assertividade
               </DialogDescription>
             </div>
 
@@ -470,276 +516,466 @@ export function AnalysisStonesModal({
             </div>
           </div>
 
-          {/* Barra de Filtros das Pedras */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-4 mt-2 border-t border-white/5">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setFilterMode("todas")}
-                className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                  filterMode === "todas"
-                    ? "bg-white/15 text-white shadow-sm"
-                    : "text-white/50 hover:text-white hover:bg-white/5"
-                }`}
-              >
-                Todas as 15 Pedras (0-14)
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterMode("sinais")}
-                className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                  filterMode === "sinais"
-                    ? "bg-primary text-white shadow-sm"
-                    : "text-white/50 hover:text-white hover:bg-white/5"
-                }`}
-              >
-                Com Sinais Enviados ({stoneStats.filter((s) => s.totalSignals > 0).length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterMode("elegiveis")}
-                className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                  filterMode === "elegiveis"
-                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                    : "text-emerald-400/60 hover:text-emerald-300 hover:bg-emerald-500/10"
-                }`}
-              >
-                Top 1 Elegíveis 80-100% ({stoneStats.filter((s) => s.status === "elegivel").length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterMode("branco")}
-                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                  filterMode === "branco"
-                    ? "bg-white text-zinc-950 font-black shadow-sm"
-                    : "text-white/70 hover:text-white hover:bg-white/10"
-                }`}
-              >
-                <span className="h-2 w-2 rounded-full bg-white border border-zinc-400" />
-                Branco (0)
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterMode("vermelho")}
-                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                  filterMode === "vermelho"
-                    ? "bg-red-500 text-white font-black shadow-sm"
-                    : "text-red-400/70 hover:text-red-300 hover:bg-red-500/10"
-                }`}
-              >
-                <span className="h-2 w-2 rounded-full bg-red-500" />
-                Vermelhos (1-7)
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterMode("preto")}
-                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                  filterMode === "preto"
-                    ? "bg-zinc-700 text-white font-black shadow-sm"
-                    : "text-zinc-400 hover:text-white hover:bg-white/5"
-                }`}
-              >
-                <span className="h-2 w-2 rounded-full bg-zinc-800 border border-white/40" />
-                Pretos (8-14)
-              </button>
-            </div>
-
-            <span className="text-[10px] text-muted-foreground font-mono">
-              Exibindo {filteredStones.length} de 15 pedras
-            </span>
-          </div>
-        </DialogHeader>
-
-        {/* Corpo do Modal: Grid de Pedras */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
-            {filteredStones.map((item) => {
-              const hasSignals = item.totalSignals > 0;
-              const winRate = item.assertividadeSignals !== null ? item.assertividadeSignals : 0;
-
-              return (
-                <div
-                  key={item.stone}
-                  className={`flex flex-col justify-between p-4 rounded-xl border transition-all ${
-                    item.status === "elegivel"
-                      ? "bg-emerald-950/15 border-emerald-500/30 hover:border-emerald-500/50"
-                      : item.status === "confluencia"
-                        ? "bg-amber-950/15 border-amber-500/30 hover:border-amber-500/50"
-                        : "bg-white/[0.02] border-white/5 hover:border-white/15"
+          {analysis.category !== "estrategias" ? (
+            /* Barra de Filtros das Pedras */
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-4 mt-2 border-t border-white/5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setFilterMode("todas")}
+                  className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                    filterMode === "todas"
+                      ? "bg-white/15 text-white shadow-sm"
+                      : "text-white/50 hover:text-white hover:bg-white/5"
                   }`}
                 >
-                  <div>
-                    {/* Topo do Card da Pedra */}
-                    <div className="flex items-center justify-between gap-2 mb-3">
-                      {/* Emblema da Pedra da Roleta */}
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`w-9 h-9 rounded-full flex items-center justify-center font-black font-outfit text-sm select-none shadow-md ${
-                            item.stone === 0
-                              ? "bg-white text-zinc-950 shadow-[0_0_12px_rgba(255,255,255,0.4)] border border-white"
-                              : item.color === "red"
-                                ? "bg-red-600 text-white shadow-[0_0_10px_rgba(220,38,38,0.35)]"
-                                : "bg-zinc-800 text-white border border-white/20 shadow-[0_0_10px_rgba(0,0,0,0.5)]"
-                          }`}
-                        >
-                          {item.stone}
-                        </div>
-                        <div>
-                          <span className="text-xs font-black text-white block leading-tight">
-                            Pedra {item.stone}
-                          </span>
-                          <span className="text-[9px] uppercase font-bold text-muted-foreground block">
-                            {item.stone === 0
-                              ? "Branco (14x)"
-                              : item.color === "red"
-                                ? "Vermelho (2x)"
-                                : "Preto (2x)"}
-                          </span>
-                        </div>
-                      </div>
+                  Todas as 15 Pedras (0-14)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterMode("sinais")}
+                  className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                    filterMode === "sinais"
+                      ? "bg-primary text-white shadow-sm"
+                      : "text-white/50 hover:text-white hover:bg-white/5"
+                  }`}
+                >
+                  Com Sinais Enviados ({stoneStats.filter((s) => s.totalSignals > 0).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterMode("elegiveis")}
+                  className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                    filterMode === "elegiveis"
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                      : "text-emerald-400/60 hover:text-emerald-300 hover:bg-emerald-500/10"
+                  }`}
+                >
+                  Top 1 Elegíveis 80-100% (
+                  {stoneStats.filter((s) => s.status === "elegivel").length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterMode("branco")}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                    filterMode === "branco"
+                      ? "bg-white text-zinc-950 font-black shadow-sm"
+                      : "text-white/70 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  <span className="h-2 w-2 rounded-full bg-white border border-zinc-400" />
+                  Branco (0)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterMode("vermelho")}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                    filterMode === "vermelho"
+                      ? "bg-red-500 text-white font-black shadow-sm"
+                      : "text-red-400/70 hover:text-red-300 hover:bg-red-500/10"
+                  }`}
+                >
+                  <span className="h-2 w-2 rounded-full bg-red-500" />
+                  Vermelhos (1-7)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterMode("preto")}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                    filterMode === "preto"
+                      ? "bg-zinc-700 text-white font-black shadow-sm"
+                      : "text-zinc-400 hover:text-white hover:bg-white/5"
+                  }`}
+                >
+                  <span className="h-2 w-2 rounded-full bg-zinc-800 border border-white/40" />
+                  Pretos (8-14)
+                </button>
+              </div>
 
-                      {/* Status de Elegibilidade */}
-                      <span
-                        className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${
-                          item.status === "elegivel"
-                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                            : item.status === "confluencia"
-                              ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                              : item.status === "baixa"
-                                ? "bg-zinc-800 text-zinc-400 border-zinc-700"
-                                : "bg-red-500/10 text-red-400 border-red-500/20"
-                        }`}
-                      >
-                        {item.status === "elegivel"
-                          ? "Top 1 Primário"
-                          : item.status === "confluencia"
-                            ? "Confluência"
-                            : item.status === "baixa"
-                              ? "Abaixo 75%"
-                              : "Bloqueada"}
-                      </span>
-                    </div>
+              <span className="text-[10px] text-muted-foreground font-mono">
+                Exibindo {filteredStones.length} de 15 pedras
+              </span>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 mt-2 border-t border-white/5">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-emerald-300 font-bold">Monitoramento Ativo 24/7</span>
+                <span>• Motor autônomo auditando todos os giros</span>
+              </div>
+              <span className="text-[10px] text-muted-foreground font-mono">
+                {strategySignals.length} sinais auditados nesta sessão
+              </span>
+            </div>
+          )}
+        </DialogHeader>
 
-                    {/* Bloco 1: Auditoria de Sinais Reais Enviados */}
-                    <div className="p-2.5 rounded-lg bg-black/40 border border-white/5 mb-3">
-                      <div className="flex items-center justify-between text-[9px] uppercase tracking-wider text-muted-foreground font-bold mb-1">
-                        <span>Sinais Enviados</span>
-                        <span className="text-white font-mono font-bold">
-                          {item.totalSignals} {item.totalSignals === 1 ? "sinal" : "sinais"}
-                        </span>
-                      </div>
-
-                      <div className="flex items-baseline justify-between mb-1.5">
-                        <span
-                          className={`text-xl font-black font-outfit ${
-                            hasSignals
-                              ? winRate >= 70
-                                ? "text-emerald-400"
-                                : winRate >= 50
-                                  ? "text-amber-400"
-                                  : "text-red-400"
-                              : "text-zinc-600 font-normal"
-                          }`}
-                        >
-                          {item.assertividadeSignals !== null
-                            ? `${item.assertividadeSignals.toFixed(1)}%`
-                            : "--"}
-                        </span>
-                        <div className="flex items-center gap-1.5 text-[10px] font-mono">
-                          <span
-                            className={
-                              item.wins > 0 ? "text-emerald-400 font-black" : "text-zinc-600"
-                            }
-                          >
-                            {item.wins}W
-                          </span>
-                          <span
-                            className={
-                              item.losses > 0 ? "text-red-400 font-black" : "text-zinc-600"
-                            }
-                          >
-                            {item.losses}L
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Barra de assertividade dos sinais */}
-                      {hasSignals ? (
-                        <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden flex">
-                          <div
-                            style={{ width: `${winRate}%` }}
-                            className="h-full bg-emerald-500 rounded-full"
-                          />
-                          <div
-                            style={{ width: `${100 - winRate}%` }}
-                            className="h-full bg-red-500/80 rounded-full"
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-full h-1 bg-white/5 rounded-full" />
-                      )}
-                    </div>
-
-                    {/* Bloco 2: Motor Preditivo (Top 1 e Ciclos da Pedra) */}
-                    <div className="space-y-1.5 text-[10px] pt-1">
-                      <div className="flex items-center justify-between text-muted-foreground">
-                        <span>Top 1 Preditivo:</span>
-                        <span
-                          className={`font-mono font-bold ${
-                            item.top1Pct !== null && item.top1Pct >= 80
-                              ? "text-emerald-400"
-                              : item.top1Pct !== null && item.top1Pct >= 75
-                                ? "text-amber-400"
-                                : item.top1Pct !== null
-                                  ? "text-white/60"
-                                  : "text-zinc-600"
-                          }`}
-                        >
-                          {item.top1Pct !== null ? `${item.top1Pct.toFixed(1)}%` : "--"}
-                          {item.top1Minute !== null && (
-                            <span className="text-[9px] text-muted-foreground ml-1">
-                              (+{item.top1Minute}m)
-                            </span>
-                          )}
-                        </span>
-                      </div>
-
-                      {item.top2Pct !== null && (
-                        <div className="flex items-center justify-between text-muted-foreground/80 text-[9px]">
-                          <span>Top 2 / Top 3:</span>
-                          <span className="font-mono text-white/50">
-                            {item.top2Pct.toFixed(1)}%
-                            {item.top3Pct !== null && ` · ${item.top3Pct.toFixed(1)}%`}
-                          </span>
-                        </div>
-                      )}
-
-                      <div className="flex items-center justify-between text-muted-foreground/80 text-[9px]">
-                        <span>Ciclos Válidos:</span>
-                        <span
-                          className={`font-mono ${
-                            item.isEligible ? "text-emerald-400/80 font-bold" : "text-amber-400/80"
-                          }`}
-                        >
-                          {item.validCycles} ciclos {item.isEligible ? "(Apto)" : "(Mín. 4)"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Rodapé do Card da Pedra */}
-                  <div className="pt-2 mt-2.5 border-t border-white/5 flex items-center justify-between text-[9px] text-muted-foreground">
-                    <span>Total histórico:</span>
-                    <span className="font-mono text-white/70 font-bold">
-                      {item.totalCycles} ciclos
+        {/* Corpo do Modal: Grid de Pedras ou Painel de Estratégia */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+          {analysis.category === "estrategias" ? (
+            <div className="space-y-6">
+              {/* Cards de Métricas Rápidas */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">
+                    Assertividade
+                  </span>
+                  <div className="flex items-baseline gap-2">
+                    <span
+                      className={`text-2xl font-black font-outfit ${
+                        analysis.assertividade !== null && analysis.assertividade >= 70
+                          ? "text-emerald-400"
+                          : analysis.assertividade !== null && analysis.assertividade >= 50
+                            ? "text-amber-400"
+                            : analysis.assertividade !== null
+                              ? "text-red-400"
+                              : "text-zinc-500"
+                      }`}
+                    >
+                      {analysis.assertividade !== null
+                        ? `${analysis.assertividade.toFixed(1)}%`
+                        : "--"}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      ({analysis.total} ops)
                     </span>
                   </div>
+                  <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden mt-3">
+                    <div
+                      className={`h-full transition-all ${
+                        analysis.assertividade !== null && analysis.assertividade >= 70
+                          ? "bg-emerald-500"
+                          : analysis.assertividade !== null && analysis.assertividade >= 50
+                            ? "bg-amber-500"
+                            : "bg-red-500"
+                      }`}
+                      style={{ width: `${Math.min(100, analysis.assertividade || 0)}%` }}
+                    />
+                  </div>
                 </div>
-              );
-            })}
-          </div>
 
-          {filteredStones.length === 0 && (
+                <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                  <span className="text-[10px] uppercase font-bold text-emerald-400 block mb-1">
+                    Vitórias (Greens)
+                  </span>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-black font-outfit text-emerald-400">
+                      {analysis.wins}
+                    </span>
+                    <span className="text-xs text-muted-foreground">acertos</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-2">
+                    {analysis.total > 0
+                      ? `${((analysis.wins / analysis.total) * 100).toFixed(0)}% conversão`
+                      : "Aguardando operações"}
+                  </p>
+                </div>
+
+                <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                  <span className="text-[10px] uppercase font-bold text-red-400 block mb-1">
+                    Derrotas (Reds)
+                  </span>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-black font-outfit text-red-400">
+                      {analysis.losses}
+                    </span>
+                    <span className="text-xs text-muted-foreground">erros</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-2">
+                    {analysis.total > 0
+                      ? `${((analysis.losses / analysis.total) * 100).toFixed(0)}% taxa de perda`
+                      : "Zero perdas"}
+                  </p>
+                </div>
+
+                <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                  <span className="text-[10px] uppercase font-bold text-purple-400 block mb-1">
+                    Status Operacional
+                  </span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                    <span className="text-sm font-bold text-white uppercase">Ativa</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-2">
+                    Confluência & Disparo Autônomo
+                  </p>
+                </div>
+              </div>
+
+              {/* Informações da Estratégia */}
+              <div className="bg-white/[0.02] border border-white/10 rounded-xl p-5 space-y-2">
+                <h4 className="text-xs font-black uppercase tracking-wider text-purple-300">
+                  Regra e Parâmetros da Estratégia
+                </h4>
+                <p className="text-sm text-zinc-200">{analysis.description}</p>
+              </div>
+
+              {/* Lista de Sinais Auditados da Estratégia */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-black uppercase tracking-wider text-zinc-300">
+                  Histórico de Sinais Auditados desta Estratégia ({strategySignals.length})
+                </h4>
+
+                {strategySignals.length > 0 ? (
+                  <div className="space-y-2">
+                    {strategySignals.map((sig, idx) => {
+                      const isWin = sig.outcome === "green";
+                      return (
+                        <div
+                          key={sig.id || idx}
+                          className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-white/[0.02] border border-white/5 hover:border-white/15 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span
+                              className={`px-2 py-1 rounded text-[10px] font-black uppercase ${
+                                isWin
+                                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                  : "bg-red-500/20 text-red-400 border border-red-500/30"
+                              }`}
+                            >
+                              {isWin ? "GREEN" : "RED"}
+                            </span>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-mono font-bold text-white">
+                                  {sig.time}
+                                </span>
+                                {sig.confluence && (
+                                  <span className="text-[10px] text-purple-300 bg-purple-500/10 px-1.5 py-0.5 rounded">
+                                    {sig.confluence}
+                                  </span>
+                                )}
+                              </div>
+                              {sig.label && (
+                                <span className="text-[10px] text-muted-foreground block mt-0.5">
+                                  {sig.label}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-4 text-xs font-mono">
+                            {sig.resultTime && (
+                              <div className="text-right">
+                                <span className="text-[9px] uppercase text-muted-foreground block">
+                                  Finalizado em
+                                </span>
+                                <span className="text-white/80">{sig.resultTime}</span>
+                              </div>
+                            )}
+                            {sig.audit?.checkedResults !== undefined && (
+                              <div className="text-right">
+                                <span className="text-[9px] uppercase text-muted-foreground block">
+                                  Giros Auditados
+                                </span>
+                                <span className="text-white/80">{sig.audit.checkedResults}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-8 text-center bg-white/[0.01] border border-white/5 rounded-xl text-muted-foreground text-xs">
+                    Nenhum sinal gravado com esta estratégia na sessão corrente recente. O motor
+                    autônomo auditará automaticamente todas as próximas ocorrências.
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
+              {filteredStones.map((item) => {
+                const hasSignals = item.totalSignals > 0;
+                const winRate = item.assertividadeSignals !== null ? item.assertividadeSignals : 0;
+
+                return (
+                  <div
+                    key={item.stone}
+                    className={`flex flex-col justify-between p-4 rounded-xl border transition-all ${
+                      item.status === "elegivel"
+                        ? "bg-emerald-950/15 border-emerald-500/30 hover:border-emerald-500/50"
+                        : item.status === "confluencia"
+                          ? "bg-amber-950/15 border-amber-500/30 hover:border-amber-500/50"
+                          : "bg-white/[0.02] border-white/5 hover:border-white/15"
+                    }`}
+                  >
+                    <div>
+                      {/* Topo do Card da Pedra */}
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        {/* Emblema da Pedra da Roleta */}
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={`w-9 h-9 rounded-full flex items-center justify-center font-black font-outfit text-sm select-none shadow-md ${
+                              item.stone === 0
+                                ? "bg-white text-zinc-950 shadow-[0_0_12px_rgba(255,255,255,0.4)] border border-white"
+                                : item.color === "red"
+                                  ? "bg-red-600 text-white shadow-[0_0_10px_rgba(220,38,38,0.35)]"
+                                  : "bg-zinc-800 text-white border border-white/20 shadow-[0_0_10px_rgba(0,0,0,0.5)]"
+                            }`}
+                          >
+                            {item.stone}
+                          </div>
+                          <div>
+                            <span className="text-xs font-black text-white block leading-tight">
+                              Pedra {item.stone}
+                            </span>
+                            <span className="text-[9px] uppercase font-bold text-muted-foreground block">
+                              {item.stone === 0
+                                ? "Branco (14x)"
+                                : item.color === "red"
+                                  ? "Vermelho (2x)"
+                                  : "Preto (2x)"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Status de Elegibilidade */}
+                        <span
+                          className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${
+                            item.status === "elegivel"
+                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                              : item.status === "confluencia"
+                                ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                                : item.status === "baixa"
+                                  ? "bg-zinc-800 text-zinc-400 border-zinc-700"
+                                  : "bg-red-500/10 text-red-400 border-red-500/20"
+                          }`}
+                        >
+                          {item.status === "elegivel"
+                            ? "Top 1 Primário"
+                            : item.status === "confluencia"
+                              ? "Confluência"
+                              : item.status === "baixa"
+                                ? "Abaixo 75%"
+                                : "Bloqueada"}
+                        </span>
+                      </div>
+
+                      {/* Bloco 1: Auditoria de Sinais Reais Enviados */}
+                      <div className="p-2.5 rounded-lg bg-black/40 border border-white/5 mb-3">
+                        <div className="flex items-center justify-between text-[9px] uppercase tracking-wider text-muted-foreground font-bold mb-1">
+                          <span>Sinais Enviados</span>
+                          <span className="text-white font-mono font-bold">
+                            {item.totalSignals} {item.totalSignals === 1 ? "sinal" : "sinais"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-baseline justify-between mb-1.5">
+                          <span
+                            className={`text-xl font-black font-outfit ${
+                              hasSignals
+                                ? winRate >= 70
+                                  ? "text-emerald-400"
+                                  : winRate >= 50
+                                    ? "text-amber-400"
+                                    : "text-red-400"
+                                : "text-zinc-600 font-normal"
+                            }`}
+                          >
+                            {item.assertividadeSignals !== null
+                              ? `${item.assertividadeSignals.toFixed(1)}%`
+                              : "--"}
+                          </span>
+                          <div className="flex items-center gap-1.5 text-[10px] font-mono">
+                            <span
+                              className={
+                                item.wins > 0 ? "text-emerald-400 font-black" : "text-zinc-600"
+                              }
+                            >
+                              {item.wins}W
+                            </span>
+                            <span
+                              className={
+                                item.losses > 0 ? "text-red-400 font-black" : "text-zinc-600"
+                              }
+                            >
+                              {item.losses}L
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Barra de assertividade dos sinais */}
+                        {hasSignals ? (
+                          <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden flex">
+                            <div
+                              style={{ width: `${winRate}%` }}
+                              className="h-full bg-emerald-500 rounded-full"
+                            />
+                            <div
+                              style={{ width: `${100 - winRate}%` }}
+                              className="h-full bg-red-500/80 rounded-full"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-full h-1 bg-white/5 rounded-full" />
+                        )}
+                      </div>
+
+                      {/* Bloco 2: Motor Preditivo (Top 1 e Ciclos da Pedra) */}
+                      <div className="space-y-1.5 text-[10px] pt-1">
+                        <div className="flex items-center justify-between text-muted-foreground">
+                          <span>Top 1 Preditivo:</span>
+                          <span
+                            className={`font-mono font-bold ${
+                              item.top1Pct !== null && item.top1Pct >= 80
+                                ? "text-emerald-400"
+                                : item.top1Pct !== null && item.top1Pct >= 75
+                                  ? "text-amber-400"
+                                  : item.top1Pct !== null
+                                    ? "text-white/60"
+                                    : "text-zinc-600"
+                            }`}
+                          >
+                            {item.top1Pct !== null ? `${item.top1Pct.toFixed(1)}%` : "--"}
+                            {item.top1Minute !== null && (
+                              <span className="text-[9px] text-muted-foreground ml-1">
+                                (+{item.top1Minute}m)
+                              </span>
+                            )}
+                          </span>
+                        </div>
+
+                        {item.top2Pct !== null && (
+                          <div className="flex items-center justify-between text-muted-foreground/80 text-[9px]">
+                            <span>Top 2 / Top 3:</span>
+                            <span className="font-mono text-white/50">
+                              {item.top2Pct.toFixed(1)}%
+                              {item.top3Pct !== null && ` · ${item.top3Pct.toFixed(1)}%`}
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between text-muted-foreground/80 text-[9px]">
+                          <span>Ciclos Válidos:</span>
+                          <span
+                            className={`font-mono ${
+                              item.isEligible
+                                ? "text-emerald-400/80 font-bold"
+                                : "text-amber-400/80"
+                            }`}
+                          >
+                            {item.validCycles} ciclos {item.isEligible ? "(Apto)" : "(Mín. 4)"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Rodapé do Card da Pedra */}
+                    <div className="pt-2 mt-2.5 border-t border-white/5 flex items-center justify-between text-[9px] text-muted-foreground">
+                      <span>Total histórico:</span>
+                      <span className="font-mono text-white/70 font-bold">
+                        {item.totalCycles} ciclos
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {analysis.category !== "estrategias" && filteredStones.length === 0 && (
             <div className="py-12 text-center text-muted-foreground text-xs">
               Nenhuma pedra corresponde ao filtro selecionado.
             </div>

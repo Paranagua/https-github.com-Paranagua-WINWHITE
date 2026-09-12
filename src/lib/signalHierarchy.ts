@@ -252,7 +252,21 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
 
   const cat = (sig.category || "").toLowerCase();
 
-  // 1. Grupos de maior hierarquia avaliados primeiro (precedência absoluta sobre Em Alta)
+  // 1. Grupo 'EM ALTA': Recebe EXCLUSIVAMENTE sinais de Tendência gerados pelo módulo de tendências (buildEmAltaSignals)
+  // Tem classificação estrita garantindo que nunca seja rebaixado ou reclassificado como outro grupo
+  if (
+    (sig as any).isEmAlta === true ||
+    cat === "em_alta" ||
+    cat.includes("em_alta") ||
+    (sig as any).groupName === "Em Alta" ||
+    (typeof sig.key === "string" && sig.key.startsWith("EM_ALTA_")) ||
+    (typeof sig.label === "string" &&
+      (sig.label.toUpperCase().includes("EM ALTA") || sig.label.startsWith("Tendência 3/3")))
+  ) {
+    return SignalRank.EM_ALTA;
+  }
+
+  // 2. Grupos de maior hierarquia para sinais padrão de análise
   if (sig.isAlavancagem || cat === "alavancagem" || (sig as any).hasYellowSeal) {
     return SignalRank.ALAVANCAGEM;
   }
@@ -261,16 +275,6 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
   }
   if (sig.isRare || cat === "rare") {
     return SignalRank.RARE;
-  }
-
-  // 2. Grupo 'EM ALTA': Recebe EXCLUSIVAMENTE sinais de Tendência gerados pelo módulo de tendências (buildEmAltaSignals)
-  if (
-    ((sig as any).isEmAlta === true || cat === "em_alta") &&
-    !sig.isAlavancagem &&
-    !sig.isSupreme &&
-    !sig.isRare
-  ) {
-    return SignalRank.EM_ALTA;
   }
 
   const top1Sources = (sig.sources || []).filter((s: any) => !s.top3 && !s.top5);
@@ -1195,6 +1199,11 @@ export function buildStrategyTriggeredSignals(
     // REGRA DO USUÁRIO: Estratégias de soma =17&19 ativas como confluência Top 2/3
     const sumStrategyCount = distinctStrategies.length;
 
+    // Regra do Usuário: Tendências 3/3 ("Em Alta") também servem de confluência para os outros grupos
+    const matching3_3Tendencies = clusterTendencyAssignments.get(clusterIdx) || [];
+    const hasTendencyConfluence = matching3_3Tendencies.length > 0;
+    const tendencyConfluenceCount = matching3_3Tendencies.length;
+
     // Todas as análises ativas na janela (Primárias + Confluência)
     const allMatchingAnalyses = [...clusterPrimary, ...matchingConfluenceAnalyses];
     const top1Analyses = allMatchingAnalyses.filter((ac) => ac.isTop1);
@@ -1203,8 +1212,8 @@ export function buildStrategyTriggeredSignals(
     const distinctTop1Analyses = Array.from(new Set(top1Analyses.map((s) => s.analysis)));
     const distinctTop3Analyses = Array.from(new Set(top3Analyses.map((s) => s.analysis)));
     const top1Count = distinctTop1Analyses.length;
-    // top3Count soma as análises secundárias Top 2/3 (75-79%) E as estratégias de soma =17&19 ativas
-    const top3Count = distinctTop3Analyses.length + sumStrategyCount;
+    // top3Count soma as análises secundárias Top 2/3 (75-79%), as estratégias de soma =17&19 ativas E as tendências 3/3 ("Em Alta") atuando como confluência
+    const top3Count = distinctTop3Analyses.length + sumStrategyCount + tendencyConfluenceCount;
 
     // Análises primárias que originaram o sinal
     const distinctPrimaryAnalyses = Array.from(new Set(clusterPrimary.map((p) => p.analysis)));
@@ -1226,31 +1235,41 @@ export function buildStrategyTriggeredSignals(
         isRare: false,
         isTop1: true,
       };
-    } else if ((top1Count === 2 || top1Count === 3) && (top3Count >= 2 || hasStrategyConfluence)) {
+    } else if (
+      (top1Count === 2 || top1Count === 3) &&
+      (top3Count >= 2 || hasStrategyConfluence || hasTendencyConfluence)
+    ) {
       evaluation = {
         rank: SignalRank.SUPREME,
         category: "supreme",
         groupName: "Supremo",
-        label: `Supremo (${primaryCodesLabel}${hasStrategyConfluence ? ` + ${strategyCodesLabel}` : ""})`,
+        label: `Supremo (${primaryCodesLabel}${hasStrategyConfluence ? ` + ${strategyCodesLabel}` : ""}${hasTendencyConfluence ? " + Em Alta" : ""})`,
         medal: `👑 Supremo (${top1Count}x Top 1 · ${primaryGroupName})`,
         isAlavancagem: false,
         isSupreme: true,
         isRare: false,
         isTop1: true,
       };
-    } else if (top1Count === 2 || top1Count === 3 || (top1Count === 1 && hasStrategyConfluence)) {
+    } else if (
+      top1Count === 2 ||
+      top1Count === 3 ||
+      (top1Count === 1 && (hasStrategyConfluence || hasTendencyConfluence))
+    ) {
       evaluation = {
         rank: SignalRank.RARE,
         category: "rare",
         groupName: "Raro",
-        label: `Raro (${primaryCodesLabel}${hasStrategyConfluence ? ` + ${strategyCodesLabel}` : ""})`,
+        label: `Raro (${primaryCodesLabel}${hasStrategyConfluence ? ` + ${strategyCodesLabel}` : ""}${hasTendencyConfluence ? " + Em Alta" : ""})`,
         medal: `💎 Raro (${top1Count}x Top 1 · ${primaryGroupName})`,
         isAlavancagem: false,
         isSupreme: false,
         isRare: true,
         isTop1: true,
       };
-    } else if (top1Count === 1 && (top3Count >= 1 || matchingConfluenceAnalyses.length >= 1)) {
+    } else if (
+      top1Count === 1 &&
+      (top3Count >= 1 || matchingConfluenceAnalyses.length >= 1 || hasTendencyConfluence)
+    ) {
       evaluation = {
         rank: SignalRank.TOP1_TOP3,
         category: "top1_top3",
@@ -1341,8 +1360,6 @@ export function buildStrategyTriggeredSignals(
 
     // Regra 3: As tendências com 100% de 3/3 atuam como confluência para os outros grupos
     // Exclusividade garantida: cada tendência é atribuída unicamente ao cluster temporalmente mais próximo
-    const matching3_3Tendencies = clusterTendencyAssignments.get(clusterIdx) || [];
-
     if (matching3_3Tendencies.length > 0) {
       matching3_3Tendencies.forEach((tc) => {
         allSources.push({
@@ -2074,6 +2091,49 @@ export function mergeSignalsLifecycle(
         (src) => !claimedCycleKeys.has(getSourceCycleKey(src)),
       );
 
+      // Tratamento especial para sinais 'Em Alta': eles são exclusivos de tendências
+      // e NUNCA devem ser convertidos em Alavancagem, Supremo ou Raro
+      const isEmAltaSignal =
+        sig.isEmAlta ||
+        (sig.category || "").toLowerCase() === "em_alta" ||
+        (sig.groupName || "").toLowerCase() === "em alta" ||
+        (typeof sig.key === "string" && sig.key.startsWith("EM_ALTA_"));
+
+      if (isEmAltaSignal) {
+        const remaining3_3 = exclusiveSources.filter(
+          (s: any) =>
+            (s.rank === 1 && s.pct === 100) ||
+            (s.cycleKey && (s.cycleKey.startsWith("TEND_") || s.cycleKey.startsWith("T3/3"))),
+        );
+        if (remaining3_3.length === 0) {
+          resultMap.delete(sigKey);
+        } else {
+          for (const src of exclusiveSources) {
+            claimedCycleKeys.add(getSourceCycleKey(src));
+          }
+          const primaryCodes = Array.from(
+            new Set(remaining3_3.map((t: any) => formatAnalysisCode(t.analysis))),
+          );
+          const confItems = exclusiveSources.map(
+            (t: any) => `${formatAnalysisCode(t.analysis)}-${t.value}`,
+          );
+          resultMap.set(sigKey, {
+            ...sig,
+            sources: exclusiveSources,
+            label: `Tendência 3/3 (${primaryCodes.join("/")})`,
+            confluence: confItems.join(" · "),
+            category: "em_alta",
+            groupName: "Em Alta",
+            isEmAlta: true,
+            isAlavancagem: false,
+            isSupreme: false,
+            isRare: false,
+            isTop1: false,
+          });
+        }
+        continue;
+      }
+
       const top1Sources = exclusiveSources.filter((s: any) => !s.top3 && !s.top5);
       const top3Sources = exclusiveSources.filter((s: any) => s.top3 || s.top5);
 
@@ -2083,34 +2143,7 @@ export function mergeSignalsLifecycle(
       });
 
       if (!evalLevel || top1Sources.length === 0) {
-        if (sig.isEmAlta) {
-          const remaining3_3 = exclusiveSources.filter(
-            (s: any) =>
-              (s.rank === 1 && s.pct === 100) ||
-              (s.cycleKey && (s.cycleKey.startsWith("TEND_") || s.cycleKey.startsWith("T3/3"))),
-          );
-          if (remaining3_3.length === 0) {
-            resultMap.delete(sigKey);
-          } else {
-            for (const src of exclusiveSources) {
-              claimedCycleKeys.add(getSourceCycleKey(src));
-            }
-            const primaryCodes = Array.from(
-              new Set(remaining3_3.map((t: any) => formatAnalysisCode(t.analysis))),
-            );
-            const confItems = exclusiveSources.map(
-              (t: any) => `${formatAnalysisCode(t.analysis)}-${t.value}`,
-            );
-            resultMap.set(sigKey, {
-              ...sig,
-              sources: exclusiveSources,
-              label: `Tendência 3/3 (${primaryCodes.join("/")})`,
-              confluence: confItems.join(" · "),
-            });
-          }
-        } else {
-          resultMap.delete(sigKey);
-        }
+        resultMap.delete(sigKey);
       } else {
         // Reivindica os cycleKeys exclusivos
         for (const src of exclusiveSources) {
@@ -2284,6 +2317,17 @@ export function mergeSignalsLifecycle(
         // Captura e grava no validador/estatísticas (apenas sinais com confluência)
         if (!sig.isNoConfluence && sig.category !== "no_confluence") {
           try {
+            const isEmAlta =
+              sig.isEmAlta ||
+              sig.category === "em_alta" ||
+              sig.groupName === "Em Alta" ||
+              (typeof sig.key === "string" && sig.key.startsWith("EM_ALTA_")) ||
+              (typeof sig.label === "string" &&
+                (sig.label.toUpperCase().includes("EM ALTA") ||
+                  sig.label.startsWith("Tendência 3/3"))) ||
+              (typeof sig.confluence === "string" &&
+                sig.confluence.toUpperCase().includes("EM ALTA"));
+
             useSignalStatsStore.getState().recordCompletedSignal({
               key: sig.key || getCanonicalSignalKey(sig.entryDate),
               time: sig.time,
@@ -2299,11 +2343,12 @@ export function mergeSignalsLifecycle(
               winningResultCreatedAt: auditRes.audit?.winningResultCreatedAt,
               audit: sig.audit,
               sources: sig.sources,
-              category: sig.category,
-              isSupreme: sig.isSupreme,
-              isRare: sig.isRare,
-              isAlavancagem: sig.isAlavancagem,
-              isTop1: sig.isTop1,
+              category: isEmAlta ? "em_alta" : sig.category,
+              isSupreme: isEmAlta ? false : sig.isSupreme,
+              isRare: isEmAlta ? false : sig.isRare,
+              isAlavancagem: isEmAlta ? false : sig.isAlavancagem,
+              isTop1: isEmAlta ? false : sig.isTop1,
+              isEmAlta: isEmAlta,
             });
           } catch {
             // fallback silencioso caso store não esteja disponível

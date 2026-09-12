@@ -419,11 +419,15 @@ class AutonomousAuditEngine {
             winningResultCreatedAt: sig.winningResultCreatedAt,
             audit: sig.audit,
             sources: sig.sources,
-            category: (sig as any).category,
-            isSupreme: sig.isSupreme,
-            isRare: sig.isRare,
-            isAlavancagem: sig.isAlavancagem,
-            isTop1: sig.isTop1,
+            category:
+              (sig as any).isEmAlta || (sig as any).category === "em_alta"
+                ? "em_alta"
+                : (sig as any).category,
+            isSupreme: (sig as any).isEmAlta ? false : sig.isSupreme,
+            isRare: (sig as any).isEmAlta ? false : sig.isRare,
+            isAlavancagem: (sig as any).isEmAlta ? false : sig.isAlavancagem,
+            isEmAlta: (sig as any).isEmAlta || (sig as any).category === "em_alta",
+            isTop1: (sig as any).isEmAlta ? false : sig.isTop1,
           });
           hasStateChanges = true;
 
@@ -436,17 +440,28 @@ class AutonomousAuditEngine {
 
         // Executa a conferência estrita de 6 rodadas nas janelas M-1, M, M+1
         const auditRes = auditSignalWithRounds(sig, auditRounds);
-        const cat =
-          (sig as any).category ||
-          (sig.isAlavancagem
-            ? "alavancagem"
-            : sig.isSupreme
-              ? "supreme"
-              : sig.isRare
-                ? "rare"
-                : sig.isTop1
-                  ? "top1_isolated"
-                  : undefined);
+        const isEmAltaSignal =
+          (sig as any).isEmAlta === true ||
+          (sig as any).category === "em_alta" ||
+          (sig as any).groupName === "Em Alta" ||
+          (typeof sig.key === "string" && sig.key.startsWith("EM_ALTA_")) ||
+          (typeof sig.label === "string" &&
+            (sig.label.toUpperCase().includes("EM ALTA") ||
+              sig.label.startsWith("Tendência 3/3"))) ||
+          (typeof sig.confluence === "string" && sig.confluence.toUpperCase().includes("EM ALTA"));
+
+        const cat = isEmAltaSignal
+          ? "em_alta"
+          : (sig as any).category ||
+            (sig.isAlavancagem
+              ? "alavancagem"
+              : sig.isSupreme
+                ? "supreme"
+                : sig.isRare
+                  ? "rare"
+                  : sig.isTop1
+                    ? "top1_isolated"
+                    : undefined);
 
         if (auditRes.outcome === "green") {
           // CAPTURADO: WIN (Branco confirmado)
@@ -474,10 +489,11 @@ class AutonomousAuditEngine {
             audit: auditRes.audit,
             sources: sig.sources,
             category: cat,
-            isSupreme: sig.isSupreme,
-            isRare: sig.isRare,
-            isAlavancagem: sig.isAlavancagem,
-            isTop1: sig.isTop1,
+            isSupreme: isEmAltaSignal ? false : sig.isSupreme,
+            isRare: isEmAltaSignal ? false : sig.isRare,
+            isAlavancagem: isEmAltaSignal ? false : sig.isAlavancagem,
+            isEmAlta: isEmAltaSignal,
+            isTop1: isEmAltaSignal ? false : sig.isTop1,
           });
 
           hasStateChanges = true;
@@ -507,10 +523,11 @@ class AutonomousAuditEngine {
             audit: auditRes.audit,
             sources: sig.sources,
             category: cat,
-            isSupreme: sig.isSupreme,
-            isRare: sig.isRare,
-            isAlavancagem: sig.isAlavancagem,
-            isTop1: sig.isTop1,
+            isSupreme: isEmAltaSignal ? false : sig.isSupreme,
+            isRare: isEmAltaSignal ? false : sig.isRare,
+            isAlavancagem: isEmAltaSignal ? false : sig.isAlavancagem,
+            isEmAlta: isEmAltaSignal,
+            isTop1: isEmAltaSignal ? false : sig.isTop1,
           });
 
           hasStateChanges = true;
@@ -538,10 +555,11 @@ class AutonomousAuditEngine {
               audit: auditRes.audit,
               sources: sig.sources,
               category: cat,
-              isSupreme: sig.isSupreme,
-              isRare: sig.isRare,
-              isAlavancagem: sig.isAlavancagem,
-              isTop1: sig.isTop1,
+              isSupreme: isEmAltaSignal ? false : sig.isSupreme,
+              isRare: isEmAltaSignal ? false : sig.isRare,
+              isAlavancagem: isEmAltaSignal ? false : sig.isAlavancagem,
+              isEmAlta: isEmAltaSignal,
+              isTop1: isEmAltaSignal ? false : sig.isTop1,
             });
             hasStateChanges = true;
           } else {
@@ -631,6 +649,16 @@ class AutonomousAuditEngine {
       return;
     }
 
+    const isEmAltaSignal =
+      signal.isEmAlta === true ||
+      signal.category === "em_alta" ||
+      (typeof signal.key === "string" && signal.key.startsWith("EM_ALTA_")) ||
+      (typeof signal.label === "string" &&
+        (signal.label.toUpperCase().includes("EM ALTA") ||
+          signal.label.startsWith("Tendência 3/3"))) ||
+      (typeof signal.confluence === "string" &&
+        signal.confluence.toUpperCase().includes("EM ALTA"));
+
     const newEntry: SignalHistoryEntry = {
       key: signal.key,
       time: signal.time,
@@ -648,12 +676,12 @@ class AutonomousAuditEngine {
       winningResultCreatedAt: signal.winningResultCreatedAt,
       audit: signal.audit,
       sources: signal.sources,
-      category: signal.category,
-      isSupreme: signal.isSupreme,
-      isRare: signal.isRare,
-      isAlavancagem: signal.isAlavancagem,
-      isEmAlta: signal.isEmAlta,
-      isTop1: signal.isTop1,
+      category: isEmAltaSignal ? "em_alta" : signal.category,
+      isSupreme: isEmAltaSignal ? false : signal.isSupreme,
+      isRare: isEmAltaSignal ? false : signal.isRare,
+      isAlavancagem: isEmAltaSignal ? false : signal.isAlavancagem,
+      isEmAlta: isEmAltaSignal,
+      isTop1: isEmAltaSignal ? false : signal.isTop1,
     };
 
     if (isCorrectionFromRedToGreen && existingIndex >= 0) {

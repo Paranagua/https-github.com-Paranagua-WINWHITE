@@ -46,6 +46,7 @@ interface SignalStatsStore {
     confluence?: string;
     resultTime?: string;
     strategyKey?: string;
+    strategies?: string[];
     confirmedStrategies?: Array<{ code: string; name?: string; id?: number }>;
     targetTime?: string;
     windowLabel?: string;
@@ -128,6 +129,16 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             };
           }
 
+          const isEmAltaSignal =
+            signal.isEmAlta === true ||
+            signal.category === "em_alta" ||
+            (typeof signal.key === "string" && signal.key.startsWith("EM_ALTA_")) ||
+            (typeof signal.label === "string" &&
+              (signal.label.toUpperCase().includes("EM ALTA") ||
+                signal.label.startsWith("Tendência 3/3"))) ||
+            (typeof signal.confluence === "string" &&
+              signal.confluence.toUpperCase().includes("EM ALTA"));
+
           const newEntry: SignalHistoryEntry = {
             key: signal.key,
             time: signal.time,
@@ -138,6 +149,7 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             timestamp: Date.now(),
             targetTime: signal.targetTime || signal.time,
             strategyKey: signal.strategyKey,
+            strategies: signal.strategies,
             confirmedStrategies: signal.confirmedStrategies,
             windowLabel: signal.windowLabel,
             checkedResults: signal.checkedResults,
@@ -145,12 +157,12 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             winningResultCreatedAt: signal.winningResultCreatedAt,
             audit: signal.audit,
             sources: signal.sources,
-            category: signal.category,
-            isSupreme: signal.isSupreme,
-            isRare: signal.isRare,
-            isAlavancagem: signal.isAlavancagem,
-            isEmAlta: signal.isEmAlta,
-            isTop1: signal.isTop1,
+            category: isEmAltaSignal ? "em_alta" : signal.category,
+            isSupreme: isEmAltaSignal ? false : signal.isSupreme,
+            isRare: isEmAltaSignal ? false : signal.isRare,
+            isAlavancagem: isEmAltaSignal ? false : signal.isAlavancagem,
+            isEmAlta: isEmAltaSignal,
+            isTop1: isEmAltaSignal ? false : signal.isTop1,
           };
 
           let updatedRecent: SignalHistoryEntry[];
@@ -186,6 +198,64 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             if (clean === "4-13") keysToUpdate.add("S17_4-13");
             if (clean === "3-14" || clean === "14-3") keysToUpdate.add("S17_14-3");
             if (clean === "F2") keysToUpdate.add("F2");
+          }
+          if (Array.isArray(signal.strategies)) {
+            signal.strategies.forEach((st) => {
+              if (st) {
+                keysToUpdate.add(st);
+                const clean = st.replace(/^(S19_|S17_)/, "");
+                keysToUpdate.add(clean);
+                if (clean === "9-10" || clean === "10-9" || clean === "109" || clean === "910") {
+                  keysToUpdate.add("10-9");
+                  keysToUpdate.add("S19_10-9");
+                }
+                if (clean === "7-12" || clean === "12-7" || clean === "127" || clean === "712") {
+                  keysToUpdate.add("12-7");
+                  keysToUpdate.add("S19_12-7");
+                }
+                if (clean === "13-6" || clean === "6-13" || clean === "613" || clean === "136") {
+                  keysToUpdate.add("6-13");
+                  keysToUpdate.add("S19_6-13");
+                }
+                if (clean === "5-14" || clean === "14-5" || clean === "145" || clean === "514") {
+                  keysToUpdate.add("14-5");
+                  keysToUpdate.add("S19_14-5");
+                }
+                if (clean === "11-8" || clean === "118") {
+                  keysToUpdate.add("11-8");
+                  keysToUpdate.add("S19_11-8");
+                }
+                if (clean === "8-11" || clean === "811") {
+                  keysToUpdate.add("8-11");
+                  keysToUpdate.add("S19_8-11");
+                }
+                if (clean === "10-7" || clean === "7-10" || clean === "107" || clean === "710") {
+                  keysToUpdate.add("10-7");
+                  keysToUpdate.add("S17_10-7");
+                }
+                if (clean === "9-8" || clean === "8-9" || clean === "89" || clean === "98") {
+                  keysToUpdate.add("8-9");
+                  keysToUpdate.add("S17_8-9");
+                }
+                if (clean === "6-11" || clean === "11-6" || clean === "116") {
+                  keysToUpdate.add("11-6");
+                  keysToUpdate.add("S17_11-6");
+                }
+                if (clean === "5-12" || clean === "12-5" || clean === "512") {
+                  keysToUpdate.add("5-12");
+                  keysToUpdate.add("S17_5-12");
+                }
+                if (clean === "13-4" || clean === "4-13" || clean === "134") {
+                  keysToUpdate.add("13-4");
+                  keysToUpdate.add("S17_13-4");
+                }
+                if (clean === "3-14" || clean === "14-3" || clean === "143") {
+                  keysToUpdate.add("14-3");
+                  keysToUpdate.add("S17_14-3");
+                }
+                if (clean === "F2") keysToUpdate.add("F2");
+              }
+            });
           }
           if (Array.isArray(signal.confirmedStrategies)) {
             signal.confirmedStrategies.forEach((cs) => {
@@ -312,6 +382,30 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             });
 
           const mergedRecent = Array.from(signalMap.values())
+            .map((sig) => {
+              const isEmAltaSignal =
+                sig.isEmAlta === true ||
+                sig.category === "em_alta" ||
+                (typeof sig.key === "string" && sig.key.startsWith("EM_ALTA_")) ||
+                (typeof sig.label === "string" &&
+                  (sig.label.toUpperCase().includes("EM ALTA") ||
+                    sig.label.startsWith("Tendência 3/3"))) ||
+                (typeof sig.confluence === "string" &&
+                  sig.confluence.toUpperCase().includes("EM ALTA"));
+
+              if (isEmAltaSignal) {
+                return {
+                  ...sig,
+                  category: "em_alta",
+                  isEmAlta: true,
+                  isAlavancagem: false,
+                  isSupreme: false,
+                  isRare: false,
+                  isTop1: false,
+                };
+              }
+              return sig;
+            })
             .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
             .slice(0, 100);
 

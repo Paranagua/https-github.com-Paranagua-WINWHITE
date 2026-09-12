@@ -45,6 +45,28 @@ export function getSignalTypeBadge(sig?: SignalLike | null): SignalTypeInfo {
   const label = (sig.label || "").toUpperCase();
   const conf = (sig.confluence || "").toUpperCase();
 
+  // 🔥 Grupo EM ALTA (Recebe sinais exclusivos de Tendência 3/3)
+  if (
+    (sig as any).isEmAlta ||
+    cat === "em_alta" ||
+    cat.includes("em_alta") ||
+    cat.includes("alta") ||
+    label.includes("EM ALTA") ||
+    conf.includes("EM ALTA") ||
+    (typeof sig.key === "string" && sig.key.startsWith("EM_ALTA_")) ||
+    label.startsWith("TENDÊNCIA 3/3")
+  ) {
+    return {
+      groupKey: "em_alta",
+      name: "Em Alta",
+      short: "Em Alta",
+      icon: "🔥",
+      badgeClass:
+        "bg-orange-500 text-white border border-orange-300 shadow-[0_2px_8px_rgba(249,115,22,0.4)] font-black",
+      cardBadgeClass: "bg-orange-500/20 text-orange-400 border-orange-500/30",
+    };
+  }
+
   const top1Sources = (sig.sources || []).filter((s: any) => !s.top3 && !s.top5);
   const top3Sources = (sig.sources || []).filter((s: any) => s.top3 || s.top5);
   const distinctTop1 = new Set(top1Sources.map((s: any) => s.analysis));

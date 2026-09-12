@@ -80,7 +80,7 @@ type SignalAuditItem = {
   sourceValue: number;
   predictedMinute: number;
   projectedPct: number; // Porcentagem teórica estatística calculada pelo motor
-  category: "alavancagem" | "supreme" | "rare" | "top1_top3";
+  category: "alavancagem" | "supreme" | "rare" | "top1_top3" | "em_alta";
   sourcesCount: number;
   top1Count: number;
   analysisGroup?: string;
@@ -284,8 +284,17 @@ export default function SignalPercentageValidator() {
       if (feedMode === "from_now" && recTime < baselineTime - 60_000) continue;
 
       recordedKeys.add(rec.key);
-      const cat: SignalAuditItem["category"] =
-        rec.category === "alavancagem" || rec.isAlavancagem
+      const isEmAlta =
+        rec.isEmAlta ||
+        rec.category === "em_alta" ||
+        (typeof rec.key === "string" && rec.key.startsWith("EM_ALTA_")) ||
+        (typeof rec.label === "string" &&
+          (rec.label.toUpperCase().includes("EM ALTA") || rec.label.startsWith("Tendência 3/3"))) ||
+        (typeof rec.confluence === "string" && rec.confluence.toUpperCase().includes("EM ALTA"));
+
+      const cat: SignalAuditItem["category"] = isEmAlta
+        ? "em_alta"
+        : rec.category === "alavancagem" || rec.isAlavancagem
           ? "alavancagem"
           : rec.category === "supreme" || rec.isSupreme
             ? "supreme"
@@ -974,7 +983,13 @@ export default function SignalPercentageValidator() {
       total > 0 ? finished.reduce((acc, s) => acc + s.projectedPct, 0) / total : 0;
 
     // Estatísticas por Categoria de Confluência
-    const catKeys: SignalAuditItem["category"][] = ["alavancagem", "supreme", "rare", "top1_top3"];
+    const catKeys: SignalAuditItem["category"][] = [
+      "em_alta",
+      "alavancagem",
+      "supreme",
+      "rare",
+      "top1_top3",
+    ];
 
     const byCategory = catKeys.map((cat) => {
       const items = finished.filter((s) => s.category === cat);
@@ -1255,6 +1270,10 @@ export default function SignalPercentageValidator() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {auditResults.stats?.byCategory.map((cat) => {
             const labelMap: Record<string, { name: string; badge: string }> = {
+              em_alta: {
+                name: "🔥 Em Alta (Tendência 3/3)",
+                badge: "bg-orange-500/20 text-orange-400 border border-orange-500/30 font-black",
+              },
               alavancagem: {
                 name: "🚀 Alavancagem (4+ Top 1)",
                 badge: "bg-white text-black font-black",
@@ -1353,6 +1372,7 @@ export default function SignalPercentageValidator() {
                 className="rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-white focus:outline-none focus:border-primary"
               >
                 <option value="all">Todas Categorias</option>
+                <option value="em_alta">🔥 Em Alta (Tendência 3/3)</option>
                 <option value="alavancagem">🚀 Alavancagem (4+ Top 1)</option>
                 <option value="supreme">👑 Supremo (2-3x Top 1 + 2+ Top 2/3)</option>
                 <option value="rare">💎 Raro (2-3x Top 1)</option>
@@ -1452,7 +1472,11 @@ export default function SignalPercentageValidator() {
                       </div>
                     </td>
                     <td className="px-6 py-3">
-                      {s.category === "alavancagem" ? (
+                      {s.category === "em_alta" ? (
+                        <span className="rounded-full bg-orange-500/20 px-2 py-0.5 text-[9px] font-black text-orange-400 border border-orange-500/30">
+                          🔥 EM ALTA
+                        </span>
+                      ) : s.category === "alavancagem" ? (
                         <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black text-black">
                           🚀 ALAVANCAGEM
                         </span>
