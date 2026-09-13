@@ -41,7 +41,10 @@ interface PrimaryAnalysisMetadataItem {
   badge: string;
   description: string;
   minute?: number;
-  strategyGroup?: "f2" | "soma19" | "soma17" | "confirmacao";
+  strategyGroup?: "f2" | "soma19" | "soma17" | "confirmacao" | "b";
+  parentKey?: string;
+  ponta?: number;
+  pProx?: number;
 }
 
 const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
@@ -465,8 +468,8 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
     minute: 9,
   },
 
-  // 6. Estratégias Ativas (F2, Somas 19, Somas 17, Confirmações E1 a E15)
-  // Estratégia F2
+  // 6. Estratégias Ativas (F2, Somas 19, Somas 17, Confirmações E1 a E15, Estratégias B)
+  // Estratégia F2 (Principal)
   {
     key: "F2",
     analysisId: 202,
@@ -475,14 +478,28 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
     category: "estrategias",
     categoryLabel: "Estratégias Ativas",
     badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
-    description: "Disparo automático após quebra de fluxo com 2 cores consecutivas alternadas.",
+    description: "Gatilho F2 após pedra 4 + P_prox. Clique para ver as 15 subcategorias (0 a 14).",
     strategyGroup: "f2",
   },
+  // 15 Subcategorias da Estratégia F2 (P_prox 0 a 14)
+  ...Array.from({ length: 15 }, (_, p) => ({
+    key: `F2-${p}`,
+    analysisId: 220 + p,
+    name: `F2 · Próxima Pedra ${p}`,
+    shortLabel: `F2-${p}`,
+    category: "estrategias" as const,
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: `Subcategoria F2 com próxima pedra (P_prox) no valor ${p}.`,
+    strategyGroup: "f2" as const,
+    parentKey: "F2",
+    pProx: p,
+  })),
   // Somas 19
   {
     key: "S19_10-9",
-    name: "Soma 19 · 10-9 / 9-10",
-    shortLabel: "10-9",
+    name: "Soma 19 · S-109 (10-9 / 9-10)",
+    shortLabel: "S-109",
     category: "estrategias",
     categoryLabel: "Estratégias Ativas",
     badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
@@ -491,8 +508,8 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "S19_11-8",
-    name: "Soma 19 · 11-8",
-    shortLabel: "11-8",
+    name: "Soma 19 · S-118 (11-8)",
+    shortLabel: "S-118",
     category: "estrategias",
     categoryLabel: "Estratégias Ativas",
     badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
@@ -501,8 +518,8 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "S19_8-11",
-    name: "Soma 19 · 8-11",
-    shortLabel: "8-11",
+    name: "Soma 19 · S-811 (8-11)",
+    shortLabel: "S-811",
     category: "estrategias",
     categoryLabel: "Estratégias Ativas",
     badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
@@ -511,8 +528,8 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "S19_12-7",
-    name: "Soma 19 · 12-7 / 7-12",
-    shortLabel: "12-7",
+    name: "Soma 19 · S-127 (12-7 / 7-12)",
+    shortLabel: "S-127",
     category: "estrategias",
     categoryLabel: "Estratégias Ativas",
     badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
@@ -521,8 +538,8 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "S19_6-13",
-    name: "Soma 19 · 6-13 / 13-6",
-    shortLabel: "6-13",
+    name: "Soma 19 · S-613 (6-13 / 13-6)",
+    shortLabel: "S-613",
     category: "estrategias",
     categoryLabel: "Estratégias Ativas",
     badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
@@ -531,8 +548,8 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "S19_14-5",
-    name: "Soma 19 · 14-5 / 5-14",
-    shortLabel: "14-5",
+    name: "Soma 19 · S-145 (14-5 / 5-14)",
+    shortLabel: "S-145",
     category: "estrategias",
     categoryLabel: "Estratégias Ativas",
     badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
@@ -542,8 +559,8 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   // Somas 17
   {
     key: "S17_10-7",
-    name: "Soma 17 · 10-7 / 7-10",
-    shortLabel: "10-7",
+    name: "Soma 17 · S-107 (10-7 / 7-10)",
+    shortLabel: "S-107",
     category: "estrategias",
     categoryLabel: "Estratégias Ativas",
     badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
@@ -552,8 +569,8 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "S17_8-9",
-    name: "Soma 17 · 8-9 / 9-8",
-    shortLabel: "8-9",
+    name: "Soma 17 · S-89 (8-9 / 9-8)",
+    shortLabel: "S-89",
     category: "estrategias",
     categoryLabel: "Estratégias Ativas",
     badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
@@ -562,8 +579,8 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "S17_11-6",
-    name: "Soma 17 · 11-6",
-    shortLabel: "11-6",
+    name: "Soma 17 · S-116 (11-6)",
+    shortLabel: "S-116",
     category: "estrategias",
     categoryLabel: "Estratégias Ativas",
     badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
@@ -572,8 +589,8 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "S17_5-12",
-    name: "Soma 17 · 5-12",
-    shortLabel: "5-12",
+    name: "Soma 17 · S-512 (5-12)",
+    shortLabel: "S-512",
     category: "estrategias",
     categoryLabel: "Estratégias Ativas",
     badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
@@ -582,8 +599,8 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "S17_13-4",
-    name: "Soma 17 · 13-4",
-    shortLabel: "13-4",
+    name: "Soma 17 · S-134 (13-4)",
+    shortLabel: "S-134",
     category: "estrategias",
     categoryLabel: "Estratégias Ativas",
     badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
@@ -592,12 +609,12 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "S17_14-3",
-    name: "Soma 17 · 14-3",
-    shortLabel: "14-3",
+    name: "Soma 17 · S-314 (14-3 / 3-14)",
+    shortLabel: "S-314",
     category: "estrategias",
     categoryLabel: "Estratégias Ativas",
     badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
-    description: "Gatilho de soma 17 pelo par consecutivo 14 e 3.",
+    description: "Gatilho de soma 17 pelo par consecutivo 14 e 3 ou 3 e 14.",
     strategyGroup: "soma17",
   },
   // Confirmações E1 a E15
@@ -766,6 +783,102 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
     description: "Confirmação ativa para as pedras 2, 4, 6, 9 e 11.",
     strategyGroup: "confirmacao",
   },
+  // Estratégias B (B1, B2, B3 - Principais)
+  {
+    key: "B1",
+    analysisId: 301,
+    name: "Estratégia B1 · Pontas 4 Giros",
+    shortLabel: "B1",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description:
+      "Gatilho B1: 4 giros onde 1ª e 4ª são iguais. Clique para ver as 15 pontas (0 a 14).",
+    strategyGroup: "b",
+  },
+  // Subcategorias B1 (Pontas 0 a 14)
+  ...Array.from({ length: 15 }, (_, p) => ({
+    key: `B1-${p}`,
+    analysisId: 330 + p,
+    name: `B1 · Ponta ${p}`,
+    shortLabel: `B-${p}`,
+    category: "estrategias" as const,
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: `Subcategoria da estratégia B1 validada com pontas no valor ${p}.`,
+    strategyGroup: "b" as const,
+    parentKey: "B1",
+    ponta: p,
+  })),
+
+  {
+    key: "B2",
+    analysisId: 302,
+    name: "Estratégia B2 · Pontas 5 Giros",
+    shortLabel: "B2",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description:
+      "Gatilho B2: 5 giros onde 1ª e 5ª são iguais. Clique para ver as 15 pontas (0 a 14).",
+    strategyGroup: "b",
+  },
+  // Subcategorias B2 (Pontas 0 a 14)
+  ...Array.from({ length: 15 }, (_, p) => ({
+    key: `B2-${p}`,
+    analysisId: 350 + p,
+    name: `B2 · Ponta ${p}`,
+    shortLabel: `B-${p}`,
+    category: "estrategias" as const,
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: `Subcategoria da estratégia B2 validada com pontas no valor ${p}.`,
+    strategyGroup: "b" as const,
+    parentKey: "B2",
+    ponta: p,
+  })),
+
+  {
+    key: "B3",
+    analysisId: 303,
+    name: "Estratégia B3 · Pontas 6 Giros",
+    shortLabel: "B3",
+    category: "estrategias",
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description:
+      "Gatilho B3: 6 giros onde 1ª e 6ª são iguais. Clique para ver as 15 pontas (0 a 14).",
+    strategyGroup: "b",
+  },
+  // Subcategorias B3 (Pontas 0 a 14)
+  ...Array.from({ length: 15 }, (_, p) => ({
+    key: `B3-${p}`,
+    analysisId: 370 + p,
+    name: `B3 · Ponta ${p}`,
+    shortLabel: `B-${p}`,
+    category: "estrategias" as const,
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: `Subcategoria da estratégia B3 validada com pontas no valor ${p}.`,
+    strategyGroup: "b" as const,
+    parentKey: "B3",
+    ponta: p,
+  })),
+
+  // Fallback Pontas Genéricas B-0 a B-14
+  ...Array.from({ length: 15 }, (_, p) => ({
+    key: `B-${p}`,
+    analysisId: 310 + p,
+    name: `Estratégia B · Ponta ${p}`,
+    shortLabel: `B-${p}`,
+    category: "estrategias" as const,
+    categoryLabel: "Estratégias Ativas",
+    badge: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    description: `Validação da estratégia B (B1, B2 ou B3) com pontas no valor ${p}.`,
+    strategyGroup: "b" as const,
+    parentKey: "B",
+    ponta: p,
+  })),
 ];
 
 type Result = {
@@ -971,7 +1084,7 @@ function SinaisSectionContent() {
   >("todas");
   const [selectedMinuteFilter, setSelectedMinuteFilter] = useState<number | null>(null);
   const [selectedStrategyGroup, setSelectedStrategyGroup] = useState<
-    "todas" | "f2" | "soma19" | "soma17" | "confirmacao"
+    "todas" | "f2" | "soma19" | "soma17" | "confirmacao" | "b"
   >("todas");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [selectedAnalysisForDetail, setSelectedAnalysisForDetail] =
@@ -1171,7 +1284,21 @@ function SinaisSectionContent() {
                 item.key.replace(/^(S19_|S17_)/, "").toUpperCase() === stUpper),
           );
           if (m) matchedKeys.add(m.key);
+          const bMatch = st.match(/^B[-_](\d+)$/i);
+          if (bMatch) {
+            matchedKeys.add(`B-${bMatch[1]}`);
+          }
+          if (/^B[1-3]$/i.test(st)) {
+            matchedKeys.add(st.toUpperCase());
+          }
         });
+      }
+
+      if ((sig as any).bType) {
+        matchedKeys.add((sig as any).bType);
+      }
+      if ((sig as any).ponta !== undefined) {
+        matchedKeys.add(`B-${(sig as any).ponta}`);
       }
 
       // Mapeamento via sig.confirmedStrategies
@@ -1311,52 +1438,6 @@ function SinaisSectionContent() {
       selectedAnalysisForDetail
     );
   }, [selectedAnalysisForDetail, primaryAnalysisStats]);
-
-  function extractSignalStrategies(sig: any): string[] {
-    const list = new Set<string>();
-    if (Array.isArray(sig.strategies)) {
-      sig.strategies.forEach((st: string) => {
-        if (typeof st === "string" && st.trim()) list.add(st.trim());
-      });
-    }
-    if (Array.isArray(sig.confirmedStrategies)) {
-      sig.confirmedStrategies.forEach((cs: any) => {
-        const code = cs?.code || cs?.name;
-        if (typeof code === "string" && code.trim()) list.add(code.trim());
-      });
-    }
-    if (typeof sig.strategyKey === "string" && sig.strategyKey.trim()) {
-      list.add(sig.strategyKey.trim());
-    }
-    const text = `${sig.label || ""} ${sig.confluence || ""}`.toUpperCase();
-    for (let i = 1; i <= 15; i++) {
-      const re = new RegExp(`\\bE${i}\\b`);
-      if (re.test(text)) list.add(`E${i}`);
-    }
-    if (/\bF2\b/.test(text)) list.add("F2");
-    const sums19 = ["10-9", "9-10", "11-8", "8-11", "12-7", "7-12", "6-13", "13-6", "14-5", "5-14"];
-    sums19.forEach((pair) => {
-      if (text.includes(pair)) list.add(pair);
-    });
-    const sums17 = [
-      "10-7",
-      "7-10",
-      "8-9",
-      "9-8",
-      "11-6",
-      "6-11",
-      "5-12",
-      "12-5",
-      "13-4",
-      "4-13",
-      "14-3",
-      "3-14",
-    ];
-    sums17.forEach((pair) => {
-      if (text.includes(pair)) list.add(pair);
-    });
-    return Array.from(list);
-  }
 
   // Auditoria dos sinais preditivos contra os resultados reais (Regra rigorosa de 6 rodadas: M-1, M, M+1)
   useEffect(() => {
@@ -1878,6 +1959,18 @@ function SinaisSectionContent() {
                     </button>
                     <button
                       type="button"
+                      onClick={() => setSelectedStrategyGroup("b")}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
+                        selectedStrategyGroup === "b"
+                          ? "bg-purple-500/30 text-purple-200 border border-purple-500/40"
+                          : "bg-white/5 text-white/50 hover:text-white/80"
+                      }`}
+                    >
+                      Estratégias B (
+                      {primaryAnalysisStats.filter((s) => s.strategyGroup === "b").length})
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setSelectedStrategyGroup("f2")}
                       className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
                         selectedStrategyGroup === "f2"
@@ -1885,7 +1978,7 @@ function SinaisSectionContent() {
                           : "bg-white/5 text-white/50 hover:text-white/80"
                       }`}
                     >
-                      F2 (1)
+                      F2 ({primaryAnalysisStats.filter((s) => s.strategyGroup === "f2").length})
                     </button>
                     <button
                       type="button"
@@ -1896,7 +1989,8 @@ function SinaisSectionContent() {
                           : "bg-white/5 text-white/50 hover:text-white/80"
                       }`}
                     >
-                      Soma 19 (6)
+                      Soma 19 (
+                      {primaryAnalysisStats.filter((s) => s.strategyGroup === "soma19").length})
                     </button>
                     <button
                       type="button"
@@ -1907,7 +2001,8 @@ function SinaisSectionContent() {
                           : "bg-white/5 text-white/50 hover:text-white/80"
                       }`}
                     >
-                      Soma 17 (6)
+                      Soma 17 (
+                      {primaryAnalysisStats.filter((s) => s.strategyGroup === "soma17").length})
                     </button>
                     <button
                       type="button"
@@ -1918,7 +2013,9 @@ function SinaisSectionContent() {
                           : "bg-white/5 text-white/50 hover:text-white/80"
                       }`}
                     >
-                      Confirmações E1-E15 (15)
+                      Confirmações (
+                      {primaryAnalysisStats.filter((s) => s.strategyGroup === "confirmacao").length}
+                      )
                     </button>
                   </div>
                 )}

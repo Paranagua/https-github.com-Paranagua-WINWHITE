@@ -41,10 +41,17 @@ export function getValidCycles(cycles: Cycle[], value?: number, analysis?: numbe
   );
 }
 
-function diffMinutes(a: Date, b: Date) {
-  const minA = Math.floor(a.getTime() / 60000);
-  const minB = Math.floor(b.getTime() / 60000);
-  return Math.max(0, minB - minA);
+export function diffMinutes(a: Date, b: Date): number | null {
+  if (!a || !b) return null;
+  const tA = a.getTime();
+  const tB = b.getTime();
+  if (Number.isNaN(tA) || Number.isNaN(tB)) return null;
+  const minA = Math.floor(tA / 60000);
+  const minB = Math.floor(tB / 60000);
+  const diff = minB - minA;
+  // Quando não conseguir calcular/carregar o tempo ou a diferença for <= 0, deixa em branco (null)
+  if (diff <= 0) return null;
+  return diff;
 }
 
 export function collectGaps(rows: Row[], i: number, dt: Date): number[] {
@@ -62,7 +69,10 @@ export function collectGaps(rows: Row[], i: number, dt: Date): number[] {
     if (zdt.getTime() - dt.getTime() > timeoutMs) break;
 
     if (Number(r.roll) === 0) {
-      gaps.push(diffMinutes(dt, zdt));
+      const gap = diffMinutes(dt, zdt);
+      if (gap !== null && gap > 0) {
+        gaps.push(gap);
+      }
     }
   }
   return gaps;
@@ -553,14 +563,17 @@ export type Group = { m: number; label: string; count: number; pct: number; dire
 
 /** Top N por presença única de linha, janela (M-1, M, M+1), com dedup. */
 export function computeTop(cycles: Cycle[], topN: number): Group[] {
-  const rowSets = cycles.map((c) => new Set(c.gaps));
+  const rowSets = cycles.map(
+    (c) =>
+      new Set((c.gaps || []).filter((g) => typeof g === "number" && !Number.isNaN(g) && g > 0)),
+  );
   const totalRows = cycles.length;
   if (!totalRows) return [];
   let maxGap = 0;
   for (const rs of rowSets) for (const v of rs) if (v > maxGap) maxGap = v;
 
   const candidates: Array<Group & { directHits: number }> = [];
-  for (let m = 0; m <= maxGap + 1; m++) {
+  for (let m = 1; m <= maxGap + 1; m++) {
     let hasM = false;
     let hasMinus = false;
     let hasPlus = false;
@@ -568,7 +581,7 @@ export function computeTop(cycles: Cycle[], topN: number): Group[] {
     let directHits = 0;
     for (const rs of rowSets) {
       const inM = rs.has(m);
-      const inMinus = m > 0 && rs.has(m - 1);
+      const inMinus = m > 1 && rs.has(m - 1);
       const inPlus = rs.has(m + 1);
       if (inM || inMinus || inPlus) {
         count++;

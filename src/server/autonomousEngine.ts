@@ -13,7 +13,6 @@ import {
 } from "../lib/predictive";
 import { IncrementalPredictiveEngine } from "../lib/incrementalPredictiveEngine";
 import { computeAllSumTriggerProjections } from "../lib/sum19Strategies";
-import { computeF2TriggerProjections, buildF2Signals } from "../lib/f2Strategy";
 import { computeConfirmationProjections } from "../lib/confirmationStrategies";
 import {
   buildStrategyTriggeredSignals,
@@ -340,13 +339,12 @@ class AutonomousAuditEngine {
         end: a.triggerAt.getTime() + a.duration * 60000,
       }));
 
-      // 3. Constrói sinais disparados por estratégias de soma (com confluências obrigatórias)
-      // Permite captura autônoma de sinais históricos recentes para auditoria contínua 24/7
-      // Estratégias "E" desativadas nas confluências; apenas soma =17&19 ativas
+      // 3. Constrói sinais das análises primárias com todas as estratégias (B1-B3, F2, E1-E15, Soma 19, Soma 17)
+      // ativas servindo APENAS de confluência
       const triggeredSignals = buildStrategyTriggeredSignals(
         sumProjections,
         rawCandidates,
-        [],
+        confProjections,
         alertWindow,
         now.getTime(),
         {
@@ -359,20 +357,11 @@ class AutonomousAuditEngine {
 
       const emAltaSignals = buildEmAltaSignals(tendencyCandidates, triggeredSignals, now.getTime());
 
-      // 4. Constrói sinais disparados pela Estratégia F2 para envio autônomo (com suporte a confluências)
-      const f2Projections = computeF2TriggerProjections(rowsToProcess);
-      const f2Signals = buildF2Signals(f2Projections, rowsToProcess, now.getTime(), {
-        allowHistorical: true,
-        minTargetTime: now.getTime() - 5 * 3600_000,
-        existingSignals: triggeredSignals,
-        sumProjections,
-        confluenceCandidates: rawCandidates,
-      });
-
-      const allAutonomousSignals = [...triggeredSignals, ...emAltaSignals, ...f2Signals];
+      // 4. Todas as estratégias ativas servindo apenas de confluência
+      const allAutonomousSignals = [...triggeredSignals, ...emAltaSignals];
 
       console.log(
-        `[AutonomousEngine] Cycle stats: rows=${rowsToProcess.length}, sumProjections=${sumProjections.length}, f2Projections=${f2Projections.length}, rawCandidates=${rawCandidates.length}, tendencyCandidates=${tendencyCandidates.length}, triggeredSignals=${allAutonomousSignals.length}`,
+        `[AutonomousEngine] Cycle stats: rows=${rowsToProcess.length}, sumProjections=${sumProjections.length}, confProjections=${confProjections.length}, rawCandidates=${rawCandidates.length}, tendencyCandidates=${tendencyCandidates.length}, triggeredSignals=${allAutonomousSignals.length}`,
       );
 
       // 4. Mescla o ciclo de vida dos sinais (sem perder estados e respeitando transições)

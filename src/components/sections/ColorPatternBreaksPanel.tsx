@@ -66,7 +66,11 @@ export function ColorPatternBreaksPanel({ rows, selectedPedra }: ColorPatternBre
     const persisted = (persistedColorCycles[patternDef.analysisId] || []).filter(
       (c) => c.value === selectedPedra,
     );
-    return persisted.length > 0 ? mergePersistedWithLiveCycles(persisted, live) : live;
+    const merged = persisted.length > 0 ? mergePersistedWithLiveCycles(persisted, live) : live;
+    return merged.map((c) => ({
+      ...c,
+      gaps: (c.gaps || []).filter((g) => typeof g === "number" && !Number.isNaN(g) && g > 0),
+    }));
   }, [breaksForSelectedStone, rows, persistedColorCycles, patternDef.analysisId, selectedPedra]);
 
   // Ciclo aberto ativo (em andamento) se o mais recente tiver menos de 14 brancos

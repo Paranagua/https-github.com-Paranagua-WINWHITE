@@ -46,27 +46,77 @@ export interface SignalLevelEvaluation {
 }
 
 /**
- * Formata o código da estratégia conforme a especificação:
- * - Estratégias de confirmação E1-E15 permanecem E1, E2... E15.
- * - Estratégias de soma (ex: 14-5, 10-9, 11-8) são exibidas sem o hífen: 145, 109, 118, etc.
- * - Sem percentual.
+ * Formata o código da estratégia conforme a especificação do usuário:
+ * - F2 = F2-(P_prox), ex: F2-8
+ * - Soma = S-(pedras da soma), ex: S-314, S-109, S-118, S-145, S-89
+ * - Confirmações = E1 a E15, ex: E5
+ * - B = B-(numero das pontas), ex: B-3
  */
 export function formatStrategyCode(raw?: string | null): string {
   if (!raw) return "";
   let clean = raw.trim();
-  clean = clean.replace(/^(S19_|S17_|Gatilho\s*:?\s*)/i, "");
-  // Remove hífen entre números, ex: "14-5" -> "145", "10-9" -> "109"
-  clean = clean.replace(/(\d+)-(\d+)/g, "$1$2");
+
+  // 1. Confirmações E1 a E15 (ex. E5)
+  const eMatch = clean.match(/^E(?:1[0-5]|[1-9])$/i);
+  if (eMatch) {
+    return clean.toUpperCase();
+  }
+
+  // 2. F2: F2-(P_prox), ex. F2-8
+  const f2Match = clean.match(/^F2(?:[-_](\d+))?$/i);
+  if (f2Match) {
+    return f2Match[1] !== undefined ? `F2-${f2Match[1]}` : "F2";
+  }
+
+  // 3. B: B-(numero das pontas), ex. B-3 (pontas de 0 a 14)
+  const bMatch = clean.match(/^B(?:[1-3])?[-_](\d+)$/i);
+  if (bMatch) {
+    return `B-${bMatch[1]}`;
+  }
+  // Se for apenas o código do gatilho (B1, B2, B3) sem ponta explícita
+  if (/^B[1-3]$/i.test(clean)) {
+    return clean.toUpperCase();
+  }
+
+  // 4. Soma: S-(pedras da soma), ex. S-314
+  if (/^S-\d+$/i.test(clean)) {
+    return clean.toUpperCase();
+  }
+
+  // Remove prefixos como S19_, S17_, S_, Gatilho
+  clean = clean.replace(/^(S19_|S17_|S_|Gatilho\s*:?\s*)/i, "");
+
+  // Pares com hífen, ex: "14-5" -> "S-145", "10-9" -> "S-109", "3-14" -> "S-314", "14-3" -> "S-143"
+  if (/^\d+-\d+$/.test(clean)) {
+    const digits = clean.replace(/-/g, "");
+    return `S-${digits}`;
+  }
+
+  // Dígitos puros de somas conhecidas (ex: "314", "109", "145", "89", "118")
+  if (/^\d{2,4}$/.test(clean)) {
+    return `S-${clean}`;
+  }
+
   return clean.trim();
 }
 
 /**
- * Extrai e deduplica todas as estratégias de um sinal, ordenando E1-E15 primeiro e depois somas numéricas.
- * Retorna códigos formatados (ex: ["E1", "145"]).
+ * Extrai e deduplica todas as estratégias de um sinal no padrão de tags do usuário:
+ * B-(numero das pontas) [ex: B-3], F2-(P_prox) [ex: F2-8], E1-E15 [ex: E5], S-(pedras da soma) [ex: S-314].
  */
 export function extractSignalStrategies(sig: any): string[] {
   if (!sig) return [];
   const list: string[] = [];
+
+  // Extrai direto de propriedades estruturadas
+  if (sig.ponta !== undefined) {
+    list.push(`B-${sig.ponta}`);
+  } else if (sig.bType) {
+    list.push(String(sig.bType).toUpperCase());
+  }
+  if (sig.pProx !== undefined) {
+    list.push(`F2-${sig.pProx}`);
+  }
 
   // 1. Array strategies explícito
   if (Array.isArray(sig.strategies) && sig.strategies.length > 0) {
@@ -96,45 +146,85 @@ export function extractSignalStrategies(sig: any): string[] {
     }
   }
 
-  // 5. Escaneia confluence e label para capturar F2 e pares de soma (14-5, 10-7, etc.) — estratégias "E" desativadas nas confluências
+  // 5. Escaneia confluence e label para capturar B-(0..14), B1-B3, F2(-X)?, E1-E15 e pares de soma
   const textToScan = `${sig.confluence || ""} ${sig.label || ""}`;
   if (textToScan) {
-    if (/\bF2\b/i.test(textToScan)) {
+    // Captura B-(0 a 14)
+    const bTipMatches = textToScan.match(/\bB-(?:1[0-4]|[0-9])\b/gi);
+    if (bTipMatches) {
+      bTipMatches.forEach((m) => list.push(formatStrategyCode(m)));
+    }
+    // Captura B1, B2, B3
+    const bMatches = textToScan.match(/\bB[1-3]\b/gi);
+    if (bMatches) {
+      bMatches.forEach((m) => list.push(m.toUpperCase()));
+    }
+    // Captura F2-(4 a 14) ou F2
+    const f2TipMatches = textToScan.match(/\bF2-(?:1[0-4]|[0-9])\b/gi);
+    if (f2TipMatches) {
+      f2TipMatches.forEach((m) => list.push(formatStrategyCode(m)));
+    } else if (/\bF2\b/i.test(textToScan)) {
       list.push("F2");
     }
-    // Procura por pares de soma como 14-5, 10-9, 11-8, 12-7, 6-13, 8-11, 10-7, 8-9, 11-6, 5-12, 13-4, 14-3
+    // Captura E1-E15
+    const eMatches = textToScan.match(/\bE(?:1[0-5]|[1-9])\b/gi);
+    if (eMatches) {
+      eMatches.forEach((m) => list.push(m.toUpperCase()));
+    }
+    // Captura S-XXX
+    const sMatches = textToScan.match(/\bS-\d+\b/gi);
+    if (sMatches) {
+      sMatches.forEach((m) => list.push(formatStrategyCode(m)));
+    }
+    // Procura por pares de soma como 14-5, 10-9, 11-8, 12-7, 6-13, 8-11, 10-7, 8-9, 11-6, 5-12, 13-4, 14-3, 3-14
     const sumMatches = textToScan.match(/\b\d+-\d+\b/g);
     if (sumMatches) {
       sumMatches.forEach((m) => list.push(formatStrategyCode(m)));
     }
   }
 
-  // Deduplica mantendo valores únicos, filtra estratégias "E" e remove tags de tendência (T_A18...)
+  // Deduplica mantendo valores únicos e remove tags de tendência (T_A18...)
   const seen = new Set<string>();
   const result: string[] = [];
   for (const item of list) {
-    if (/^E\d+$/i.test(item)) continue; // Estratégias "E" desativadas nas confluências
     if (/^T[_-]/i.test(item)) continue; // Remove tags de tendência como T_A18
     const formatted = formatStrategyCode(item);
-    if (
-      formatted &&
-      !/^E\d+$/i.test(formatted) &&
-      !/^T[_-]/i.test(formatted) &&
-      !seen.has(formatted)
-    ) {
+    if (formatted && !/^T[_-]/i.test(formatted) && !seen.has(formatted)) {
       seen.add(formatted);
       result.push(formatted);
     }
   }
 
-  // Ordena F2 primeiro e depois somas numéricas (ex: F2, 89, 107, 109, 145...)
-  result.sort((a, b) => {
-    if (a === "F2") return -1;
-    if (b === "F2") return 1;
+  // Se houver uma ponta específica (ex: B-3), não precisa exibir o genérico B1 na mesma tag se ambos existirem
+  const hasSpecificB = result.some((r) => /^B-\d+$/i.test(r));
+  const filtered = hasSpecificB ? result.filter((r) => !/^B[1-3]$/i.test(r)) : result;
+
+  // Ordena B primeiro (ex. B-3), depois F2 (ex. F2-8), depois Confirmações E1-E15 (ex. E5), depois Somas (ex. S-314)
+  filtered.sort((a, b) => {
+    const isB_A = /^B[-_\d]/i.test(a);
+    const isB_B = /^B[-_\d]/i.test(b);
+    if (isB_A && !isB_B) return -1;
+    if (!isB_A && isB_B) return 1;
+
+    const isF2_A = /^F2/i.test(a);
+    const isF2_B = /^F2/i.test(b);
+    if (isF2_A && !isF2_B) return -1;
+    if (!isF2_A && isF2_B) return 1;
+
+    const isE_A = /^E\d+$/i.test(a);
+    const isE_B = /^E\d+$/i.test(b);
+    if (isE_A && !isE_B) return -1;
+    if (!isE_A && isE_B) return 1;
+    if (isE_A && isE_B) {
+      const numA = parseInt(a.replace(/\D/g, ""), 10) || 0;
+      const numB = parseInt(b.replace(/\D/g, ""), 10) || 0;
+      return numA - numB;
+    }
+
     return a.localeCompare(b);
   });
 
-  return result;
+  return filtered;
 }
 
 export interface SignalAnalysisItem {
@@ -161,8 +251,8 @@ export function extractSignalAnalyses(sig: any): SignalAnalysisItem[] {
   if (Array.isArray(sig.sources) && sig.sources.length > 0) {
     sig.sources.forEach((src: any) => {
       if (!src) return;
-      // Estratégias E já são exibidas em cardStrategies
-      if (src.analysis >= 101 && src.analysis <= 115) return;
+      // Estratégias (E1..E15, F2, B1..B3, Somas) NÃO são análises primárias e nunca exibem tags de percentual no card
+      if (src.analysis >= 100) return;
       const pctStr = typeof src.pct === "number" && src.pct > 0 ? `${Math.round(src.pct)}%` : "";
       const code =
         src.analysis >= 50 && src.analysis <= 56 ? `Q${src.analysis - 49}` : `A${src.analysis}`;
@@ -282,12 +372,15 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
   const distinctTop1 = new Set(top1Sources.map((s: any) => s.analysis));
   const distinctTop3 = new Set(top3Sources.map((s: any) => s.analysis));
 
-  // Regra do Usuário: Estratégias "E" desativadas nas confluências.
-  // Apenas as estratégias de soma =17&19 atuam ativamente como confluência Top 2/3.
+  // Confluência de estratégias ativas (B1-B3, F2, E1-E15, e somas numéricas):
   const textToScan = `${sig.confluence || ""} ${sig.label || ""} ${(sig as any).strategies?.join(" ") || ""}`;
   const sumMatches = textToScan.match(/\b\d+-\d+\b/g);
   if (sumMatches) {
     sumMatches.forEach((m) => distinctTop3.add(`SUM_${formatStrategyCode(m)}`));
+  }
+  const stratMatches = textToScan.match(/\b(B[1-3]|F2|E(?:1[0-5]|[1-9]))\b/gi);
+  if (stratMatches) {
+    stratMatches.forEach((m) => distinctTop3.add(`STRAT_${m.toUpperCase()}`));
   }
 
   // Quando fontes estruturadas estão presentes, calcula estritamente pelas regras dos grupos:
@@ -1168,17 +1261,26 @@ export function buildStrategyTriggeredSignals(
       return t >= clusterWindowStart && t <= clusterWindowEnd;
     });
 
-    // 2. Busca confluências das Estratégias: ESTRATÉGIAS "E" DESATIVADAS NAS CONFLUÊNCIAS.
-    // Deixa ativa apenas as estratégias de soma =17&19 (Soma 19 e Soma 17)!
+    // 2. Busca confluências das Estratégias: TODAS AS ESTRATÉGIAS ATIVAS PARA SERVIR DE CONFLUÊNCIA
+    // (B1, B2, B3, F2, Soma 19, Soma 17, E1-E15)
     const matchingSumProjections = (sumProjections || []).filter((sp) => {
       if (!sp || !sp.targetDate) return false;
       const t = sp.targetDate.getTime();
       return t >= clusterWindowStart && t <= clusterWindowEnd;
     });
 
+    const matchingConfProjections = (confirmationProjections || []).filter((cp) => {
+      if (!cp || !cp.targetDate) return false;
+      const t = cp.targetDate.getTime();
+      return t >= clusterWindowStart && t <= clusterWindowEnd;
+    });
+
     const rawStrategyCodes: string[] = [];
     matchingSumProjections.forEach((sp) => {
       if (sp.code) rawStrategyCodes.push(sp.code);
+    });
+    matchingConfProjections.forEach((cp) => {
+      if (cp.code) rawStrategyCodes.push(cp.code);
     });
 
     const distinctStrategies: string[] = [];
@@ -1342,8 +1444,24 @@ export function buildStrategyTriggeredSignals(
       }
     });
 
-    // Estratégias confirmadas na janela: vazio pois estratégias "E" estão desativadas nas confluências
+    // Estratégias confirmadas na janela:
     const clusterConfirmed: ConfirmedStrategyInfo[] = [];
+    matchingConfProjections.forEach((cp, cIdx) => {
+      clusterConfirmed.push({
+        id: cp.id,
+        code: cp.code,
+        name: cp.name,
+        type: cp.type,
+      });
+      allSources.push({
+        analysis: 40000 + (cp.id || cIdx + 1),
+        value: cp.id || cIdx + 1,
+        pct: 85.0,
+        top3: true,
+        rank: 2,
+        cycleKey: `CONF_${cp.code}_T${cp.targetTimestamp}`,
+      });
+    });
 
     // Formata textos de confluência
     const formattedAnalyses: string[] = [];

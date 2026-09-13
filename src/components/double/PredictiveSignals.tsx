@@ -28,7 +28,6 @@ import {
 } from "@/lib/signalHierarchy";
 import { computeAnalysisTendency, type RawTendencyCandidate } from "@/lib/tendencias";
 import { computeAllSumTriggerProjections } from "@/lib/sum19Strategies";
-import { computeF2TriggerProjections, buildF2Signals } from "@/lib/f2Strategy";
 import { computeConfirmationProjections } from "@/lib/confirmationStrategies";
 import {
   detectAllColorPatternBreaks,
@@ -903,12 +902,12 @@ export function PredictiveSignals() {
       }));
       setActiveRecAlerts(alertWindow);
 
-      // 3. Geração de Sinais: Estratégias de Soma 19 e Soma 17 ativas nas confluências.
-      // Estratégias "E" desativadas nas confluências conforme regra do usuário.
+      // 3. Geração de Sinais: Todas as estratégias (B1, B2, B3, F2, Soma 19, Soma 17, E1-E15)
+      // ativas para servir APENAS de confluência nos sinais das Análises Primárias.
       const strategySignals = buildStrategyTriggeredSignals(
         sumProjections,
         rawCandidates,
-        [],
+        confProjections,
         alertWindow,
         now.getTime(),
         undefined,
@@ -927,15 +926,8 @@ export function PredictiveSignals() {
         now.getTime(),
       );
 
-      // 5. Geração de Sinais da Estratégia F2 (com suporte total a confluências e sem duplicação)
-      const f2Projections = computeF2TriggerProjections(rows);
-      const f2Signals = buildF2Signals(f2Projections, rows, now.getTime(), {
-        existingSignals: strategySignals,
-        sumProjections,
-        confluenceCandidates: rawCandidates,
-      });
-
-      const allGeneratedSignals = [...strategySignals, ...emAltaSignalsGenerated, ...f2Signals];
+      // 5. Todas as estratégias ativas servindo apenas de confluência (não geram sinais avulsos)
+      const allGeneratedSignals = [...strategySignals, ...emAltaSignalsGenerated];
 
       // Constrói lista m1 (sinais elegíveis)
       const m1: Mode1Signal[] = allGeneratedSignals.map((s) => {

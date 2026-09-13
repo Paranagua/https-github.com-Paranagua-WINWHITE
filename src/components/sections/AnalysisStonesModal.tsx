@@ -72,6 +72,9 @@ export interface PrimaryAnalysisInfo {
   wins: number;
   losses: number;
   total: number;
+  parentKey?: string;
+  ponta?: number;
+  pProx?: number;
 }
 
 export interface StoneStatItem {
@@ -317,7 +320,10 @@ export function AnalysisStonesModal({
     }
     cycles.forEach((c) => {
       if (c.value >= 0 && c.value <= 14) {
-        cyclesByVal.get(c.value)?.push(c);
+        cyclesByVal.get(c.value)?.push({
+          ...c,
+          gaps: (c.gaps || []).filter((g) => typeof g === "number" && !Number.isNaN(g) && g > 0),
+        });
       }
     });
 
@@ -426,6 +432,29 @@ export function AnalysisStonesModal({
         sig.strategyKey?.toUpperCase() === altClean ||
         (shortClean && sig.strategyKey?.toUpperCase() === shortClean)
       ) {
+        return true;
+      }
+      // Checagem de Estratégias B (B1, B2, B3 e pontas)
+      if ((sig as any).bType && (sig as any).bType.toUpperCase() === keyClean) return true;
+      if ((sig as any).ponta !== undefined) {
+        const p = (sig as any).ponta;
+        if (`B-${p}`.toUpperCase() === keyClean) return true;
+        if ((sig as any).bType) {
+          const bt = (sig as any).bType.toUpperCase();
+          if (`${bt}-${p}`.toUpperCase() === keyClean) return true;
+        } else {
+          if (keyClean === `B1-${p}` || keyClean === `B2-${p}` || keyClean === `B3-${p}`) return true;
+        }
+      }
+      // Checagem de Estratégia F2 e P_prox
+      if (keyClean.startsWith("F2-")) {
+        const pVal =
+          (sig as any).pProx !== undefined
+            ? (sig as any).pProx
+            : (sig.sources || []).find((src: any) => src.analysis === 202)?.value;
+        if (pVal !== undefined && `F2-${pVal}`.toUpperCase() === keyClean) return true;
+      }
+      if (keyClean === "F2" && ((sig as any).pProx !== undefined || (sig.sources || []).some((src: any) => src.analysis === 202))) {
         return true;
       }
       if (Array.isArray(sig.confirmedStrategies)) {

@@ -72,12 +72,15 @@ export function getSignalTypeBadge(sig?: SignalLike | null): SignalTypeInfo {
   const distinctTop1 = new Set(top1Sources.map((s: any) => s.analysis));
   const distinctTop3 = new Set(top3Sources.map((s: any) => s.analysis));
 
-  // Regra do Usuário: Estratégias "E" desativadas nas confluências.
-  // Apenas as estratégias de soma =17&19 atuam como confluência Top 2/3.
+  // Confluência de estratégias ativas (B1-B3, F2, E1-E15 e somas numéricas):
   const textToScan = `${sig.confluence || ""} ${sig.label || ""} ${(sig as any).strategies?.join(" ") || ""}`;
   const sumMatches = textToScan.match(/\b\d+-\d+\b/g);
   if (sumMatches) {
     sumMatches.forEach((m) => distinctTop3.add(`SUM_${m.replace(/-/g, "")}`));
+  }
+  const stratMatches = textToScan.match(/\b(B[1-3]|F2|E(?:1[0-5]|[1-9]))\b/gi);
+  if (stratMatches) {
+    stratMatches.forEach((m) => distinctTop3.add(`STRAT_${m.toUpperCase()}`));
   }
 
   // Quando fontes estruturadas estão presentes, calcula estritamente pelas regras dos grupos:

@@ -53,7 +53,10 @@ export function cycleToRecord(
   analysisName?: string,
 ): PersistedCycleRecord {
   const triggerDate = cycle.triggerAt instanceof Date ? cycle.triggerAt : new Date(cycle.triggerAt);
-  const gaps = Array.isArray(cycle.gaps) ? [...cycle.gaps] : [];
+  // Garante que gaps contenham apenas valores numéricos positivos (> 0); valores 0 ou inválidos são deixados em branco
+  const gaps = Array.isArray(cycle.gaps)
+    ? cycle.gaps.filter((g) => typeof g === "number" && !Number.isNaN(g) && g > 0)
+    : [];
   const status = computeCycleStatus(gaps, triggerDate);
 
   return {
@@ -73,11 +76,14 @@ export function cycleToRecord(
 
 // Converte um registro do banco de volta para o tipo Cycle do motor preditivo
 export function recordToCycle(record: PersistedCycleRecord): Cycle {
+  const gaps = Array.isArray(record.gaps)
+    ? record.gaps.filter((g) => typeof g === "number" && !Number.isNaN(g) && g > 0)
+    : [];
   return {
     analysis: record.analysis,
     value: record.value,
     triggerAt: new Date(record.trigger_at),
-    gaps: Array.isArray(record.gaps) ? record.gaps : [],
+    gaps,
   };
 }
 

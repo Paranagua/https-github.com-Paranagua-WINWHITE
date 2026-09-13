@@ -825,9 +825,8 @@ export default function SignalPercentageValidator() {
       }
     }
 
-    // 2. Projeções das Estratégias: Estratégias "E" desativadas nas confluências.
-    // Ativas as estratégias de soma =17&19 (Soma 19 e Soma 17) atuando como confluência Top 2/3,
-    // e a Estratégia F2 atuando como Primária Top 1:
+    // 2. Projeções de Todas as Estratégias (B1-B3, F2, Soma 19, Soma 17, E1-E15) atuando apenas de confluência (Top 2/3):
+    const confProjections = computeConfirmationProjections(allResults);
     for (const sp of sumProjections) {
       if (!sp || !sp.targetDate) continue;
       const slotKey = Math.floor(sp.targetDate.getTime() / 60000) * 60000;
@@ -835,33 +834,41 @@ export default function SignalPercentageValidator() {
         timeSlots.set(slotKey, { top1: [], top3: [] });
       }
 
-      const isF2 = sp.code === "F2";
-
       const payload = {
         strategyKey: sp.code,
         strategyLabel: sp.name,
         value: (sp as any).pProx || parseInt(formatStrategyCode(sp.code), 10) || 1,
-        pct: isF2 ? 95.0 : 78.0,
-        isTop1: isF2,
-        isPrimary: isF2,
-        group: isF2 ? "f2" : "estrategias_soma",
+        pct: 78.0,
+        isTop1: false,
+        isPrimary: false,
+        group: "estrategias",
         groupName: sp.sumType,
-        rank: isF2 ? 1 : 2,
+        rank: 2,
         triggerAt: sp.triggerDate,
       };
 
-      if (isF2) {
-        timeSlots.get(slotKey)!.top1.push(payload);
-        // A Estratégia F2 também serve de confluência (Top 3) quando atua junto a outras análises:
-        timeSlots.get(slotKey)!.top3.push({
-          ...payload,
-          isTop1: false,
-          isPrimary: false,
-          rank: 2,
-        });
-      } else {
-        timeSlots.get(slotKey)!.top3.push(payload);
+      timeSlots.get(slotKey)!.top3.push(payload);
+    }
+
+    for (const cp of confProjections) {
+      if (!cp || !cp.targetDate) continue;
+      const slotKey = Math.floor(cp.targetDate.getTime() / 60000) * 60000;
+      if (!timeSlots.has(slotKey)) {
+        timeSlots.set(slotKey, { top1: [], top3: [] });
       }
+
+      timeSlots.get(slotKey)!.top3.push({
+        strategyKey: cp.code,
+        strategyLabel: cp.name,
+        value: cp.id || 1,
+        pct: 78.0,
+        isTop1: false,
+        isPrimary: false,
+        group: "estrategias_confirmacao",
+        groupName: cp.type === "yellow" ? "Selo Amarelo" : "Selo Azul",
+        rank: 2,
+        triggerAt: cp.triggerDate,
+      });
     }
 
     // Agora auditamos os sinais projetados nos slots temporais contra os giros reais

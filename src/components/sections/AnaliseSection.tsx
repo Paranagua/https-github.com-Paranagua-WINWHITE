@@ -94,9 +94,14 @@ function AnalysisPanel({
   maxZeros?: number;
   detailFormatter?: (c: EngineCycle) => string;
 }) {
-  // Todos os ciclos desta pedra
+  // Todos os ciclos desta pedra com gaps normalizados (apenas positivos > 0, valores 0 ou não carregados deixados em branco)
   const allStoneCycles = useMemo(() => {
-    return cycles.filter((c) => c.value === pedra);
+    return cycles
+      .filter((c) => c.value === pedra)
+      .map((c) => ({
+        ...c,
+        gaps: (c.gaps || []).filter((g) => typeof g === "number" && !Number.isNaN(g) && g > 0),
+      }));
   }, [cycles, pedra]);
 
   // O gatilho aberto ativo é estritamente o ciclo mais recente desta pedra, caso ainda tenha menos de 14 brancos
@@ -551,10 +556,13 @@ export default function AnaliseSection() {
       list.forEach((c) => {
         const n = c.value;
         if (s[n]) {
+          const cleanGaps = (c.gaps || []).filter(
+            (g) => typeof g === "number" && !Number.isNaN(g) && g > 0,
+          );
           s[n].total++;
-          if (c.gaps.length >= MAX_ZEROS) s[n].fullyCompleted++;
-          s[n].totalGaps += c.gaps.length;
-          s[n].sumGaps += c.gaps.reduce((a, b) => a + b, 0);
+          if (cleanGaps.length >= MAX_ZEROS) s[n].fullyCompleted++;
+          s[n].totalGaps += cleanGaps.length;
+          s[n].sumGaps += cleanGaps.reduce((a, b) => a + b, 0);
         }
       });
     });

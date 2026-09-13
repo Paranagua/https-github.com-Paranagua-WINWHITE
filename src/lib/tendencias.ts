@@ -66,20 +66,23 @@ export function computeAnalysisTendency(
   // Pega exatamente os 3 ciclos anteriores mais recentes daquela análise
   const recent3 = pastValidCycles.slice(-3);
 
-  // Gaps registrados em cada um dos 3 ciclos
+  // Gaps registrados em cada um dos 3 ciclos (apenas positivos > 0)
   const gapSets = recent3.map(
-    (c) => new Set(c.gaps.filter((g) => typeof g === "number" && !Number.isNaN(g))),
+    (c) =>
+      new Set((c.gaps || []).filter((g) => typeof g === "number" && !Number.isNaN(g) && g > 0)),
   );
-  const allGapsFlat = recent3.flatMap((c) => c.gaps);
+  const allGapsFlat = recent3
+    .flatMap((c) => c.gaps || [])
+    .filter((g) => typeof g === "number" && !Number.isNaN(g) && g > 0);
   const maxGap = allGapsFlat.length > 0 ? Math.max(30, ...allGapsFlat) : 30;
 
   const candidates: IdentifiedTendency[] = [];
   const upperLimit = Math.min(60, maxGap + 2);
 
-  for (let g = 0; g <= upperLimit; g++) {
+  for (let g = 1; g <= upperLimit; g++) {
     // Verifica se cada um dos 3 ciclos confirma o gap g ou seus adjacentes [g-1, g, g+1]
     const confirms = gapSets.map((s) => {
-      const hasMinus = g > 0 && s.has(g - 1);
+      const hasMinus = g > 1 && s.has(g - 1);
       const hasExact = s.has(g);
       const hasPlus = s.has(g + 1);
       return hasMinus || hasExact || hasPlus;
@@ -92,7 +95,7 @@ export function computeAnalysisTendency(
 
     // Constrói os componentes presentes para o rótulo
     const parts: string[] = [];
-    if (g > 0 && gapSets.some((s) => s.has(g - 1))) parts.push(String(g - 1));
+    if (g > 1 && gapSets.some((s) => s.has(g - 1))) parts.push(String(g - 1));
     if (gapSets.some((s) => s.has(g))) parts.push(String(g));
     if (gapSets.some((s) => s.has(g + 1))) parts.push(String(g + 1));
     const label = parts.length > 1 ? parts.join(" - ") : String(g);

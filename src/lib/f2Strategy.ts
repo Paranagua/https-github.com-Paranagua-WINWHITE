@@ -147,11 +147,12 @@ export function computeF2TriggerProjections(
     const targetTimeStr = fmtClock(targetDate);
 
     const id = `F2_${pProxDate.getTime()}_${targetTimestamp}`;
+    const code = `F2-${pProx}`;
 
     projections.push({
       id,
-      code: "F2",
-      name: "Estratégia F2",
+      code,
+      name: `Estratégia ${code}`,
       sumType: "F2",
       description: `Gatilho 4 seguido de ${pProx} (+${giros} giros [${girosSeconds}s] + 1 min)`,
       triggerDate: confirmDate || pProxDate,
@@ -345,7 +346,7 @@ export function buildF2Signals(
       isSupreme,
       isRare,
       strategyKey: "F2",
-      strategies: ["F2", ...extraStrategies],
+      strategies: [proj.code || `F2-${proj.pProx}`, ...extraStrategies],
       sources,
       clusterTimestamps: [proj.targetTimestamp],
     });

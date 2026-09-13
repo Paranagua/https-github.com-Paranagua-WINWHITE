@@ -56,10 +56,17 @@ const SECOND_STONE_ANALYSIS: Record<number, number> = {
   9: 3, // A3: 2ª do Minuto 9
 };
 
-function diffMinutes(a: Date, b: Date): number {
-  const minA = Math.floor(a.getTime() / 60000);
-  const minB = Math.floor(b.getTime() / 60000);
-  return Math.max(0, minB - minA);
+function diffMinutes(a: Date, b: Date): number | null {
+  if (!a || !b) return null;
+  const tA = a.getTime();
+  const tB = b.getTime();
+  if (Number.isNaN(tA) || Number.isNaN(tB)) return null;
+  const minA = Math.floor(tA / 60000);
+  const minB = Math.floor(tB / 60000);
+  const diff = minB - minA;
+  // Quando não conseguir calcular/carregar o tempo ou a diferença for <= 0, deixa em branco (null)
+  if (diff <= 0) return null;
+  return diff;
 }
 
 export class IncrementalPredictiveEngine {
@@ -174,15 +181,18 @@ export class IncrementalPredictiveEngine {
       if (isWhite) {
         if (cycle.gaps.length < MAX_ZEROS) {
           const gap = diffMinutes(cycle.triggerAt, currentDate);
-          cycle.gaps.push(gap);
-          cycle.isDirty = true;
-          updatedCycles.push(cycle);
-          dirtyCycles.push(cycle);
+          // Quando não conseguir carregar o tempo ou for <= 0, deixa em branco (não preenche com 0)
+          if (gap !== null && gap > 0) {
+            cycle.gaps.push(gap);
+            cycle.isDirty = true;
+            updatedCycles.push(cycle);
+            dirtyCycles.push(cycle);
 
-          // Se atingiu o limite de 14 brancos, conclui o ciclo
-          if (cycle.gaps.length >= MAX_ZEROS) {
-            cycle.status = "concluido";
-            closedKeys.push(key);
+            // Se atingiu o limite de 14 brancos, conclui o ciclo
+            if (cycle.gaps.length >= MAX_ZEROS) {
+              cycle.status = "concluido";
+              closedKeys.push(key);
+            }
           }
         }
       }

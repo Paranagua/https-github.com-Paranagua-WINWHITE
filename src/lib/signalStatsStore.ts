@@ -25,6 +25,10 @@ export interface SignalHistoryEntry {
   isAlavancagem?: boolean;
   isEmAlta?: boolean;
   isTop1?: boolean;
+  strategies?: string[];
+  bType?: string;
+  ponta?: number;
+  pProx?: number;
 }
 
 export interface AnalysisStat {
@@ -61,6 +65,9 @@ interface SignalStatsStore {
     isAlavancagem?: boolean;
     isEmAlta?: boolean;
     isTop1?: boolean;
+    bType?: string;
+    ponta?: number;
+    pProx?: number;
   }) => void;
   clearStats: () => void;
   getAssertivity: (key: string) => number;
@@ -163,6 +170,9 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             isAlavancagem: isEmAltaSignal ? false : signal.isAlavancagem,
             isEmAlta: isEmAltaSignal,
             isTop1: isEmAltaSignal ? false : signal.isTop1,
+            bType: signal.bType,
+            ponta: signal.ponta,
+            pProx: signal.pProx,
           };
 
           let updatedRecent: SignalHistoryEntry[];
