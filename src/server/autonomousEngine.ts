@@ -26,6 +26,14 @@ import { auditSignalWithRounds, type AuditResultItem } from "../lib/signalAuditE
 import type { PredictiveSignal } from "../lib/signalsStore";
 import type { SignalHistoryEntry, AnalysisStat } from "../lib/signalStatsStore";
 import {
+  computeWhiteFreezeIntervals,
+  getCurrentWhiteStreak,
+  isSignalInWhiteFreeze,
+  filterSignalsExcludingWhiteFreeze,
+  type WhiteStreakStatus,
+  type WhiteFreezeInterval,
+} from "../lib/whiteStreakFreeze";
+import {
   persistCyclesBatch,
   fetchPersistedCycles,
   fetchPersistedCyclesMap,
@@ -55,6 +63,7 @@ export interface AutonomousAuditState {
   activeSignals: PredictiveSignal[];
   recentSignals: SignalHistoryEntry[];
   stats: Record<string, AnalysisStat>;
+  whiteStreak?: WhiteStreakStatus;
   error?: string | null;
   debugInfo?: any;
 }
@@ -87,6 +96,10 @@ class AutonomousAuditEngine {
   private incrementalEngine = new IncrementalPredictiveEngine();
   private lastProcessedId: number | null = null;
   private rowsBuffer: Row[] = [];
+
+  // Controle de janelas de congelamento por sequências > 24 giros sem branco (pedra 0)
+  private currentFreezeIntervals: WhiteFreezeInterval[] = [];
+  private currentWhiteStreakStatus: WhiteStreakStatus | null = null;
 
   private state: AutonomousAuditState = {
     status: "idle",
@@ -307,6 +320,11 @@ class AutonomousAuditEngine {
         return;
       }
 
+      // Calcula as janelas de congelamento por sequências com mais de 24 giros sem branco (pedra 0)
+      this.currentFreezeIntervals = computeWhiteFreezeIntervals(rowsToProcess);
+      this.currentWhiteStreakStatus = getCurrentWhiteStreak(rowsToProcess);
+      this.state.whiteStreak = this.currentWhiteStreakStatus;
+
       const engine = this.incrementalEngine.getAllCyclesMap();
       const latestRow = rowsToProcess[rowsToProcess.length - 1];
       const highestId = latestRow ? latestRow.id : null;
@@ -360,14 +378,21 @@ class AutonomousAuditEngine {
       // 4. Todas as estratégias ativas servindo apenas de confluência
       const allAutonomousSignals = [...triggeredSignals, ...emAltaSignals];
 
+      // Filtra sinais que caem em janelas com mais de 24 giros sem o 0 (branco)
+      const validAutonomousSignals = filterSignalsExcludingWhiteFreeze(
+        allAutonomousSignals,
+        this.currentFreezeIntervals,
+        this.currentWhiteStreakStatus,
+      );
+
       console.log(
-        `[AutonomousEngine] Cycle stats: rows=${rowsToProcess.length}, sumProjections=${sumProjections.length}, confProjections=${confProjections.length}, rawCandidates=${rawCandidates.length}, tendencyCandidates=${tendencyCandidates.length}, triggeredSignals=${allAutonomousSignals.length}`,
+        `[AutonomousEngine] Cycle stats: rows=${rowsToProcess.length}, sumProjections=${sumProjections.length}, confProjections=${confProjections.length}, rawCandidates=${rawCandidates.length}, tendencyCandidates=${tendencyCandidates.length}, triggeredSignals=${allAutonomousSignals.length}, validSignals=${validAutonomousSignals.length}`,
       );
 
       // 4. Mescla o ciclo de vida dos sinais (sem perder estados e respeitando transições)
       const mergedSignals = mergeSignalsLifecycle(
         this.state.activeSignals,
-        allAutonomousSignals,
+        validAutonomousSignals,
         rowsToProcess,
         now.getTime(),
         {
@@ -389,6 +414,17 @@ class AutonomousAuditEngine {
           sig.entryDate instanceof Date
             ? sig.entryDate.getTime()
             : parseUtcDate(sig.entryDate as any).getTime();
+
+        // Regra dos 24 giros sem branco:
+        // Sinais com horário posterior aos 24 giros são ocultos e não são auditados/contabilizados
+        if (
+          isSignalInWhiteFreeze(sigTime, this.currentFreezeIntervals) ||
+          (this.currentWhiteStreakStatus?.isFrozen &&
+            this.currentWhiteStreakStatus.freezeStartTime &&
+            sigTime > this.currentWhiteStreakStatus.freezeStartTime)
+        ) {
+          continue;
+        }
 
         // Se o sinal já foi auditado como WIN ou LOSS
         if (sig.outcome === "green" || sig.outcome === "red") {
@@ -617,6 +653,25 @@ class AutonomousAuditEngine {
       (signal as any).isNoConfluence ||
       signal.category === "no_confluence" ||
       (signal.confluence && signal.confluence.includes("Sem Confluência"))
+    ) {
+      return;
+    }
+
+    // Regra dos 24 giros sem branco:
+    // Sinais com horário posterior aos 24 giros sem o "0" (branco) são ocultos e param de contabilizar no painel de auditoria
+    const sigTimeMs = signal.targetTime
+      ? typeof signal.targetTime === "number"
+        ? signal.targetTime
+        : parseUtcDate(signal.targetTime).getTime()
+      : typeof signal.time === "string" && signal.time.includes("T")
+        ? parseUtcDate(signal.time).getTime()
+        : Date.now();
+
+    if (
+      isSignalInWhiteFreeze(sigTimeMs, this.currentFreezeIntervals) ||
+      (this.currentWhiteStreakStatus?.isFrozen &&
+        this.currentWhiteStreakStatus.freezeStartTime &&
+        sigTimeMs > this.currentWhiteStreakStatus.freezeStartTime)
     ) {
       return;
     }

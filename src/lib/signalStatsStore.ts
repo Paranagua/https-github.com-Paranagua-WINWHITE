@@ -329,32 +329,19 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
         set((state) => {
           if (!data) return state;
           const incomingSignals = Array.isArray(data.recentSignals) ? data.recentSignals : [];
+
+          // Se o servidor foi limpo (recentSignals vazio e sem stats), zera tudo localmente também
           if (
             incomingSignals.length === 0 &&
             (!data.stats || Object.keys(data.stats).length === 0)
           ) {
-            return state;
+            return {
+              recentSignals: [],
+              stats: {},
+            };
           }
 
           const effectiveClearedAt = state.clearedAt || 0;
-
-          // Se o servidor foi limpo (recentSignals vazio e sem stats), zera tudo localmente também
-          if (
-            Array.isArray(data.recentSignals) &&
-            data.recentSignals.length === 0 &&
-            (!data.stats || Object.keys(data.stats).length === 0)
-          ) {
-            return {
-              recentSignals: state.recentSignals.filter(
-                (s) => (s.timestamp || 0) > effectiveClearedAt,
-              ),
-              stats: Object.fromEntries(
-                Object.entries(state.stats).filter(
-                  ([_, st]) => (st.lastUpdated || 0) > effectiveClearedAt,
-                ),
-              ),
-            };
-          }
 
           // Mescla os sinais com base na chave única
           const signalMap = new Map<string, SignalHistoryEntry>();
@@ -442,9 +429,12 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
         const now = Date.now();
         set({ stats: {}, recentSignals: [], clearedAt: now });
         try {
+          localStorage.removeItem("freitas-signal-stats-v4");
           localStorage.removeItem("freitas-signal-stats-v3");
-          localStorage.removeItem("freitas-signal-stats");
           localStorage.removeItem("freitas-signal-stats-v2");
+          localStorage.removeItem("freitas-signal-stats");
+          localStorage.removeItem("freitas.signals.v1");
+          localStorage.removeItem("freitas.predictive.signals");
           localStorage.setItem("freitas-signal-stats-cleared-at", String(now));
         } catch {
           // ignore
@@ -470,7 +460,7 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
       },
     }),
     {
-      name: "freitas-signal-stats-v3",
+      name: "freitas-signal-stats-v4",
     },
   ),
 );

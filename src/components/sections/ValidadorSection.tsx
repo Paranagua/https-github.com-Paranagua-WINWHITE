@@ -17,11 +17,17 @@ import {
   Layers,
   Sparkles,
   Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
 import { parseUtcDate } from "@/lib/utils";
 import { fmtTime, colorOf, type Color } from "@/components/double/types";
 import { Card } from "@/components/double/Card";
+import {
+  computeWhiteFreezeIntervals,
+  getCurrentWhiteStreak,
+  isSignalInWhiteFreeze,
+} from "@/lib/whiteStreakFreeze";
 import {
   buildA2,
   buildA3,
@@ -150,6 +156,18 @@ export default function SignalPercentageValidator() {
     localStorage.setItem("freitas_validador_baseline_time", String(now));
     setFeedMode("from_now");
     localStorage.setItem("freitas_validador_feed_mode", "from_now");
+
+    // Limpa completamente o banco de dados de Win/Loss e histórico local e servidor
+    useSignalStatsStore.getState().clearStats();
+    if (typeof fetch !== "undefined") {
+      fetch("/api/public/autonomous-audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clear" }),
+      }).catch(() => {
+        fetch("/api/public/autonomous-audit", { method: "DELETE" }).catch(() => {});
+      });
+    }
   }, []);
 
   const handleFeedModeChange = useCallback((mode: "from_now" | "all") => {
@@ -267,6 +285,15 @@ export default function SignalPercentageValidator() {
     };
   }, [loadHistory, syncAutonomous]);
 
+  // Janelas históricas e ativas de congelamento por sequências com mais de 24 giros sem branco (0)
+  const freezeIntervals = useMemo(() => {
+    return computeWhiteFreezeIntervals(rawRows || []);
+  }, [rawRows]);
+
+  const whiteStreakStatus = useMemo(() => {
+    return getCurrentWhiteStreak(rawRows || []);
+  }, [rawRows]);
+
   // Executa o Backtesting / Auditoria de todos os sinais gerados pelo motor no histórico
   const auditResults = useMemo(() => {
     if (rawRows.length < 50) return { signals: [], stats: null, byStrategy: [] };
@@ -282,6 +309,17 @@ export default function SignalPercentageValidator() {
       if (!rec || !rec.time) continue;
       const recTime = rec.timestamp || Date.now();
       if (feedMode === "from_now" && recTime < baselineTime - 60_000) continue;
+
+      // Regra dos 24 giros sem branco:
+      // Sinais com horário posterior a > 24 giros sem o "0" (branco) são ocultos e não contabilizados
+      if (
+        isSignalInWhiteFreeze(recTime, freezeIntervals) ||
+        (whiteStreakStatus.isFrozen &&
+          whiteStreakStatus.freezeStartTime &&
+          recTime > whiteStreakStatus.freezeStartTime)
+      ) {
+        continue;
+      }
 
       recordedKeys.add(rec.key);
       const isEmAlta =
@@ -882,6 +920,17 @@ export default function SignalPercentageValidator() {
     const nowTime = Date.now();
 
     for (const [slotTime, data] of sortedSlots.slice(0, maxSignalsToEvaluate)) {
+      // Regra dos 24 giros sem branco:
+      // Sinais com horário posterior a > 24 giros sem o "0" (branco) são ocultos e não contabilizados
+      if (
+        isSignalInWhiteFreeze(slotTime, freezeIntervals) ||
+        (whiteStreakStatus.isFrozen &&
+          whiteStreakStatus.freezeStartTime &&
+          slotTime > whiteStreakStatus.freezeStartTime)
+      ) {
+        continue;
+      }
+
       // Bloqueio de envio: se já houve branco no minuto anterior (M-1), o sinal é inválido para envio
       const whiteInM1 = allResults.some((r) => {
         const rTime = parseUtcDate(r.created_at).getTime();
@@ -1055,7 +1104,15 @@ export default function SignalPercentageValidator() {
       },
       byStrategy,
     };
-  }, [rawRows, maxSignalsToEvaluate, feedMode, baselineTime, timeTick]);
+  }, [
+    rawRows,
+    maxSignalsToEvaluate,
+    feedMode,
+    baselineTime,
+    timeTick,
+    freezeIntervals,
+    whiteStreakStatus,
+  ]);
 
   // Filtros da tabela
   const filteredSignals = useMemo(() => {
@@ -1184,6 +1241,24 @@ export default function SignalPercentageValidator() {
           >
             Reiniciar agora
           </button>
+        </div>
+      )}
+
+      {/* Banner de Proteção: Sequência com mais de 24 giros sem branco */}
+      {whiteStreakStatus.isFrozen && (
+        <div className="flex items-center gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-5 py-4 text-amber-300 shadow-2xl backdrop-blur-sm">
+          <AlertTriangle className="h-6 w-6 shrink-0 text-amber-400 animate-pulse" />
+          <div className="flex-1 space-y-0.5">
+            <div className="text-xs font-black uppercase tracking-wider text-amber-200">
+              Pausa de Proteção Ativa — {whiteStreakStatus.currentStreak} Giros Sem Branco
+            </div>
+            <p className="text-[11px] text-amber-300/90 leading-relaxed">
+              Foi detectada uma sequência com mais de 24 giros sem o &quot;0&quot; (branco).
+              Conforme a nova regra, sinais com horário posterior a esses giros estão ocultos e
+              temporariamente desativados do painel validador. A reativação total ocorrerá assim que
+              sair um &quot;0&quot; (branco) na mesa.
+            </p>
+          </div>
         </div>
       )}
 

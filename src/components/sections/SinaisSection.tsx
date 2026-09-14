@@ -18,11 +18,17 @@ import {
   Clock,
   ChevronRight,
   ArrowLeft,
+  AlertTriangle,
 } from "lucide-react";
 import { setSection } from "@/lib/sectionStore";
 import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
 import { colorOf, fmtTime, type Color } from "@/components/double/types";
 import { parseUtcDate } from "@/lib/utils";
+import {
+  computeWhiteFreezeIntervals,
+  getCurrentWhiteStreak,
+  isSignalInWhiteFreeze,
+} from "@/lib/whiteStreakFreeze";
 import { PredictiveSignals } from "@/components/double/PredictiveSignals";
 import {
   extractSignalStrategies,
@@ -1233,6 +1239,15 @@ function SinaisSectionContent() {
     };
   }, []);
 
+  // Janelas históricas e ativas de congelamento por sequências com mais de 24 giros sem branco (0)
+  const freezeIntervals = useMemo(() => {
+    return computeWhiteFreezeIntervals(resultsForValidation || []);
+  }, [resultsForValidation]);
+
+  const whiteStreakStatus = useMemo(() => {
+    return getCurrentWhiteStreak(resultsForValidation || []);
+  }, [resultsForValidation]);
+
   // Estatísticas de Visão Geral: alimentadas em tempo real agrupadas pelas 18 ANÁLISES PRIMÁRIAS + ESTRATÉGIAS
   const primaryAnalysisStats = useMemo(() => {
     // Agrega a partir de recentSignals para contagem exata por análise primária ou estratégia
@@ -1252,6 +1267,22 @@ function SinaisSectionContent() {
       ) {
         return;
       }
+
+      // Regra dos 24 giros sem branco:
+      // Oculta e para de contabilizar sinais com horário posterior a > 24 giros sem branco
+      const sigTime =
+        sig.timestamp || (sig.targetTime ? parseUtcDate(sig.targetTime).getTime() : 0);
+      if (sigTime && isSignalInWhiteFreeze(sigTime, freezeIntervals)) {
+        return;
+      }
+      if (
+        whiteStreakStatus.isFrozen &&
+        whiteStreakStatus.freezeStartTime &&
+        sigTime > whiteStreakStatus.freezeStartTime
+      ) {
+        return;
+      }
+
       const isWin = sig.outcome === "green";
       const matchedKeys = new Set<string>();
 
@@ -1428,7 +1459,7 @@ function SinaisSectionContent() {
         total,
       };
     });
-  }, [stats, recentSignals]);
+  }, [stats, recentSignals, freezeIntervals, whiteStreakStatus]);
 
   const displayedPrimaryAnalyses = useMemo(() => {
     let list = primaryAnalysisStats;
@@ -1524,6 +1555,17 @@ function SinaisSectionContent() {
 
             // Se for sinal pendente antigo (> 5 minutos no passado), descarta (sem limite futuro de 60/65 min)
             if (s.outcome === "pending" && !Number.isNaN(sigTime) && now - sigTime > 300_000) {
+              return null;
+            }
+
+            // Regra dos 24 giros sem branco:
+            // Sinais com horário posterior aos 24 giros sem o "0" (branco) são ocultos
+            if (
+              isSignalInWhiteFreeze(sigTime, freezeIntervals) ||
+              (whiteStreakStatus.isFrozen &&
+                whiteStreakStatus.freezeStartTime &&
+                sigTime > whiteStreakStatus.freezeStartTime)
+            ) {
               return null;
             }
 
@@ -1655,12 +1697,31 @@ function SinaisSectionContent() {
     } catch (err) {
       console.error("[SinaisSection] Validation error:", err);
     }
-  }, [resultsForValidation, recordCompletedSignal, timeTick]);
+  }, [resultsForValidation, recordCompletedSignal, timeTick, freezeIntervals, whiteStreakStatus]);
 
   // Estatísticas das Rodadas Atuais: calculadas com base nos 10 ÚLTIMOS sinais do histórico
+  // que NÃO estejam dentro de janelas de congelamento (> 24 giros sem branco)
+  const validRecentSignals = useMemo(() => {
+    return (recentSignals || []).filter((sig) => {
+      const sigTime =
+        sig.timestamp || (sig.targetTime ? parseUtcDate(sig.targetTime).getTime() : 0);
+      if (sigTime && isSignalInWhiteFreeze(sigTime, freezeIntervals)) {
+        return false;
+      }
+      if (
+        whiteStreakStatus.isFrozen &&
+        whiteStreakStatus.freezeStartTime &&
+        sigTime > whiteStreakStatus.freezeStartTime
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [recentSignals, freezeIntervals, whiteStreakStatus]);
+
   const last10Signals = useMemo(() => {
-    return (recentSignals || []).slice(0, 10);
-  }, [recentSignals]);
+    return validRecentSignals.slice(0, 10);
+  }, [validRecentSignals]);
 
   const last10Stats = useMemo(() => {
     const total = last10Signals.length;
@@ -1720,6 +1781,24 @@ function SinaisSectionContent() {
       </div>
 
       <div className="flex flex-col gap-6">
+        {/* Banner de Proteção: Sequência com mais de 24 giros sem branco */}
+        {whiteStreakStatus.isFrozen && (
+          <div className="flex items-center gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-5 py-4 text-amber-300 shadow-2xl backdrop-blur-sm">
+            <AlertTriangle className="h-6 w-6 shrink-0 text-amber-400 animate-pulse" />
+            <div className="flex-1 space-y-0.5">
+              <div className="text-xs font-black uppercase tracking-wider text-amber-200">
+                Pausa de Proteção Ativa — {whiteStreakStatus.currentStreak} Giros Sem Branco
+              </div>
+              <p className="text-[11px] text-amber-300/90 leading-relaxed">
+                Foi detectada uma sequência com mais de 24 giros sem o &quot;0&quot; (branco).
+                Conforme a regra, sinais com horário posterior a esses giros estão ocultos e
+                temporariamente desativados do painel de auditoria. A reativação total ocorrerá
+                assim que sair um &quot;0&quot; (branco) na mesa.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Card de Auditoria */}
         <div className="rounded-2xl border border-white/5 bg-[#0c0c0c] overflow-hidden shadow-2xl">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 bg-white/[0.02] px-6 py-4">
