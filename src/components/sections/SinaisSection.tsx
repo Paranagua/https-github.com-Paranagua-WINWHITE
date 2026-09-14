@@ -17,6 +17,7 @@ import {
   XCircle,
   Clock,
   ChevronRight,
+  ArrowLeft,
 } from "lucide-react";
 import { setSection } from "@/lib/sectionStore";
 import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
@@ -1086,6 +1087,7 @@ function SinaisSectionContent() {
   const [selectedStrategyGroup, setSelectedStrategyGroup] = useState<
     "todas" | "f2" | "soma19" | "soma17" | "confirmacao" | "b"
   >("todas");
+  const [activeSubcategoryParent, setActiveSubcategoryParent] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [selectedAnalysisForDetail, setSelectedAnalysisForDetail] =
     useState<PrimaryAnalysisInfo | null>(null);
@@ -1294,11 +1296,31 @@ function SinaisSectionContent() {
         });
       }
 
-      if ((sig as any).bType) {
-        matchedKeys.add((sig as any).bType);
+      // Mapeamento explícito de estratégias B e suas 15 pontas
+      const bTypeVal = ((sig as any).bType || "").toUpperCase();
+      if (bTypeVal) {
+        matchedKeys.add(bTypeVal);
       }
-      if ((sig as any).ponta !== undefined) {
-        matchedKeys.add(`B-${(sig as any).ponta}`);
+      const pontaVal = (sig as any).ponta;
+      if (pontaVal !== undefined && pontaVal >= 0 && pontaVal <= 14) {
+        matchedKeys.add(`B-${pontaVal}`);
+        if (bTypeVal) {
+          matchedKeys.add(`${bTypeVal}-${pontaVal}`);
+        } else {
+          matchedKeys.add(`B1-${pontaVal}`);
+          matchedKeys.add(`B2-${pontaVal}`);
+          matchedKeys.add(`B3-${pontaVal}`);
+        }
+      }
+
+      // Mapeamento explícito de estratégia F2 e suas 15 subcategorias (P_prox)
+      const pProxVal =
+        (sig as any).pProx !== undefined
+          ? (sig as any).pProx
+          : (sig.sources || []).find((src: any) => src.analysis === 202)?.value;
+      if (pProxVal !== undefined && pProxVal >= 0 && pProxVal <= 14) {
+        matchedKeys.add("F2");
+        matchedKeys.add(`F2-${pProxVal}`);
       }
 
       // Mapeamento via sig.confirmedStrategies
@@ -1364,8 +1386,25 @@ function SinaisSectionContent() {
       );
       const storeLosses = Math.max(s?.red || 0, sAlt?.red || 0, sClean?.red || 0, sShort?.red || 0);
 
-      const wins = Math.max(fromRecent.wins, storeWins);
-      const losses = Math.max(fromRecent.losses, storeLosses);
+      let wins = Math.max(fromRecent.wins, storeWins);
+      let losses = Math.max(fromRecent.losses, storeLosses);
+
+      // Se for estratégia pai (B1, B2, B3 ou F2), acumula as métricas dos filhos se o pai não tiver contagem direta
+      if (m.key === "B1" || m.key === "B2" || m.key === "B3" || m.key === "F2") {
+        let childWins = 0;
+        let childLosses = 0;
+        ALL_PRIMARY_ANALYSES_METADATA.forEach((child) => {
+          if (child.parentKey === m.key) {
+            const cRecent = countsByKey[child.key] || { wins: 0, losses: 0 };
+            const cStore = stats[child.key];
+            childWins += Math.max(cRecent.wins, cStore?.green || 0);
+            childLosses += Math.max(cRecent.losses, cStore?.red || 0);
+          }
+        });
+        wins = Math.max(wins, childWins);
+        losses = Math.max(losses, childLosses);
+      }
+
       const total = wins + losses;
       const assertividade = total > 0 ? (wins / total) * 100 : null;
 
@@ -1380,6 +1419,9 @@ function SinaisSectionContent() {
         description: m.description,
         minute: m.minute,
         strategyGroup: m.strategyGroup,
+        parentKey: m.parentKey,
+        ponta: m.ponta,
+        pProx: m.pProx,
         assertividade,
         wins,
         losses,
@@ -1390,6 +1432,15 @@ function SinaisSectionContent() {
 
   const displayedPrimaryAnalyses = useMemo(() => {
     let list = primaryAnalysisStats;
+
+    // Se o usuário estiver no modo de drill-down de subcategoria (B1, B2, B3 ou F2), exibe as 15 pontas/subcategorias filhas
+    if (activeSubcategoryParent) {
+      return list.filter((s) => s.parentKey === activeSubcategoryParent);
+    }
+
+    // Na visualização padrão de estratégias/análises, oculta as subcategorias filhas
+    list = list.filter((s) => !s.parentKey);
+
     if (primaryTabFilter !== "todas") {
       list = list.filter((s) => s.category === primaryTabFilter);
     }
@@ -1400,17 +1451,25 @@ function SinaisSectionContent() {
       list = list.filter((s) => s.strategyGroup === selectedStrategyGroup);
     }
     return list;
-  }, [primaryAnalysisStats, primaryTabFilter, selectedMinuteFilter, selectedStrategyGroup]);
+  }, [
+    primaryAnalysisStats,
+    primaryTabFilter,
+    selectedMinuteFilter,
+    selectedStrategyGroup,
+    activeSubcategoryParent,
+  ]);
 
   const primaryOverallSummary = useMemo(() => {
     let totalWins = 0;
     let totalLosses = 0;
     let activeAnalyses = 0;
-    primaryAnalysisStats.forEach((s) => {
-      totalWins += s.wins;
-      totalLosses += s.losses;
-      if (s.total > 0) activeAnalyses += 1;
-    });
+    primaryAnalysisStats
+      .filter((s) => !s.parentKey)
+      .forEach((s) => {
+        totalWins += s.wins;
+        totalLosses += s.losses;
+        if (s.total > 0) activeAnalyses += 1;
+      });
     const totalOps = totalWins + totalLosses;
     const avgAssertivity = totalOps > 0 ? (totalWins / totalOps) * 100 : null;
     return {
@@ -1776,18 +1835,24 @@ function SinaisSectionContent() {
                   <div className="flex flex-wrap items-center gap-1.5 bg-black/40 p-1 rounded-xl border border-white/5">
                     <button
                       type="button"
-                      onClick={() => setPrimaryTabFilter("todas")}
+                      onClick={() => {
+                        setPrimaryTabFilter("todas");
+                        setActiveSubcategoryParent(null);
+                      }}
                       className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
                         primaryTabFilter === "todas"
                           ? "bg-white/15 text-white shadow-sm"
                           : "text-white/40 hover:text-white/70"
                       }`}
                     >
-                      Todas ({primaryAnalysisStats.length})
+                      Todas ({primaryAnalysisStats.filter((s) => !s.parentKey).length})
                     </button>
                     <button
                       type="button"
-                      onClick={() => setPrimaryTabFilter("pedras")}
+                      onClick={() => {
+                        setPrimaryTabFilter("pedras");
+                        setActiveSubcategoryParent(null);
+                      }}
                       className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
                         primaryTabFilter === "pedras"
                           ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
@@ -1799,7 +1864,10 @@ function SinaisSectionContent() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setPrimaryTabFilter("sequencia")}
+                      onClick={() => {
+                        setPrimaryTabFilter("sequencia");
+                        setActiveSubcategoryParent(null);
+                      }}
                       className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
                         primaryTabFilter === "sequencia"
                           ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
@@ -1811,7 +1879,10 @@ function SinaisSectionContent() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setPrimaryTabFilter("somas")}
+                      onClick={() => {
+                        setPrimaryTabFilter("somas");
+                        setActiveSubcategoryParent(null);
+                      }}
                       className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
                         primaryTabFilter === "somas"
                           ? "bg-violet-500/20 text-violet-300 border border-violet-500/30"
@@ -1823,7 +1894,10 @@ function SinaisSectionContent() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setPrimaryTabFilter("cores")}
+                      onClick={() => {
+                        setPrimaryTabFilter("cores");
+                        setActiveSubcategoryParent(null);
+                      }}
                       className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
                         primaryTabFilter === "cores"
                           ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
@@ -1838,6 +1912,7 @@ function SinaisSectionContent() {
                       onClick={() => {
                         setPrimaryTabFilter("minutos");
                         setSelectedMinuteFilter(null);
+                        setActiveSubcategoryParent(null);
                       }}
                       className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
                         primaryTabFilter === "minutos"
@@ -1853,6 +1928,7 @@ function SinaisSectionContent() {
                       onClick={() => {
                         setPrimaryTabFilter("estrategias");
                         setSelectedStrategyGroup("todas");
+                        setActiveSubcategoryParent(null);
                       }}
                       className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
                         primaryTabFilter === "estrategias"
@@ -1861,7 +1937,12 @@ function SinaisSectionContent() {
                       }`}
                     >
                       Estratégias (
-                      {primaryAnalysisStats.filter((s) => s.category === "estrategias").length})
+                      {
+                        primaryAnalysisStats.filter(
+                          (s) => s.category === "estrategias" && !s.parentKey,
+                        ).length
+                      }
+                      )
                     </button>
                   </div>
 
@@ -1870,7 +1951,8 @@ function SinaisSectionContent() {
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <span>Ativas:</span>
                       <strong className="text-white font-mono">
-                        {primaryOverallSummary.activeAnalyses}/{primaryAnalysisStats.length}
+                        {primaryOverallSummary.activeAnalyses}/
+                        {primaryAnalysisStats.filter((s) => !s.parentKey).length}
                       </strong>
                     </div>
                     <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -1947,7 +2029,10 @@ function SinaisSectionContent() {
                     </span>
                     <button
                       type="button"
-                      onClick={() => setSelectedStrategyGroup("todas")}
+                      onClick={() => {
+                        setSelectedStrategyGroup("todas");
+                        setActiveSubcategoryParent(null);
+                      }}
                       className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
                         selectedStrategyGroup === "todas"
                           ? "bg-purple-500/30 text-purple-200 border border-purple-500/40"
@@ -1955,11 +2040,19 @@ function SinaisSectionContent() {
                       }`}
                     >
                       Todas (
-                      {primaryAnalysisStats.filter((s) => s.category === "estrategias").length})
+                      {
+                        primaryAnalysisStats.filter(
+                          (s) => s.category === "estrategias" && !s.parentKey,
+                        ).length
+                      }
+                      )
                     </button>
                     <button
                       type="button"
-                      onClick={() => setSelectedStrategyGroup("b")}
+                      onClick={() => {
+                        setSelectedStrategyGroup("b");
+                        setActiveSubcategoryParent(null);
+                      }}
                       className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
                         selectedStrategyGroup === "b"
                           ? "bg-purple-500/30 text-purple-200 border border-purple-500/40"
@@ -1967,22 +2060,37 @@ function SinaisSectionContent() {
                       }`}
                     >
                       Estratégias B (
-                      {primaryAnalysisStats.filter((s) => s.strategyGroup === "b").length})
+                      {
+                        primaryAnalysisStats.filter((s) => s.strategyGroup === "b" && !s.parentKey)
+                          .length
+                      }
+                      )
                     </button>
                     <button
                       type="button"
-                      onClick={() => setSelectedStrategyGroup("f2")}
+                      onClick={() => {
+                        setSelectedStrategyGroup("f2");
+                        setActiveSubcategoryParent(null);
+                      }}
                       className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
                         selectedStrategyGroup === "f2"
                           ? "bg-purple-500/30 text-purple-200 border border-purple-500/40"
                           : "bg-white/5 text-white/50 hover:text-white/80"
                       }`}
                     >
-                      F2 ({primaryAnalysisStats.filter((s) => s.strategyGroup === "f2").length})
+                      F2 (
+                      {
+                        primaryAnalysisStats.filter((s) => s.strategyGroup === "f2" && !s.parentKey)
+                          .length
+                      }
+                      )
                     </button>
                     <button
                       type="button"
-                      onClick={() => setSelectedStrategyGroup("soma19")}
+                      onClick={() => {
+                        setSelectedStrategyGroup("soma19");
+                        setActiveSubcategoryParent(null);
+                      }}
                       className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
                         selectedStrategyGroup === "soma19"
                           ? "bg-purple-500/30 text-purple-200 border border-purple-500/40"
@@ -1990,11 +2098,19 @@ function SinaisSectionContent() {
                       }`}
                     >
                       Soma 19 (
-                      {primaryAnalysisStats.filter((s) => s.strategyGroup === "soma19").length})
+                      {
+                        primaryAnalysisStats.filter(
+                          (s) => s.strategyGroup === "soma19" && !s.parentKey,
+                        ).length
+                      }
+                      )
                     </button>
                     <button
                       type="button"
-                      onClick={() => setSelectedStrategyGroup("soma17")}
+                      onClick={() => {
+                        setSelectedStrategyGroup("soma17");
+                        setActiveSubcategoryParent(null);
+                      }}
                       className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
                         selectedStrategyGroup === "soma17"
                           ? "bg-purple-500/30 text-purple-200 border border-purple-500/40"
@@ -2002,11 +2118,19 @@ function SinaisSectionContent() {
                       }`}
                     >
                       Soma 17 (
-                      {primaryAnalysisStats.filter((s) => s.strategyGroup === "soma17").length})
+                      {
+                        primaryAnalysisStats.filter(
+                          (s) => s.strategyGroup === "soma17" && !s.parentKey,
+                        ).length
+                      }
+                      )
                     </button>
                     <button
                       type="button"
-                      onClick={() => setSelectedStrategyGroup("confirmacao")}
+                      onClick={() => {
+                        setSelectedStrategyGroup("confirmacao");
+                        setActiveSubcategoryParent(null);
+                      }}
                       className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
                         selectedStrategyGroup === "confirmacao"
                           ? "bg-purple-500/30 text-purple-200 border border-purple-500/40"
@@ -2014,23 +2138,59 @@ function SinaisSectionContent() {
                       }`}
                     >
                       Confirmações (
-                      {primaryAnalysisStats.filter((s) => s.strategyGroup === "confirmacao").length}
+                      {
+                        primaryAnalysisStats.filter(
+                          (s) => s.strategyGroup === "confirmacao" && !s.parentKey,
+                        ).length
+                      }
                       )
                     </button>
                   </div>
                 )}
 
-                {/* Dica interativa para o usuário */}
-                <div className="flex items-center justify-between px-1 text-[11px] text-muted-foreground/80">
-                  <span className="flex items-center gap-1.5">
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                    Clique em qualquer análise para abrir o detalhamento das 14 pedras e branco (0 a
-                    14) com assertividade auditada e preditiva.
-                  </span>
-                  <span className="hidden sm:inline-block text-[10px] text-primary/80 font-semibold font-mono">
-                    {primaryAnalysisStats.length} Análises Monitoradas
-                  </span>
-                </div>
+                {/* Dica interativa para o usuário ou banner de subcategoria */}
+                {activeSubcategoryParent ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/30">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setActiveSubcategoryParent(null)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black text-white bg-purple-600 hover:bg-purple-500 rounded-lg transition-all border border-purple-400/40 shadow-sm cursor-pointer active:scale-95"
+                      >
+                        <ArrowLeft className="h-3.5 w-3.5" />
+                        <span>
+                          Voltar para{" "}
+                          {activeSubcategoryParent.startsWith("B") ? "Estratégias B" : "F2"}
+                        </span>
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded text-xs font-mono font-black bg-purple-500/30 text-purple-200 border border-purple-500/50">
+                          {activeSubcategoryParent}
+                        </span>
+                        <span className="text-xs font-bold text-white">
+                          {activeSubcategoryParent.startsWith("B")
+                            ? `Subcategorias de ${activeSubcategoryParent} · As 15 Pontas (0 ao 14)`
+                            : `Subcategorias de F2 · As 15 Próximas Pedras (0 ao 14)`}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-[11px] text-purple-300 font-mono font-bold">
+                      Exibindo 15 Subcategorias (0 ao 14)
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between px-1 text-[11px] text-muted-foreground/80">
+                    <span className="flex items-center gap-1.5">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                      Clique em qualquer estratégia para ver suas subcategorias ou clique nas
+                      análises para ver as 14 pedras (0 a 14).
+                    </span>
+                    <span className="hidden sm:inline-block text-[10px] text-primary/80 font-semibold font-mono">
+                      {primaryAnalysisStats.filter((s) => !s.parentKey).length} Análises &
+                      Estratégias
+                    </span>
+                  </div>
+                )}
 
                 {/* Grid de Análises Primárias */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -2038,14 +2198,26 @@ function SinaisSectionContent() {
                     const hasData = s.total > 0;
                     const winRate = s.assertividade !== null ? s.assertividade : 0;
                     const isSelected = selectedAnalysisForDetail?.key === s.key;
+                    const isParentStrategy =
+                      (s.key === "B1" || s.key === "B2" || s.key === "B3" || s.key === "F2") &&
+                      !activeSubcategoryParent;
+
                     return (
                       <div
                         key={s.key}
-                        onClick={() => setSelectedAnalysisForDetail(s)}
+                        onClick={() => {
+                          if (isParentStrategy) {
+                            setActiveSubcategoryParent(s.key);
+                          } else {
+                            setSelectedAnalysisForDetail(s);
+                          }
+                        }}
                         className={`flex flex-col justify-between p-3.5 rounded-xl transition-all group cursor-pointer active:scale-[0.99] relative select-none ${
                           isSelected
                             ? "bg-primary/10 border-2 border-primary shadow-[0_0_15px_rgba(239,68,68,0.25)]"
-                            : "bg-white/[0.02] border border-white/5 hover:border-primary/40 hover:bg-white/[0.04]"
+                            : isParentStrategy
+                              ? "bg-purple-950/20 border border-purple-500/30 hover:border-purple-400 hover:bg-purple-900/30"
+                              : "bg-white/[0.02] border border-white/5 hover:border-primary/40 hover:bg-white/[0.04]"
                         }`}
                       >
                         <div>
@@ -2063,7 +2235,11 @@ function SinaisSectionContent() {
                                     : s.category === "cores"
                                       ? "Quebra Cores"
                                       : s.category === "estrategias"
-                                        ? "Estratégia"
+                                        ? isParentStrategy
+                                          ? "Estratégia Raiz"
+                                          : s.parentKey
+                                            ? "Subcategoria"
+                                            : "Estratégia"
                                         : "Minutos"}
                             </span>
                             <span className="text-[10px] font-mono font-black text-white/60">
@@ -2122,9 +2298,23 @@ function SinaisSectionContent() {
                               />
                             </div>
                           )}
+
+                          {/* Botão de Drill-down visível no card pai para as 15 subcategorias */}
+                          {isParentStrategy && (
+                            <div className="mt-2 pt-2 border-t border-purple-500/20 flex items-center justify-between">
+                              <span className="text-[8.5px] text-purple-300/80 font-medium">
+                                {s.key.startsWith("B")
+                                  ? "15 Pontas (0-14)"
+                                  : "15 Subcategorias (0-14)"}
+                              </span>
+                              <span className="inline-flex items-center gap-1 text-[8.5px] font-black uppercase text-purple-200 bg-purple-500/25 px-1.5 py-0.5 rounded border border-purple-400/40 group-hover:bg-purple-500/40 transition-all">
+                                Abrir Subcategorias →
+                              </span>
+                            </div>
+                          )}
                         </div>
 
-                        {/* Rodapé: Vitórias, Derrotas e Botão de Drill-down para as 14 pedras */}
+                        {/* Rodapé: Vitórias, Derrotas e Botão de Ação */}
                         <div className="flex items-center justify-between text-[10px] font-bold pt-2 border-t border-white/5 mt-auto">
                           <div className="flex items-center gap-2">
                             <span
@@ -2140,10 +2330,20 @@ function SinaisSectionContent() {
                               {s.losses}L
                             </span>
                           </div>
-                          <div className="flex items-center gap-0.5 text-[9px] text-primary group-hover:text-primary/90 font-bold transition-colors">
-                            <span>14 pedras</span>
-                            <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-                          </div>
+
+                          {isParentStrategy ? (
+                            <div className="flex items-center gap-1 text-[9px] text-purple-300 font-bold group-hover:text-purple-200 transition-colors">
+                              <span>
+                                {s.key.startsWith("B") ? "15 pontas" : "15 subcategorias"}
+                              </span>
+                              <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-0.5 text-[9px] text-primary group-hover:text-primary/90 font-bold transition-colors">
+                              <span>{s.parentKey ? "Auditar pedra" : "14 pedras"}</span>
+                              <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                            </div>
+                          )}
                         </div>
                       </div>
                     );

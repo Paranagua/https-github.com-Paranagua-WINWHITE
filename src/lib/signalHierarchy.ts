@@ -56,6 +56,9 @@ export function formatStrategyCode(raw?: string | null): string {
   if (!raw) return "";
   let clean = raw.trim();
 
+  // Remove qualquer indicador de percentual (ex: " (88%)", " 88%", "(100%)")
+  clean = clean.replace(/\s*\(\d+%\)|\s*\d+%/g, "").trim();
+
   // 1. Confirmações E1 a E15 (ex. E5)
   const eMatch = clean.match(/^E(?:1[0-5]|[1-9])$/i);
   if (eMatch) {

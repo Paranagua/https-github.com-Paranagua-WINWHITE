@@ -294,6 +294,46 @@ export function AnalysisStonesModal({
         }
       }
 
+      // Pontas para Estratégias B (B1, B2, B3, B) e F2
+      if (matchedStone === null) {
+        if (key === "B1" || key === "B2" || key === "B3" || key === "B") {
+          const sigBType = ((sig as any).bType || "").toUpperCase();
+          if (
+            !sigBType ||
+            sigBType === key ||
+            key === "B" ||
+            (sig.strategyKey && sig.strategyKey.toUpperCase() === key)
+          ) {
+            if ((sig as any).ponta !== undefined) {
+              matchedStone = Number((sig as any).ponta);
+            } else {
+              const bMatch = (sig.strategies || []).find((s: string) =>
+                /^B(?:[1-3])?[-_](\d+)$/i.test(s),
+              );
+              if (bMatch) {
+                const num = parseInt(bMatch.replace(/\D/g, ""), 10);
+                if (!isNaN(num)) matchedStone = num;
+              }
+            }
+          }
+        } else if (key === "F2") {
+          if ((sig as any).pProx !== undefined) {
+            matchedStone = Number((sig as any).pProx);
+          } else {
+            const f2Src = (sig.sources || []).find((s: any) => s.analysis === 202);
+            if (f2Src && typeof f2Src.value === "number") {
+              matchedStone = f2Src.value;
+            } else {
+              const f2Match = (sig.strategies || []).find((s: string) => /^F2[-_](\d+)$/i.test(s));
+              if (f2Match) {
+                const num = parseInt(f2Match.replace(/\D/g, ""), 10);
+                if (!isNaN(num)) matchedStone = num;
+              }
+            }
+          }
+        }
+      }
+
       if (matchedStone !== null && matchedStone >= 0 && matchedStone <= 14) {
         if (isWin) countsByStone[matchedStone].wins += 1;
         else countsByStone[matchedStone].losses += 1;
@@ -304,8 +344,10 @@ export function AnalysisStonesModal({
     for (let val = 0; val <= 14; val++) {
       const s1 = stats[`${key}_${val}`];
       const s2 = stats[`A${analysisId}_${val}`];
-      const storeWins = Math.max(s1?.green || 0, s2?.green || 0);
-      const storeLosses = Math.max(s1?.red || 0, s2?.red || 0);
+      const sB = stats[`${key}-${val}`] || stats[`B-${val}`];
+      const sF2 = stats[`F2-${val}`];
+      const storeWins = Math.max(s1?.green || 0, s2?.green || 0, sB?.green || 0, sF2?.green || 0);
+      const storeLosses = Math.max(s1?.red || 0, s2?.red || 0, sB?.red || 0, sF2?.red || 0);
       countsByStone[val].wins = Math.max(countsByStone[val].wins, storeWins);
       countsByStone[val].losses = Math.max(countsByStone[val].losses, storeLosses);
     }
@@ -443,7 +485,8 @@ export function AnalysisStonesModal({
           const bt = (sig as any).bType.toUpperCase();
           if (`${bt}-${p}`.toUpperCase() === keyClean) return true;
         } else {
-          if (keyClean === `B1-${p}` || keyClean === `B2-${p}` || keyClean === `B3-${p}`) return true;
+          if (keyClean === `B1-${p}` || keyClean === `B2-${p}` || keyClean === `B3-${p}`)
+            return true;
         }
       }
       // Checagem de Estratégia F2 e P_prox
@@ -454,7 +497,11 @@ export function AnalysisStonesModal({
             : (sig.sources || []).find((src: any) => src.analysis === 202)?.value;
         if (pVal !== undefined && `F2-${pVal}`.toUpperCase() === keyClean) return true;
       }
-      if (keyClean === "F2" && ((sig as any).pProx !== undefined || (sig.sources || []).some((src: any) => src.analysis === 202))) {
+      if (
+        keyClean === "F2" &&
+        ((sig as any).pProx !== undefined ||
+          (sig.sources || []).some((src: any) => src.analysis === 202))
+      ) {
         return true;
       }
       if (Array.isArray(sig.confirmedStrategies)) {
@@ -738,6 +785,86 @@ export function AnalysisStonesModal({
                 </h4>
                 <p className="text-sm text-zinc-200">{analysis.description}</p>
               </div>
+
+              {/* Subcategorias da Estratégia: 15 Pontas (B1, B2, B3) ou 15 Próximas Pedras (F2) */}
+              {(analysis.key.startsWith("B") || analysis.key === "F2") && (
+                <div className="space-y-3 bg-white/[0.01] border border-white/5 p-4 rounded-xl">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-purple-400" />
+                      <h4 className="text-xs font-black uppercase tracking-wider text-purple-300">
+                        {analysis.key.startsWith("B")
+                          ? `Subcategorias de ${analysis.key} · 15 Pontas (0 ao 14)`
+                          : `Subcategorias de F2 · 15 Próximas Pedras (0 ao 14)`}
+                      </h4>
+                    </div>
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      Assertividade Auditada Individual por Ponta
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-5 gap-2 pt-1">
+                    {Array.from({ length: 15 }, (_, val) => {
+                      const item = stoneStats[val];
+                      const isWhite = val === 0;
+                      const isRed = val >= 1 && val <= 7;
+                      const winRate =
+                        item && item.assertividadeSignals !== null
+                          ? item.assertividadeSignals
+                          : null;
+                      const total = item ? item.totalSignals : 0;
+                      const wins = item ? item.wins : 0;
+                      const losses = item ? item.losses : 0;
+
+                      return (
+                        <div
+                          key={val}
+                          className="p-2.5 rounded-lg bg-black/40 border border-white/5 hover:border-purple-500/40 flex flex-col justify-between min-h-[78px] transition-all"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-mono font-bold text-white/70">
+                              {analysis.key.startsWith("B") ? `Ponta ${val}` : `P_prox ${val}`}
+                            </span>
+                            <span
+                              className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black ${
+                                isWhite
+                                  ? "bg-white text-black"
+                                  : isRed
+                                    ? "bg-red-600 text-white"
+                                    : "bg-zinc-800 text-white border border-white/20"
+                              }`}
+                            >
+                              {val}
+                            </span>
+                          </div>
+
+                          <div className="my-0.5">
+                            <span
+                              className={`text-sm font-black font-outfit ${
+                                winRate !== null
+                                  ? winRate >= 70
+                                    ? "text-emerald-400"
+                                    : winRate >= 50
+                                      ? "text-amber-400"
+                                      : "text-red-400"
+                                  : "text-zinc-600"
+                              }`}
+                            >
+                              {winRate !== null ? `${winRate.toFixed(0)}%` : "--"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[8.5px] font-bold text-muted-foreground border-t border-white/5 pt-1">
+                            <span className="text-emerald-400 font-bold">{wins}W</span>
+                            <span className="text-red-400 font-bold">{losses}L</span>
+                            <span className="text-zinc-500 font-mono">({total})</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Lista de Sinais Auditados da Estratégia */}
               <div className="space-y-3">
