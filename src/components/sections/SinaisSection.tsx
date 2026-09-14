@@ -28,6 +28,7 @@ import {
   computeWhiteFreezeIntervals,
   getCurrentWhiteStreak,
   isSignalInWhiteFreeze,
+  isSignalAuditableAfterFreeze,
 } from "@/lib/whiteStreakFreeze";
 import { PredictiveSignals } from "@/components/double/PredictiveSignals";
 import {
@@ -1268,18 +1269,13 @@ function SinaisSectionContent() {
         return;
       }
 
-      // Regra dos 24 giros sem branco:
-      // Oculta e para de contabilizar sinais com horário posterior a > 24 giros sem branco
+      // Regra dos 25 giros sem o "0":
+      // 25 giros sem o "0", os sinais são ocultados e o painel auditor congelado.
+      // Quando aparece o "0", são exclusos sinais <= quebra, re-exibindo sinais >= quebra + 2,
+      // e o painel auditor descongela contando win/loss apenas dos sinais pós descongelamento.
       const sigTime =
         sig.timestamp || (sig.targetTime ? parseUtcDate(sig.targetTime).getTime() : 0);
-      if (sigTime && isSignalInWhiteFreeze(sigTime, freezeIntervals)) {
-        return;
-      }
-      if (
-        whiteStreakStatus.isFrozen &&
-        whiteStreakStatus.freezeStartTime &&
-        sigTime > whiteStreakStatus.freezeStartTime
-      ) {
+      if (!isSignalAuditableAfterFreeze(sigTime, freezeIntervals, whiteStreakStatus)) {
         return;
       }
 

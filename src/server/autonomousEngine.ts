@@ -29,6 +29,7 @@ import {
   computeWhiteFreezeIntervals,
   getCurrentWhiteStreak,
   isSignalInWhiteFreeze,
+  isSignalAuditableAfterFreeze,
   filterSignalsExcludingWhiteFreeze,
   type WhiteStreakStatus,
   type WhiteFreezeInterval,
@@ -415,13 +416,16 @@ class AutonomousAuditEngine {
             ? sig.entryDate.getTime()
             : parseUtcDate(sig.entryDate as any).getTime();
 
-        // Regra dos 24 giros sem branco:
-        // Sinais com horário posterior aos 24 giros são ocultos e não são auditados/contabilizados
+        // Regra dos 25 giros sem o "0":
+        // 25 giros sem o "0", os sinais são ocultados e o painel auditor congelado.
+        // Quando aparece o "0", são exclusos sinais <= quebra, re-exibindo sinais >= quebra + 2,
+        // e o painel auditor descongela contando win/loss apenas dos sinais pós descongelamento.
         if (
-          isSignalInWhiteFreeze(sigTime, this.currentFreezeIntervals) ||
-          (this.currentWhiteStreakStatus?.isFrozen &&
-            this.currentWhiteStreakStatus.freezeStartTime &&
-            sigTime > this.currentWhiteStreakStatus.freezeStartTime)
+          !isSignalAuditableAfterFreeze(
+            sigTime,
+            this.currentFreezeIntervals,
+            this.currentWhiteStreakStatus,
+          )
         ) {
           continue;
         }
@@ -599,6 +603,32 @@ class AutonomousAuditEngine {
       this.state.lastRoundId = highestId;
       this.state.lastRunAt = now.toISOString();
       this.state.error = null;
+
+      // Regra pós-descongelamento:
+      // "Quando aparece o '0' nos giros são exclusos os sinais menor igual a quebra do congelamento,
+      // re-exibindo sinais maior igual a quebra do congelamento + 2, e o painel auditor descongela
+      // contando win/loss apenas dos sinais pós descongelamento."
+      const prevRecentLen = this.state.recentSignals.length;
+      this.state.recentSignals = this.state.recentSignals.filter((s) => {
+        const sTime =
+          s.timestamp ||
+          (s.targetTime
+            ? typeof s.targetTime === "number"
+              ? s.targetTime
+              : parseUtcDate(s.targetTime).getTime()
+            : 0);
+        return isSignalAuditableAfterFreeze(
+          sTime,
+          this.currentFreezeIntervals,
+          this.currentWhiteStreakStatus,
+        );
+      });
+
+      if (this.state.recentSignals.length !== prevRecentLen) {
+        this.recalculateStatsFromRecentSignals();
+        hasStateChanges = true;
+      }
+
       this.state.debugInfo = {
         rowsCount: rowsToProcess.length,
         sumProjectionsCount: sumProjections.length,
@@ -657,8 +687,8 @@ class AutonomousAuditEngine {
       return;
     }
 
-    // Regra dos 24 giros sem branco:
-    // Sinais com horário posterior aos 24 giros sem o "0" (branco) são ocultos e param de contabilizar no painel de auditoria
+    // Regra dos 25 giros sem o "0":
+    // Sinais com horário posterior a 25 giros sem 0 ou <= quebra ou < quebra + 2 são exclusos e NÃO contabilizados no auditor
     const sigTimeMs = signal.targetTime
       ? typeof signal.targetTime === "number"
         ? signal.targetTime
@@ -668,10 +698,11 @@ class AutonomousAuditEngine {
         : Date.now();
 
     if (
-      isSignalInWhiteFreeze(sigTimeMs, this.currentFreezeIntervals) ||
-      (this.currentWhiteStreakStatus?.isFrozen &&
-        this.currentWhiteStreakStatus.freezeStartTime &&
-        sigTimeMs > this.currentWhiteStreakStatus.freezeStartTime)
+      !isSignalAuditableAfterFreeze(
+        sigTimeMs,
+        this.currentFreezeIntervals,
+        this.currentWhiteStreakStatus,
+      )
     ) {
       return;
     }
@@ -816,6 +847,91 @@ class AutonomousAuditEngine {
       }
     });
 
+    this.state.stats = newStats;
+  }
+
+  private extractKeysForSignal(signal: {
+    strategyKey?: string;
+    confirmedStrategies?: any[];
+    sources?: any[];
+  }): Set<string> {
+    const keys = new Set<string>();
+
+    if (signal.strategyKey) {
+      keys.add(signal.strategyKey);
+      const clean = signal.strategyKey.replace(/^(S19_|S17_)/, "");
+      keys.add(clean);
+      if (clean === "9-10" || clean === "10-9") keys.add("S19_10-9");
+      if (clean === "7-12" || clean === "12-7") keys.add("S19_12-7");
+      if (clean === "13-6" || clean === "6-13") keys.add("S19_6-13");
+      if (clean === "5-14" || clean === "14-5") keys.add("S19_14-5");
+      if (clean === "11-8") keys.add("S19_11-8");
+      if (clean === "8-11") keys.add("S19_8-11");
+      if (clean === "10-7") keys.add("S17_10-7");
+      if (clean === "7-10") keys.add("S17_7-10");
+      if (clean === "9-8" || clean === "8-9") keys.add("S17_8-9");
+      if (clean === "6-11" || clean === "11-6") keys.add("S17_11-6");
+      if (clean === "5-12") keys.add("S17_5-12");
+      if (clean === "12-5") keys.add("S17_12-5");
+      if (clean === "13-4") keys.add("S17_13-4");
+      if (clean === "4-13") keys.add("S17_4-13");
+      if (clean === "3-14" || clean === "14-3") keys.add("S17_14-3");
+      if (clean === "F2") keys.add("F2");
+    }
+
+    if (Array.isArray(signal.confirmedStrategies)) {
+      signal.confirmedStrategies.forEach((cs) => {
+        if (cs && cs.code) {
+          keys.add(cs.code);
+          if (cs.code === "F2") keys.add("F2");
+        }
+      });
+    }
+
+    if (Array.isArray(signal.sources)) {
+      signal.sources.forEach((src) => {
+        if (src && src.analysis) {
+          let code = "";
+          if (src.analysis === 202) {
+            code = "F2";
+          } else if (src.analysis >= 101 && src.analysis <= 115) {
+            code = `E${src.analysis - 100}`;
+          } else if (src.analysis >= 50 && src.analysis <= 56) {
+            code = `Q${src.analysis - 49}`;
+          } else {
+            code = `A${src.analysis}`;
+          }
+          keys.add(code);
+          if (typeof src.value === "number" && src.value >= 0 && src.value <= 14) {
+            keys.add(`${code}_${src.value}`);
+            keys.add(`A${src.analysis}_${src.value}`);
+          }
+        }
+      });
+    }
+    if (signal.strategyKey && /^[AQ]\d+/i.test(signal.strategyKey)) {
+      keys.add(signal.strategyKey.toUpperCase());
+    }
+
+    return keys;
+  }
+
+  private recalculateStatsFromRecentSignals(): void {
+    const newStats: Record<string, { green: number; red: number; lastUpdated: number }> = {};
+    for (const signal of this.state.recentSignals) {
+      if (signal.outcome !== "green" && signal.outcome !== "red") continue;
+      const keysToUpdate = this.extractKeysForSignal(signal);
+      keysToUpdate.forEach((k) => {
+        if (!newStats[k]) {
+          newStats[k] = { green: 0, red: 0, lastUpdated: signal.timestamp || Date.now() };
+        }
+        if (signal.outcome === "green") {
+          newStats[k].green += 1;
+        } else if (signal.outcome === "red") {
+          newStats[k].red += 1;
+        }
+      });
+    }
     this.state.stats = newStats;
   }
 
