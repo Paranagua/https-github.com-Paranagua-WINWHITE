@@ -54,8 +54,20 @@ export function diffMinutes(a: Date, b: Date): number | null {
   return diff;
 }
 
+export function getResultIdentity(r: {
+  id?: number | string | null;
+  created_at?: string;
+  roll?: number | string;
+}): string {
+  if (r.id !== undefined && r.id !== null && r.id !== "") {
+    return `id:${r.id}`;
+  }
+  return `t:${r.created_at ?? ""}_r:${r.roll ?? "0"}`;
+}
+
 export function collectGaps(rows: Row[], i: number, dt: Date): number[] {
   const gaps: number[] = [];
+  const processedIdentities = new Set<string>();
   const limit = MAX_ZEROS;
   const timeoutMs = TIMEOUT_MINUTES * 60000;
 
@@ -69,6 +81,13 @@ export function collectGaps(rows: Row[], i: number, dt: Date): number[] {
     if (zdt.getTime() - dt.getTime() > timeoutMs) break;
 
     if (Number(r.roll) === 0) {
+      // Deduplicação estrita pela IDENTIDADE DO RESULTADO (e NUNCA pelo valor do gap)
+      const identity = getResultIdentity(r);
+      if (processedIdentities.has(identity)) {
+        continue;
+      }
+      processedIdentities.add(identity);
+
       const gap = diffMinutes(dt, zdt);
       if (gap !== null && gap > 0) {
         gaps.push(gap);

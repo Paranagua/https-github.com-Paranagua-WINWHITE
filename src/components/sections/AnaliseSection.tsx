@@ -17,7 +17,11 @@ import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client"
 import { Card } from "@/components/double/Card";
 import { computeTop, isValidCycle, type Cycle as EngineCycle, type Row } from "@/lib/predictive";
 import { IncrementalPredictiveEngine } from "@/lib/incrementalPredictiveEngine";
-import { fetchPersistedCyclesMap, mergePersistedWithLiveCycles } from "@/lib/cyclePersistence";
+import {
+  fetchPersistedCyclesMap,
+  mergePersistedWithLiveCycles,
+  sanitizeMonotonicGaps,
+} from "@/lib/cyclePersistence";
 
 type UiCycle = {
   index: number;
@@ -100,7 +104,7 @@ function AnalysisPanel({
       .filter((c) => c.value === pedra)
       .map((c) => ({
         ...c,
-        gaps: (c.gaps || []).filter((g) => typeof g === "number" && !Number.isNaN(g) && g > 0),
+        gaps: sanitizeMonotonicGaps(c.gaps),
       }));
   }, [cycles, pedra]);
 
@@ -556,9 +560,7 @@ export default function AnaliseSection() {
       list.forEach((c) => {
         const n = c.value;
         if (s[n]) {
-          const cleanGaps = (c.gaps || []).filter(
-            (g) => typeof g === "number" && !Number.isNaN(g) && g > 0,
-          );
+          const cleanGaps = sanitizeMonotonicGaps(c.gaps);
           s[n].total++;
           if (cleanGaps.length >= MAX_ZEROS) s[n].fullyCompleted++;
           s[n].totalGaps += cleanGaps.length;

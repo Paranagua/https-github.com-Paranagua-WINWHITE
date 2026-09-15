@@ -10,7 +10,14 @@
  */
 
 import { parseUtcDate } from "@/lib/utils";
-import { type Row, type Cycle, MAX_ZEROS, TIMEOUT_MINUTES, isValidCycle } from "@/lib/predictive";
+import {
+  type Row,
+  type Cycle,
+  MAX_ZEROS,
+  TIMEOUT_MINUTES,
+  isValidCycle,
+  getResultIdentity,
+} from "@/lib/predictive";
 import {
   COLOR_PATTERNS,
   detectAllColorPatternBreaks,
@@ -22,6 +29,9 @@ export interface IncrementalCycle extends Cycle {
   cycleKey: string;
   status: "aberto" | "concluido" | "timeout";
   isDirty?: boolean;
+  whiteResultIds?: string[];
+  processedWhiteIdentities?: Set<string>;
+  lastWhiteTimeMs?: number;
 }
 
 export interface TriggerDefinition {
@@ -89,8 +99,9 @@ export class IncrementalPredictiveEngine {
   // Rastreamento de quebras de cores já processadas para evitar re-disparo
   private processedColorBreakKeys = new Set<string>();
 
-  // Conjunto de IDs de rodadas já processadas para garantir idempotência
+  // Conjunto de IDs e identidades de rodadas já processadas para garantir idempotência global
   private processedRowIds = new Set<number>();
+  private processedRowIdentities = new Set<string>();
 
   /**
    * Limpa todo o estado em memória (útil para testes ou reinicialização).
@@ -104,6 +115,7 @@ export class IncrementalPredictiveEngine {
     this.minuteStoneCounts.clear();
     this.processedColorBreakKeys.clear();
     this.processedRowIds.clear();
+    this.processedRowIdentities.clear();
   }
 
   /**
@@ -114,14 +126,56 @@ export class IncrementalPredictiveEngine {
       if (!c || !c.triggerAt) continue;
       const key = getCycleKey(c.analysis, c.value, c.triggerAt);
       const triggerDate = c.triggerAt instanceof Date ? c.triggerAt : new Date(c.triggerAt);
-      const gaps = Array.isArray(c.gaps) ? [...c.gaps] : [];
+
+      // Normaliza gaps: apenas valores positivos (> 0) e estritamente cronológicos (sem loop-backs de bugs legados)
+      let gaps: number[] = [];
+      if (Array.isArray(c.gaps)) {
+        let prevGap = 0;
+        for (const g of c.gaps) {
+          if (typeof g === "number" && !Number.isNaN(g) && g > 0) {
+            // Em um ciclo cronológico válido, o tempo nunca volta para trás!
+            if (g >= prevGap) {
+              gaps.push(g);
+              prevGap = g;
+            } else {
+              // Corta loop-back de dados reprocessados por versões anteriores
+              break;
+            }
+          }
+        }
+      }
+      if (gaps.length > MAX_ZEROS) {
+        gaps = gaps.slice(0, MAX_ZEROS);
+      }
+
+      // Se já temos este ciclo em memória com mais ou iguais gaps válidos, mantém o da memória
+      const existing = this.allCyclesByKey.get(key);
+      if (existing && existing.gaps.length >= gaps.length) {
+        continue;
+      }
+
       const status = computeCycleStatus(gaps, triggerDate);
+
+      // Rastreamento das identidades de resultados brancos associados a este ciclo
+      const processedIdentities = new Set<string>();
+      if (Array.isArray((c as any).whiteResultIds)) {
+        for (const wid of (c as any).whiteResultIds) {
+          processedIdentities.add(String(wid));
+        }
+      }
+
+      // Timestamp limite do último branco conhecido pelo gap
+      const lastGap = gaps.length > 0 ? gaps[gaps.length - 1] : 0;
+      const lastWhiteTimeMs = triggerDate.getTime() + lastGap * 60000;
 
       const incCycle: IncrementalCycle = {
         analysis: c.analysis,
         value: c.value,
         triggerAt: triggerDate,
         gaps,
+        whiteResultIds: Array.from(processedIdentities),
+        processedWhiteIdentities: processedIdentities,
+        lastWhiteTimeMs: gaps.length > 0 ? lastWhiteTimeMs : triggerDate.getTime(),
         cycleKey: key,
         status,
         isSecondary: c.isSecondary,
@@ -131,6 +185,8 @@ export class IncrementalPredictiveEngine {
       this.allCyclesByKey.set(key, incCycle);
       if (status === "aberto") {
         this.openCycles.set(key, incCycle);
+      } else {
+        this.openCycles.delete(key);
       }
     }
   }
@@ -144,10 +200,14 @@ export class IncrementalPredictiveEngine {
     updatedCycles: IncrementalCycle[];
     dirtyCycles: IncrementalCycle[];
   } {
-    if (this.processedRowIds.has(row.id)) {
+    const rowIdentity = getResultIdentity(row);
+    if (this.processedRowIdentities.has(rowIdentity)) {
       return { newCycles: [], updatedCycles: [], dirtyCycles: [] };
     }
-    this.processedRowIds.add(row.id);
+    this.processedRowIdentities.add(rowIdentity);
+    if (row.id !== undefined && row.id !== null) {
+      this.processedRowIds.add(row.id);
+    }
 
     const currentDate = parseUtcDate(row.created_at);
     if (Number.isNaN(currentDate.getTime())) {
@@ -179,16 +239,41 @@ export class IncrementalPredictiveEngine {
 
       // Se a nova pedra for BRANCO (0), computa o gap em minutos
       if (isWhite) {
+        // Ignora resultados no momento ou antes do gatilho (diff <= 0)
+        if (currentDate.getTime() <= cycle.triggerAt.getTime()) {
+          return;
+        }
+
+        // Garante a existência do conjunto de identidades processadas
+        if (!cycle.processedWhiteIdentities) {
+          cycle.processedWhiteIdentities = new Set<string>();
+        }
+
+        // 1. REQUISITO OBRIGATÓRIO: Deduplicação estrita pela IDENTIDADE DO RESULTADO (e NUNCA pelo valor do gap)
+        if (cycle.processedWhiteIdentities.has(rowIdentity)) {
+          return; // Ignora completamente, o mesmo resultado já foi computado neste ciclo
+        }
+
+        // 2. Proteção contra reinício de lote histórico: se o ciclo já possui brancos computados,
+        // o novo branco não pode ter ocorrido antes do timestamp do último branco registrado
+        if (cycle.lastWhiteTimeMs !== undefined && currentDate.getTime() < cycle.lastWhiteTimeMs) {
+          return; // Evento histórico anterior ao último branco conhecido do ciclo, ignora
+        }
+
         if (cycle.gaps.length < MAX_ZEROS) {
           const gap = diffMinutes(cycle.triggerAt, currentDate);
           // Quando não conseguir carregar o tempo ou for <= 0, deixa em branco (não preenche com 0)
           if (gap !== null && gap > 0) {
             cycle.gaps.push(gap);
+            cycle.processedWhiteIdentities.add(rowIdentity);
+            if (!cycle.whiteResultIds) cycle.whiteResultIds = [];
+            cycle.whiteResultIds.push(rowIdentity);
+            cycle.lastWhiteTimeMs = currentDate.getTime();
             cycle.isDirty = true;
             updatedCycles.push(cycle);
             dirtyCycles.push(cycle);
 
-            // Se atingiu o limite de 14 brancos, conclui o ciclo
+            // Se atingiu o limite de 14 brancos distintos, conclui o ciclo
             if (cycle.gaps.length >= MAX_ZEROS) {
               cycle.status = "concluido";
               closedKeys.push(key);
@@ -223,6 +308,9 @@ export class IncrementalPredictiveEngine {
         value: trig.value,
         triggerAt: trig.triggerAt,
         gaps: [],
+        whiteResultIds: [],
+        processedWhiteIdentities: new Set<string>(),
+        lastWhiteTimeMs: trig.triggerAt.getTime(),
         cycleKey: key,
         status: "aberto",
         isSecondary: trig.analysisId >= 100,

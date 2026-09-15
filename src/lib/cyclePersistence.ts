@@ -46,6 +46,25 @@ export function computeCycleStatus(
   return "aberto";
 }
 
+// Garante que gaps contenham apenas valores numéricos positivos (> 0) e estritamente cronológicos (sem loop-backs de bugs legados)
+export function sanitizeMonotonicGaps(rawGaps?: number[]): number[] {
+  if (!Array.isArray(rawGaps)) return [];
+  const clean: number[] = [];
+  let prev = 0;
+  for (const g of rawGaps) {
+    if (typeof g === "number" && !Number.isNaN(g) && g > 0) {
+      if (g >= prev) {
+        clean.push(g);
+        prev = g;
+      } else {
+        // Corta duplicações que voltaram no tempo em registros antigos
+        break;
+      }
+    }
+  }
+  return clean.slice(0, MAX_ZEROS);
+}
+
 // Converte um Cycle em memória para o formato persistível no banco
 export function cycleToRecord(
   cycle: Cycle,
@@ -54,9 +73,7 @@ export function cycleToRecord(
 ): PersistedCycleRecord {
   const triggerDate = cycle.triggerAt instanceof Date ? cycle.triggerAt : new Date(cycle.triggerAt);
   // Garante que gaps contenham apenas valores numéricos positivos (> 0); valores 0 ou inválidos são deixados em branco
-  const gaps = Array.isArray(cycle.gaps)
-    ? cycle.gaps.filter((g) => typeof g === "number" && !Number.isNaN(g) && g > 0)
-    : [];
+  const gaps = sanitizeMonotonicGaps(cycle.gaps);
   const status = computeCycleStatus(gaps, triggerDate);
 
   return {
@@ -76,9 +93,7 @@ export function cycleToRecord(
 
 // Converte um registro do banco de volta para o tipo Cycle do motor preditivo
 export function recordToCycle(record: PersistedCycleRecord): Cycle {
-  const gaps = Array.isArray(record.gaps)
-    ? record.gaps.filter((g) => typeof g === "number" && !Number.isNaN(g) && g > 0)
-    : [];
+  const gaps = sanitizeMonotonicGaps(record.gaps);
   return {
     analysis: record.analysis,
     value: record.value,
