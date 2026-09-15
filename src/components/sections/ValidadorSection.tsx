@@ -27,6 +27,7 @@ import {
   computeWhiteFreezeIntervals,
   getCurrentWhiteStreak,
   isSignalInWhiteFreeze,
+  isSignalAuditableAfterFreeze,
 } from "@/lib/whiteStreakFreeze";
 import {
   buildA2,
@@ -310,14 +311,11 @@ export default function SignalPercentageValidator() {
       const recTime = rec.timestamp || Date.now();
       if (feedMode === "from_now" && recTime < baselineTime - 60_000) continue;
 
-      // Regra dos 24 giros sem branco:
-      // Sinais com horário posterior a > 24 giros sem o "0" (branco) são ocultos e não contabilizados
-      if (
-        isSignalInWhiteFreeze(recTime, freezeIntervals) ||
-        (whiteStreakStatus.isFrozen &&
-          whiteStreakStatus.freezeStartTime &&
-          recTime > whiteStreakStatus.freezeStartTime)
-      ) {
+      // Regra dos 25 giros sem o "0":
+      // 25 giros sem o "0", os sinais são ocultados e o painel auditor congelado.
+      // Quando aparece o "0", são exclusos sinais <= quebra, re-exibindo sinais >= quebra + 2,
+      // e o painel auditor descongela contando win/loss apenas dos sinais pós descongelamento.
+      if (!isSignalAuditableAfterFreeze(recTime, freezeIntervals, whiteStreakStatus)) {
         continue;
       }
 
@@ -920,14 +918,11 @@ export default function SignalPercentageValidator() {
     const nowTime = Date.now();
 
     for (const [slotTime, data] of sortedSlots.slice(0, maxSignalsToEvaluate)) {
-      // Regra dos 24 giros sem branco:
-      // Sinais com horário posterior a > 24 giros sem o "0" (branco) são ocultos e não contabilizados
-      if (
-        isSignalInWhiteFreeze(slotTime, freezeIntervals) ||
-        (whiteStreakStatus.isFrozen &&
-          whiteStreakStatus.freezeStartTime &&
-          slotTime > whiteStreakStatus.freezeStartTime)
-      ) {
+      // Regra dos 25 giros sem o "0":
+      // 25 giros sem o "0", os sinais são ocultados e o painel auditor congelado.
+      // Quando aparece o "0", são exclusos sinais <= quebra, re-exibindo sinais >= quebra + 2,
+      // e o painel auditor descongela contando win/loss apenas dos sinais pós descongelamento.
+      if (!isSignalAuditableAfterFreeze(slotTime, freezeIntervals, whiteStreakStatus)) {
         continue;
       }
 
@@ -1244,19 +1239,16 @@ export default function SignalPercentageValidator() {
         </div>
       )}
 
-      {/* Banner de Proteção: Sequência com mais de 24 giros sem branco */}
+      {/* Banner de Proteção: Gráfico em recuperação */}
       {whiteStreakStatus.isFrozen && (
         <div className="flex items-center gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-5 py-4 text-amber-300 shadow-2xl backdrop-blur-sm">
           <AlertTriangle className="h-6 w-6 shrink-0 text-amber-400 animate-pulse" />
           <div className="flex-1 space-y-0.5">
-            <div className="text-xs font-black uppercase tracking-wider text-amber-200">
-              Pausa de Proteção Ativa — {whiteStreakStatus.currentStreak} Giros Sem Branco
+            <div className="text-sm font-black uppercase tracking-wider text-amber-200">
+              Grafico em recuperação.
             </div>
-            <p className="text-[11px] text-amber-300/90 leading-relaxed">
-              Foi detectada uma sequência com mais de 24 giros sem o &quot;0&quot; (branco).
-              Conforme a nova regra, sinais com horário posterior a esses giros estão ocultos e
-              temporariamente desativados do painel validador. A reativação total ocorrerá assim que
-              sair um &quot;0&quot; (branco) na mesa.
+            <p className="text-xs font-bold text-amber-300/90">
+              {whiteStreakStatus.currentStreak} Giros Sem Branco
             </p>
           </div>
         </div>

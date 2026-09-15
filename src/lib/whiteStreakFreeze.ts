@@ -236,10 +236,10 @@ export function isSignalInWhiteFreeze(
 /**
  * Verifica se um sinal é elegível para ser contabilizado no painel auditor.
  * Regra:
- * "e o painel auditor descongela contando win/loss apenas dos sinais pós descongelamento."
- * - Se congelado atualmente: NÃO conta (painel congelado).
- * - Se cair em qualquer intervalo de congelamento histórico: NÃO conta (excluso).
- * - Se houve descongelamento: conta win/loss APENAS de sinais com horário >= quebra + 2.
+ * - 25 giros sem o "0": sinais são ocultados e o painel auditor congelado.
+ *   O painel auditor para de contar mas NÃO DEVE ZERAR (mantém dados e histórico pré-congelamento).
+ * - Quando aparece o "0" nos giros: são exclusos sinais <= quebra, re-exibindo sinais >= quebra + 2,
+ *   e o painel auditor descongela contando win/loss apenas dos sinais pós descongelamento.
  */
 export function isSignalAuditableAfterFreeze(
   signalTimeMs: number,
@@ -248,12 +248,17 @@ export function isSignalAuditableAfterFreeze(
 ): boolean {
   if (!signalTimeMs) return false;
 
-  // 1. Enquanto a mesa estiver congelada (25 giros sem 0), o painel auditor está congelado
+  // 1. Enquanto a mesa estiver congelada (25 giros sem 0):
+  // O painel auditor para de contar NOVOS sinais (sinais após o início do congelamento são ignorados),
+  // mas NÃO DEVE ZERAR: os sinais concluídos antes do início do congelamento permanecem válidos.
   if (currentStatus?.isFrozen) {
-    return false;
+    if (currentStatus.freezeStartTime && signalTimeMs > currentStatus.freezeStartTime) {
+      return false;
+    }
+    return !isSignalInWhiteFreeze(signalTimeMs, intervals);
   }
 
-  // 2. Se o sinal está em uma janela de congelamento (ou anterior a quebra + 2 de qualquer quebra)
+  // 2. Se o sinal está em uma janela de congelamento histórico (ou anterior a quebra + 2 de qualquer quebra)
   if (isSignalInWhiteFreeze(signalTimeMs, intervals)) {
     return false;
   }
@@ -337,4 +342,3 @@ export function filterSignalsExcludingWhiteFreeze<
     return true;
   });
 }
-

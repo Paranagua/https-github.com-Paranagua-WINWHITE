@@ -7,10 +7,16 @@ import {
   type StoredSignal,
   type PredictiveSignal,
 } from "@/lib/signalsStore";
-import { Loader2, Sparkles, Target, Layers, Zap, Flame } from "lucide-react";
+import { Loader2, Sparkles, Target, Layers, Zap, Flame, AlertTriangle } from "lucide-react";
 import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
 import { parseUtcDate } from "@/lib/utils";
 import { Card } from "@/components/double/Card";
+import {
+  getCurrentWhiteStreak,
+  computeWhiteFreezeIntervals,
+  isSignalInWhiteFreeze,
+  filterSignalsExcludingWhiteFreeze,
+} from "@/lib/whiteStreakFreeze";
 import {
   getCanonicalSignalKey,
   getSignalRank,
@@ -480,6 +486,14 @@ export function PredictiveSignals() {
     new IncrementalPredictiveEngine(),
   );
 
+  const whiteStreakStatus = useMemo(() => {
+    return getCurrentWhiteStreak(rows);
+  }, [rows]);
+
+  const freezeIntervals = useMemo(() => {
+    return computeWhiteFreezeIntervals(rows);
+  }, [rows]);
+
   // 0. Carrega ciclos preditivos persistidos do Supabase/Servidor com fallback seguro
   useEffect(() => {
     let alive = true;
@@ -688,6 +702,11 @@ export function PredictiveSignals() {
   const hasOpportunity = active.length > 0;
 
   const generate = useCallback(async () => {
+    if (whiteStreakStatus.isFrozen) {
+      setSignals([]);
+      setPredictiveSignals([]);
+      return;
+    }
     try {
       const now = new Date();
       now.setSeconds(0, 0);
@@ -973,7 +992,7 @@ export function PredictiveSignals() {
     } catch (err) {
       console.error("[PredictiveSignals] Signal generation error:", err);
     }
-  }, [rows, active, engine]);
+  }, [rows, active, engine, whiteStreakStatus.isFrozen]);
 
   // Inscrição em tempo real para sincronizar o status de validação dos sinais (WIN/LOSS/PENDENTE)
   const [liveStoredMap, setLiveStoredMap] = useState<Map<string, PredictiveSignal>>(() => {
@@ -1016,6 +1035,12 @@ export function PredictiveSignals() {
 
   // Lista unificada de todos os sinais com ciclo de vida estável
   const activeSignals = useMemo(() => {
+    // Se estiver em congelamento por 25 giros sem o 0:
+    // "1) Os cards dos sinais ainda ficam visíveis após 25 giros sem o "0". Ele deve sumir da tela"
+    if (whiteStreakStatus.isFrozen) {
+      return [];
+    }
+
     const storedList = Array.from(liveStoredMap.values());
     const sourceList =
       storedList.length > 0
@@ -1102,6 +1127,8 @@ export function PredictiveSignals() {
       })
       .filter((s) => {
         if (s.isNoConfluence || s.category === "no_confluence") return false;
+        const sTime = s.at instanceof Date ? s.at.getTime() : 0;
+        if (isSignalInWhiteFreeze(sTime, freezeIntervals)) return false;
         const rank = getSignalRank(s);
         return (
           rank === SignalRank.ALAVANCAGEM ||
@@ -1116,7 +1143,7 @@ export function PredictiveSignals() {
         const tB = b.at instanceof Date ? b.at.getTime() : 0;
         return tA - tB;
       });
-  }, [liveStoredMap, mode1]);
+  }, [liveStoredMap, mode1, whiteStreakStatus, freezeIntervals]);
 
   // 1. 🚀 ALAVANCAGEM (Rank 4: >= 4x Top 1 + 0 ou mais Top 2/3)
   const alavancagemSignals = useMemo(() => {
@@ -1264,10 +1291,17 @@ export function PredictiveSignals() {
       // Mescla com ciclo de vida monotônico garantindo que NADA é perdido e promoções são respeitadas
       const mergedList = mergeSignalsLifecycle(existing, candidateSignals, rows, Date.now());
 
-      setPredictiveSignals(mergedList);
+      const filteredMerged = filterSignalsExcludingWhiteFreeze(
+        mergedList,
+        freezeIntervals,
+        whiteStreakStatus,
+      );
+
+      const finalToStore = whiteStreakStatus.isFrozen ? [] : filteredMerged;
+      setPredictiveSignals(finalToStore);
 
       // Sincroniza também no formato StoredSignal para a grelha de roleta
-      const storedSignalsList: StoredSignal[] = mergedList.map((s) => {
+      const storedSignalsList: StoredSignal[] = finalToStore.map((s) => {
         const dt =
           s.entryDate instanceof Date
             ? s.entryDate
@@ -1301,7 +1335,7 @@ export function PredictiveSignals() {
       });
       setSignals(storedSignalsList);
     }
-  }, [rows, loading, mode1, activeRecAlerts]);
+  }, [rows, loading, mode1, activeRecAlerts, whiteStreakStatus, freezeIntervals]);
 
   return (
     <Card className="glass-card !p-0 overflow-hidden">
@@ -1323,7 +1357,7 @@ export function PredictiveSignals() {
           <button
             type="button"
             onClick={generate}
-            disabled={!hasOpportunity || loading}
+            disabled={!hasOpportunity || loading || whiteStreakStatus.isFrozen}
             className="btn-primary flex items-center gap-2 px-5 py-2.5 shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all font-bold text-xs uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
@@ -1343,89 +1377,100 @@ export function PredictiveSignals() {
           </div>
         )}
 
-        {!err && (
-          <div className="space-y-8">
-            {/* 1. 🚀 ALAVANCAGEM (4+ Análises Top 1) */}
-            {alavancagemSignals.length > 0 && (
-              <section className="space-y-3">
-                <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-white">
-                  <Zap className="h-4 w-4 text-white fill-white animate-pulse" /> 🚀 ALAVANCAGEM (4+
-                  Sinais Top 1)
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {alavancagemSignals.map((s) => (
-                    <SignalCard key={s.key} signal={s} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* 2. 👑 SUPREMO (2-3x Top 1 + 2+ Top 2/3) */}
-            {supremeSignals.length > 0 && (
-              <section className="space-y-3">
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-purple-400">
-                  <Sparkles className="h-3.5 w-3.5" /> 👑 SUPREMO (2x-3x Top 1 + 2+ Top 2/3)
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {supremeSignals.map((s) => (
-                    <SignalCard key={s.key} signal={s} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* 3. 💎 RARO (2-3x Top 1 + 0-1 Top 2/3) */}
-            {rareSignals.length > 0 && (
-              <section className="space-y-3">
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-400">
-                  <Sparkles className="h-3.5 w-3.5" /> 💎 RARO (2x-3x Top 1)
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {rareSignals.map((s) => (
-                    <SignalCard key={s.key} signal={s} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* 4. ⚡ TOP 1 & TOP 3 (1x Top 1 + 1+ Top 2/3) */}
-            {top1Top3Signals.length > 0 && (
-              <section className="space-y-3">
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
-                  <Layers className="h-3.5 w-3.5" /> ⚡ TOP 1 & TOP 3 (1x Top 1 + 1+ Top 2/3)
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {top1Top3Signals.map((s) => (
-                    <SignalCard key={s.key} signal={s} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* 5. 🔥 EM ALTA (Tendência 3/3) - Fica abaixo de todos os outros grupos */}
-            {emAltaSignals.length > 0 && (
-              <section className="space-y-3">
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-orange-400">
-                  <Flame className="h-3.5 w-3.5 text-orange-400 animate-pulse" /> 🔥 EM ALTA
-                  (Tendência 3/3)
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {emAltaSignals.map((s) => (
-                    <SignalCard key={s.key} signal={s} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {activeSignals.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-10">
-                {loading
-                  ? "Carregando resultados e calculando sinais..."
-                  : "Sem sinais ativos no momento (aguardando confluências Top 1 & Top 3, Raro, Supremo, Alavancagem ou Em Alta)."}
+        {!err &&
+          (whiteStreakStatus.isFrozen ? (
+            <div className="flex flex-col items-center justify-center p-8 rounded-2xl border border-amber-500/30 bg-amber-500/10 text-center space-y-2 my-2">
+              <AlertTriangle className="h-7 w-7 text-amber-400 animate-pulse" />
+              <div className="text-base font-black uppercase tracking-wider text-amber-200">
+                Grafico em recuperação.
+              </div>
+              <p className="text-xs font-bold text-amber-300/90">
+                {whiteStreakStatus.currentStreak} Giros Sem Branco
               </p>
-            )}
-          </div>
-        )}
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {/* 1. 🚀 ALAVANCAGEM (4+ Análises Top 1) */}
+              {alavancagemSignals.length > 0 && (
+                <section className="space-y-3">
+                  <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-white">
+                    <Zap className="h-4 w-4 text-white fill-white animate-pulse" /> 🚀 ALAVANCAGEM
+                    (4+ Sinais Top 1)
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {alavancagemSignals.map((s) => (
+                      <SignalCard key={s.key} signal={s} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* 2. 👑 SUPREMO (2-3x Top 1 + 2+ Top 2/3) */}
+              {supremeSignals.length > 0 && (
+                <section className="space-y-3">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-purple-400">
+                    <Sparkles className="h-3.5 w-3.5" /> 👑 SUPREMO (2x-3x Top 1 + 2+ Top 2/3)
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {supremeSignals.map((s) => (
+                      <SignalCard key={s.key} signal={s} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* 3. 💎 RARO (2-3x Top 1 + 0-1 Top 2/3) */}
+              {rareSignals.length > 0 && (
+                <section className="space-y-3">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-400">
+                    <Sparkles className="h-3.5 w-3.5" /> 💎 RARO (2x-3x Top 1)
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {rareSignals.map((s) => (
+                      <SignalCard key={s.key} signal={s} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* 4. ⚡ TOP 1 & TOP 3 (1x Top 1 + 1+ Top 2/3) */}
+              {top1Top3Signals.length > 0 && (
+                <section className="space-y-3">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
+                    <Layers className="h-3.5 w-3.5" /> ⚡ TOP 1 & TOP 3 (1x Top 1 + 1+ Top 2/3)
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {top1Top3Signals.map((s) => (
+                      <SignalCard key={s.key} signal={s} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* 5. 🔥 EM ALTA (Tendência 3/3) - Fica abaixo de todos os outros grupos */}
+              {emAltaSignals.length > 0 && (
+                <section className="space-y-3">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-orange-400">
+                    <Flame className="h-3.5 w-3.5 text-orange-400 animate-pulse" /> 🔥 EM ALTA
+                    (Tendência 3/3)
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {emAltaSignals.map((s) => (
+                      <SignalCard key={s.key} signal={s} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {activeSignals.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-10">
+                  {loading
+                    ? "Carregando resultados e calculando sinais..."
+                    : "Sem sinais ativos no momento (aguardando confluências Top 1 & Top 3, Raro, Supremo, Alavancagem ou Em Alta)."}
+                </p>
+              )}
+            </div>
+          ))}
       </div>
     </Card>
   );

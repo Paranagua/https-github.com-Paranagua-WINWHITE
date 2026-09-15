@@ -1701,17 +1701,7 @@ function SinaisSectionContent() {
     return (recentSignals || []).filter((sig) => {
       const sigTime =
         sig.timestamp || (sig.targetTime ? parseUtcDate(sig.targetTime).getTime() : 0);
-      if (sigTime && isSignalInWhiteFreeze(sigTime, freezeIntervals)) {
-        return false;
-      }
-      if (
-        whiteStreakStatus.isFrozen &&
-        whiteStreakStatus.freezeStartTime &&
-        sigTime > whiteStreakStatus.freezeStartTime
-      ) {
-        return false;
-      }
-      return true;
+      return isSignalAuditableAfterFreeze(sigTime, freezeIntervals, whiteStreakStatus);
     });
   }, [recentSignals, freezeIntervals, whiteStreakStatus]);
 
@@ -1777,19 +1767,16 @@ function SinaisSectionContent() {
       </div>
 
       <div className="flex flex-col gap-6">
-        {/* Banner de Proteção: Sequência com mais de 24 giros sem branco */}
+        {/* Banner de Proteção: Gráfico em recuperação */}
         {whiteStreakStatus.isFrozen && (
           <div className="flex items-center gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-5 py-4 text-amber-300 shadow-2xl backdrop-blur-sm">
             <AlertTriangle className="h-6 w-6 shrink-0 text-amber-400 animate-pulse" />
             <div className="flex-1 space-y-0.5">
-              <div className="text-xs font-black uppercase tracking-wider text-amber-200">
-                Pausa de Proteção Ativa — {whiteStreakStatus.currentStreak} Giros Sem Branco
+              <div className="text-sm font-black uppercase tracking-wider text-amber-200">
+                Grafico em recuperação.
               </div>
-              <p className="text-[11px] text-amber-300/90 leading-relaxed">
-                Foi detectada uma sequência com mais de 24 giros sem o &quot;0&quot; (branco).
-                Conforme a regra, sinais com horário posterior a esses giros estão ocultos e
-                temporariamente desativados do painel de auditoria. A reativação total ocorrerá
-                assim que sair um &quot;0&quot; (branco) na mesa.
+              <p className="text-xs font-bold text-amber-300/90">
+                {whiteStreakStatus.currentStreak} Giros Sem Branco
               </p>
             </div>
           </div>
