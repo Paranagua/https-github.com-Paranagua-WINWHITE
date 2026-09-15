@@ -128,17 +128,22 @@ export default {
 
               if (validRecords.length > 0) {
                 // 1. Persistência na fonte de verdade (Supabase: public.predictive_cycles)
-                const { error } = await blazeSupabase
-                  .from("predictive_cycles")
-                  .upsert(validRecords, { onConflict: "cycle_key" });
+                // Chunking de 50 registros para evitar 'canceling statement due to statement timeout'
+                const CHUNK_SIZE = 50;
+                for (let i = 0; i < validRecords.length; i += CHUNK_SIZE) {
+                  const chunk = validRecords.slice(i, i + CHUNK_SIZE);
+                  const { error } = await blazeSupabase
+                    .from("predictive_cycles")
+                    .upsert(chunk, { onConflict: "cycle_key" });
 
-                if (!error) {
-                  saved = validRecords.length;
-                } else {
-                  console.warn(
-                    "[Server] Error upserting to Supabase predictive_cycles:",
-                    error.message,
-                  );
+                  if (!error) {
+                    saved += chunk.length;
+                  } else {
+                    console.warn(
+                      `[Server] Error upserting chunk ${i}-${i + chunk.length} to Supabase predictive_cycles:`,
+                      error.message,
+                    );
+                  }
                 }
 
                 // 2. Atualiza cache em memória

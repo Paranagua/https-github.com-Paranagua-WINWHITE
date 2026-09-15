@@ -1141,7 +1141,7 @@ function SinaisSectionContent() {
       const { data } = await supabase
         .from("blaze_results")
         .select("id, roll, color, created_at")
-        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
         .limit(500);
       if (data) setResultsForValidation(data.map(rowToResult));
     } catch (err) {
@@ -1165,7 +1165,7 @@ function SinaisSectionContent() {
         const { data } = await supabase
           .from("blaze_results")
           .select("id, roll, color, created_at")
-          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
           .limit(25);
         if (data && data.length > 0) {
           const fresh = data.map(rowToResult);
@@ -1173,7 +1173,9 @@ function SinaisSectionContent() {
             const existingIds = new Set(prev.map((r) => r.id));
             const newItems = fresh.filter((r) => !existingIds.has(r.id));
             if (newItems.length === 0) return prev;
-            return [...newItems, ...prev].slice(0, 500);
+            return [...newItems, ...prev]
+              .sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0))
+              .slice(0, 500);
           });
         }
       } catch (err) {
@@ -1192,7 +1194,9 @@ function SinaisSectionContent() {
           const newResult = rowToResult(payload.new as any);
           setResultsForValidation((prev) => {
             if (prev.some((r) => r.id === newResult.id)) return prev;
-            return [newResult, ...prev].slice(0, 500);
+            return [newResult, ...prev]
+              .sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0))
+              .slice(0, 500);
           });
         },
       )

@@ -23,6 +23,7 @@ import {
   type Row,
   MIN_CYCLES,
 } from "@/lib/predictive";
+import { sanitizeMonotonicGaps } from "@/lib/cyclePersistence";
 
 export type PatternColor = "red" | "black" | "white";
 
@@ -927,7 +928,7 @@ export function colorBreaksToCycles(breaks: ColorBreakResult[], rows: Row[]): Cy
     value: b.breakStone.roll,
     analysis: b.analysisId,
     triggerAt: b.breakStone.date,
-    gaps: collectGaps(rows, b.breakStone.rowIndex, b.breakStone.date),
+    gaps: sanitizeMonotonicGaps(collectGaps(rows, b.breakStone.rowIndex, b.breakStone.date)),
   }));
 }
 

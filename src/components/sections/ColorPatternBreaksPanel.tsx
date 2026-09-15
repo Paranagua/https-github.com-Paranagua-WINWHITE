@@ -10,7 +10,11 @@ import { Card } from "@/components/double/Card";
 import { Sparkles, ShieldCheck, Clock, Table as TableIcon, LayoutGrid } from "lucide-react";
 import { fmtDateTime } from "@/components/double/types";
 import { computeTop, isValidCycle, type Row, type Cycle } from "@/lib/predictive";
-import { fetchPersistedCyclesMap, mergePersistedWithLiveCycles } from "@/lib/cyclePersistence";
+import {
+  fetchPersistedCyclesMap,
+  mergePersistedWithLiveCycles,
+  sanitizeMonotonicGaps,
+} from "@/lib/cyclePersistence";
 
 interface ColorPatternBreaksPanelProps {
   rows: Row[];
@@ -69,7 +73,7 @@ export function ColorPatternBreaksPanel({ rows, selectedPedra }: ColorPatternBre
     const merged = persisted.length > 0 ? mergePersistedWithLiveCycles(persisted, live) : live;
     return merged.map((c) => ({
       ...c,
-      gaps: (c.gaps || []).filter((g) => typeof g === "number" && !Number.isNaN(g) && g > 0),
+      gaps: sanitizeMonotonicGaps(c.gaps),
     }));
   }, [breaksForSelectedStone, rows, persistedColorCycles, patternDef.analysisId, selectedPedra]);
 

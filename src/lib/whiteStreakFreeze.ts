@@ -49,18 +49,27 @@ export function isWhiteRound(r: any): boolean {
  */
 export function getRoundTimestampMs(r: any): number {
   if (!r) return 0;
-  if (typeof r.timestamp === "number" && r.timestamp > 0) return r.timestamp;
+  if (typeof r.timestamp === "number" && !Number.isNaN(r.timestamp) && r.timestamp > 0)
+    return r.timestamp;
   if (typeof r.created_at === "string") {
-    return parseUtcDate(r.created_at).getTime();
+    const t = parseUtcDate(r.created_at).getTime();
+    if (!Number.isNaN(t)) return t;
   }
   if (typeof r.createdAt === "string") {
-    return parseUtcDate(r.createdAt).getTime();
+    const t = parseUtcDate(r.createdAt).getTime();
+    if (!Number.isNaN(t)) return t;
   }
   if (typeof r.timestamp === "string") {
-    return parseUtcDate(r.timestamp).getTime();
+    const t = parseUtcDate(r.timestamp).getTime();
+    if (!Number.isNaN(t)) return t;
   }
   if (r.created_at instanceof Date) {
-    return r.created_at.getTime();
+    const t = r.created_at.getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  if (r.createdAt instanceof Date) {
+    const t = r.createdAt.getTime();
+    if (!Number.isNaN(t)) return t;
   }
   return 0;
 }
@@ -151,7 +160,11 @@ export function getCurrentWhiteStreak(rounds: any[]): WhiteStreakStatus {
   }
 
   // Ordena cronologicamente decrescente (do mais recente para o mais antigo)
-  const sortedDesc = [...rounds].sort((a, b) => getRoundTimestampMs(b) - getRoundTimestampMs(a));
+  const sortedDesc = [...rounds].sort((a, b) => {
+    const diff = getRoundTimestampMs(b) - getRoundTimestampMs(a);
+    if (diff !== 0) return diff;
+    return (Number(b.id) || 0) - (Number(a.id) || 0);
+  });
 
   let currentStreak = 0;
   let lastWhiteTime: number | null = null;
@@ -169,13 +182,13 @@ export function getCurrentWhiteStreak(rounds: any[]): WhiteStreakStatus {
     }
   }
 
-  // 25 giros sem o "0": congelamento ativo
-  const isFrozen = currentStreak >= 25;
+  const intervals = computeWhiteFreezeIntervals(rounds);
+  const active = intervals.find((inv) => inv.endTime === Number.POSITIVE_INFINITY);
+  const isFrozen = currentStreak >= 25 || !!active;
   const freezeStartTime = isFrozen
-    ? round24Time || (lastWhiteTime ? lastWhiteTime + 24 * 30000 : null)
+    ? (active?.startTime ?? (lastWhiteTime ? lastWhiteTime + 24 * 30000 : null))
     : null;
 
-  const intervals = computeWhiteFreezeIntervals(rounds);
   const finished = intervals.filter((inv) => inv.endTime !== Number.POSITIVE_INFINITY);
   const lastFinished = finished.length > 0 ? finished[finished.length - 1] : null;
 
@@ -258,18 +271,13 @@ export function isSignalAuditableAfterFreeze(
     return !isSignalInWhiteFreeze(signalTimeMs, intervals);
   }
 
-  // 2. Se o sinal está em uma janela de congelamento histórico (ou anterior a quebra + 2 de qualquer quebra)
+  // 2. Quando a mesa descongela (aparece o "0"):
+  // Sinais dentro do intervalo de congelamento histórico ou no período de exclusão (< quebra + 2)
+  // são excluídos (isSignalInWhiteFreeze retorna true).
+  // Sinais concluídos antes do congelamento permanecem preservados, e sinais pós-descongelamento
+  // (>= quebra + 2) são reativados e contabilizados normalmente.
   if (isSignalInWhiteFreeze(signalTimeMs, intervals)) {
     return false;
-  }
-
-  // 3. Regra pós-descongelamento:
-  // "o painel auditor descongela contando win/loss apenas dos sinais pós descongelamento"
-  // Sinais menores ou iguais à quebra do congelamento ou < quebra + 2 são excluídos do auditor.
-  if (currentStatus && currentStatus.lastResumeTime && currentStatus.lastUnfreezeTime) {
-    if (signalTimeMs < currentStatus.lastResumeTime) {
-      return false;
-    }
   }
 
   return true;

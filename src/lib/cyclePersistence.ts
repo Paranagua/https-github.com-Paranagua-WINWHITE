@@ -147,44 +147,56 @@ export async function persistCyclesBatch(
   const records = Array.from(payloadMap.values());
   if (records.length === 0) return 0;
 
-  // 2. Tenta persistência via API do servidor (bypassa RLS com segurança e persiste no backend)
+  // 2. Persistência em lotes (batching) para evitar payloads gigantes e timeout
   let savedCount = 0;
-  try {
-    const isNode = typeof window === "undefined";
-    const apiUrl = isNode
-      ? "http://localhost:3000/api/public/predictive-cycles"
-      : "/api/public/predictive-cycles";
-    const res = await fetch(apiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ records }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      savedCount = data.saved ?? records.length;
-      for (const rec of records) {
-        persistedSignatures.set(rec.cycle_key, `${rec.cycle_key}_${rec.gaps.length}_${rec.status}`);
-      }
-      return savedCount;
-    }
-  } catch {
-    // Continua para tentativa direta no Supabase
-  }
+  const isNode = typeof window === "undefined";
+  const apiUrl = isNode
+    ? "http://localhost:3000/api/public/predictive-cycles"
+    : "/api/public/predictive-cycles";
+  const BATCH_SIZE = 100;
 
-  // 3. Tentativa direta no Supabase via client
-  try {
-    const { error } = await (supabase as any)
-      .from("predictive_cycles")
-      .upsert(records, { onConflict: "cycle_key" });
+  for (let i = 0; i < records.length; i += BATCH_SIZE) {
+    const batch = records.slice(i, i + BATCH_SIZE);
+    let batchSaved = false;
 
-    if (!error) {
-      savedCount = records.length;
-      for (const rec of records) {
-        persistedSignatures.set(rec.cycle_key, `${rec.cycle_key}_${rec.gaps.length}_${rec.status}`);
+    // Tenta persistência via API do servidor (bypassa RLS com segurança e persiste no backend)
+    try {
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records: batch }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        savedCount += data.saved ?? batch.length;
+        batchSaved = true;
+      }
+    } catch {
+      // Continua para tentativa direta no Supabase
+    }
+
+    if (!batchSaved) {
+      // 3. Fallback: Tentativa direta no Supabase via client em chunks de 50
+      try {
+        const CHUNK_SIZE = 50;
+        for (let j = 0; j < batch.length; j += CHUNK_SIZE) {
+          const chunk = batch.slice(j, j + CHUNK_SIZE);
+          const { error } = await (supabase as any)
+            .from("predictive_cycles")
+            .upsert(chunk, { onConflict: "cycle_key" });
+
+          if (!error) {
+            savedCount += chunk.length;
+          }
+        }
+      } catch {
+        // Falha silenciosa tolerada (cache em memória e fallback já retêm os dados)
       }
     }
-  } catch {
-    // Falha silenciosa tolerada (cache em memória e fallback já retêm os dados)
+
+    for (const rec of batch) {
+      persistedSignatures.set(rec.cycle_key, `${rec.cycle_key}_${rec.gaps.length}_${rec.status}`);
+    }
   }
 
   return savedCount;
@@ -314,24 +326,25 @@ export async function fetchPersistedCyclesMap(
 export function mergePersistedWithLiveCycles(persisted: Cycle[] = [], live: Cycle[] = []): Cycle[] {
   const mergedMap = new Map<string, Cycle>();
 
-  // 1. Adiciona os ciclos persistidos
+  // 1. Adiciona os ciclos persistidos sanitizados
   for (const c of persisted) {
     if (!c.triggerAt) continue;
     const key = getCycleKey(c.analysis, c.value, c.triggerAt);
-    mergedMap.set(key, c);
+    mergedMap.set(key, { ...c, gaps: sanitizeMonotonicGaps(c.gaps) });
   }
 
-  // 2. Adiciona ou atualiza com os ciclos calculados da janela viva
+  // 2. Adiciona ou atualiza com os ciclos calculados da janela viva sanitizados
   for (const c of live) {
     if (!c.triggerAt) continue;
     const key = getCycleKey(c.analysis, c.value, c.triggerAt);
+    const cleanLiveGaps = sanitizeMonotonicGaps(c.gaps);
     const existing = mergedMap.get(key);
     if (!existing) {
-      mergedMap.set(key, c);
+      mergedMap.set(key, { ...c, gaps: cleanLiveGaps });
     } else {
       // Se o ciclo vivo tem mais ou iguais gaps ou foi reavaliado, atualiza
-      if (c.gaps.length >= existing.gaps.length) {
-        mergedMap.set(key, c);
+      if (cleanLiveGaps.length >= existing.gaps.length) {
+        mergedMap.set(key, { ...c, gaps: cleanLiveGaps });
       }
     }
   }

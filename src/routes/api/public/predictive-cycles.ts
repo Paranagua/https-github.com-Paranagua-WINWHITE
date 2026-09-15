@@ -129,14 +129,22 @@ export const Route = createFileRoute("/api/public/predictive-cycles")({
 
             if (validRecords.length > 0) {
               // 1. Persistência primária na fonte de verdade (Supabase: public.predictive_cycles)
-              const { error } = await blazeSupabase
-                .from("predictive_cycles")
-                .upsert(validRecords, { onConflict: "cycle_key" });
+              // Chunking de 50 registros para evitar 'canceling statement due to statement timeout'
+              const CHUNK_SIZE = 50;
+              for (let i = 0; i < validRecords.length; i += CHUNK_SIZE) {
+                const chunk = validRecords.slice(i, i + CHUNK_SIZE);
+                const { error } = await blazeSupabase
+                  .from("predictive_cycles")
+                  .upsert(chunk, { onConflict: "cycle_key" });
 
-              if (error) {
-                console.error("[API predictive-cycles] Upsert error in Supabase:", error.message);
-              } else {
-                saved = validRecords.length;
+                if (error) {
+                  console.error(
+                    `[API predictive-cycles] Upsert error for chunk ${i}-${i + chunk.length} in Supabase:`,
+                    error.message,
+                  );
+                } else {
+                  saved += chunk.length;
+                }
               }
 
               // 2. Atualiza cache em memória
