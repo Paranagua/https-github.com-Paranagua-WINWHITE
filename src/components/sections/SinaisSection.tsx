@@ -29,6 +29,7 @@ import {
   getCurrentWhiteStreak,
   isSignalInWhiteFreeze,
   isSignalAuditableAfterFreeze,
+  extractSignalTimestampMs,
 } from "@/lib/whiteStreakFreeze";
 import { PredictiveSignals } from "@/components/double/PredictiveSignals";
 import {
@@ -1277,8 +1278,7 @@ function SinaisSectionContent() {
       // 25 giros sem o "0", os sinais são ocultados e o painel auditor congelado.
       // Quando aparece o "0", são exclusos sinais <= quebra, re-exibindo sinais >= quebra + 2,
       // e o painel auditor descongela contando win/loss apenas dos sinais pós descongelamento.
-      const sigTime =
-        sig.timestamp || (sig.targetTime ? parseUtcDate(sig.targetTime).getTime() : 0);
+      const sigTime = extractSignalTimestampMs(sig) || sig.timestamp || 0;
       if (!isSignalAuditableAfterFreeze(sigTime, freezeIntervals, whiteStreakStatus)) {
         return;
       }
@@ -1613,7 +1613,18 @@ function SinaisSectionContent() {
                     strategyKey: s.strategyKey,
                     confirmedStrategies: s.confirmedStrategies,
                     strategies: extractSignalStrategies(s),
-                    targetTime: s.time,
+                    targetTime:
+                      s.targetIso ||
+                      (s.entryDate instanceof Date
+                        ? s.entryDate.toISOString()
+                        : String(s.entryDate)) ||
+                      s.time,
+                    targetIso: s.targetIso,
+                    entryDate: s.entryDate,
+                    timestamp:
+                      s.entryDate instanceof Date
+                        ? s.entryDate.getTime()
+                        : parseUtcDate(s.entryDate as any).getTime(),
                     windowLabel: auditResult.audit.windowLabel,
                     checkedResults: auditResult.audit.checkedResults,
                     winningResultId: auditResult.winningResultId,
@@ -1653,7 +1664,18 @@ function SinaisSectionContent() {
                     strategyKey: s.strategyKey,
                     confirmedStrategies: s.confirmedStrategies,
                     strategies: extractSignalStrategies(s),
-                    targetTime: s.time,
+                    targetTime:
+                      s.targetIso ||
+                      (s.entryDate instanceof Date
+                        ? s.entryDate.toISOString()
+                        : String(s.entryDate)) ||
+                      s.time,
+                    targetIso: s.targetIso,
+                    entryDate: s.entryDate,
+                    timestamp:
+                      s.entryDate instanceof Date
+                        ? s.entryDate.getTime()
+                        : parseUtcDate(s.entryDate as any).getTime(),
                     windowLabel: auditResult.audit.windowLabel,
                     checkedResults: auditResult.audit.checkedResults,
                     winningResultId: null,
@@ -1703,8 +1725,7 @@ function SinaisSectionContent() {
   // que NÃO estejam dentro de janelas de congelamento (> 24 giros sem branco)
   const validRecentSignals = useMemo(() => {
     return (recentSignals || []).filter((sig) => {
-      const sigTime =
-        sig.timestamp || (sig.targetTime ? parseUtcDate(sig.targetTime).getTime() : 0);
+      const sigTime = extractSignalTimestampMs(sig) || sig.timestamp || 0;
       return isSignalAuditableAfterFreeze(sigTime, freezeIntervals, whiteStreakStatus);
     });
   }, [recentSignals, freezeIntervals, whiteStreakStatus]);

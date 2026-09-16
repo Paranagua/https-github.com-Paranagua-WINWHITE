@@ -31,6 +31,7 @@ import {
   isSignalInWhiteFreeze,
   isSignalAuditableAfterFreeze,
   filterSignalsExcludingWhiteFreeze,
+  extractSignalTimestampMs,
   type WhiteStreakStatus,
   type WhiteFreezeInterval,
 } from "../lib/whiteStreakFreeze";
@@ -441,7 +442,15 @@ class AutonomousAuditEngine {
             resultTime: sig.resultTime,
             strategyKey: sig.strategyKey,
             confirmedStrategies: sig.confirmedStrategies,
-            targetTime: sig.time,
+            targetTime:
+              sig.targetIso ||
+              (sig.entryDate instanceof Date
+                ? sig.entryDate.toISOString()
+                : (sig.entryDate as string)) ||
+              sig.time,
+            entryDate: sig.entryDate,
+            targetIso: sig.targetIso,
+            timestamp: sigTime,
             windowLabel: sig.windowLabel || sig.audit?.windowLabel,
             checkedResults: sig.checkedResults || sig.audit?.checkedResults || 6,
             winningResultId: sig.winningResultId,
@@ -610,13 +619,7 @@ class AutonomousAuditEngine {
       // contando win/loss apenas dos sinais pós descongelamento."
       const prevRecentLen = this.state.recentSignals.length;
       this.state.recentSignals = this.state.recentSignals.filter((s) => {
-        const sTime =
-          s.timestamp ||
-          (s.targetTime
-            ? typeof s.targetTime === "number"
-              ? s.targetTime
-              : parseUtcDate(s.targetTime).getTime()
-            : 0);
+        const sTime = extractSignalTimestampMs(s) || s.timestamp || 0;
         return isSignalAuditableAfterFreeze(
           sTime,
           this.currentFreezeIntervals,
@@ -689,13 +692,9 @@ class AutonomousAuditEngine {
 
     // Regra dos 25 giros sem o "0":
     // Sinais com horário posterior a 25 giros sem 0 ou <= quebra ou < quebra + 2 são exclusos e NÃO contabilizados no auditor
-    const sigTimeMs = signal.targetTime
-      ? typeof signal.targetTime === "number"
-        ? signal.targetTime
-        : parseUtcDate(signal.targetTime).getTime()
-      : typeof signal.time === "string" && signal.time.includes("T")
-        ? parseUtcDate(signal.time).getTime()
-        : Date.now();
+    const sigTimeMs =
+      extractSignalTimestampMs(signal) ||
+      (typeof signal.timestamp === "number" ? signal.timestamp : Date.now());
 
     if (
       !isSignalAuditableAfterFreeze(
@@ -741,8 +740,16 @@ class AutonomousAuditEngine {
       label: signal.label,
       confluence: signal.confluence,
       resultTime: signal.resultTime,
-      timestamp: Date.now(),
-      targetTime: signal.targetTime || signal.time,
+      timestamp: sigTimeMs,
+      targetTime:
+        signal.targetTime ||
+        (signal.entryDate
+          ? signal.entryDate instanceof Date
+            ? signal.entryDate.toISOString()
+            : String(signal.entryDate)
+          : signal.time),
+      entryDate: signal.entryDate,
+      targetIso: signal.targetIso,
       strategyKey: signal.strategyKey,
       confirmedStrategies: signal.confirmedStrategies,
       windowLabel: signal.windowLabel,

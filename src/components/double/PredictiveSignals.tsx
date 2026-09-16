@@ -1144,7 +1144,10 @@ export function PredictiveSignals() {
       .filter((s) => {
         if (s.isNoConfluence || s.category === "no_confluence") return false;
         const sTime = s.at instanceof Date ? s.at.getTime() : 0;
-        if (isSignalInWhiteFreeze(sTime, freezeIntervals)) return false;
+        const intervalsToCheck = whiteStreakStatus.isFrozen
+          ? freezeIntervals
+          : freezeIntervals.filter((inv) => Number.isFinite(inv.endTime));
+        if (isSignalInWhiteFreeze(sTime, intervalsToCheck)) return false;
         const rank = getSignalRank(s);
         return (
           rank === SignalRank.ALAVANCAGEM ||

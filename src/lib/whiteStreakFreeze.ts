@@ -75,6 +75,50 @@ export function getRoundTimestampMs(r: any): number {
 }
 
 /**
+ * Extrai o timestamp (ms) de qualquer representação de sinal.
+ */
+export function extractSignalTimestampMs(sig: any): number {
+  if (!sig) return 0;
+  if (
+    typeof sig.timestamp === "number" &&
+    !Number.isNaN(sig.timestamp) &&
+    sig.timestamp > 1_600_000_000_000
+  ) {
+    return sig.timestamp;
+  }
+  if (sig.entryDate) {
+    const t =
+      sig.entryDate instanceof Date
+        ? sig.entryDate.getTime()
+        : parseUtcDate(sig.entryDate).getTime();
+    if (!Number.isNaN(t) && t > 0) return t;
+  }
+  if (sig.targetIso) {
+    const t = parseUtcDate(sig.targetIso).getTime();
+    if (!Number.isNaN(t) && t > 0) return t;
+  }
+  if (
+    typeof sig.targetTime === "number" &&
+    !Number.isNaN(sig.targetTime) &&
+    sig.targetTime > 1_600_000_000_000
+  ) {
+    return sig.targetTime;
+  }
+  if (typeof sig.targetTime === "string" && sig.targetTime.includes("-")) {
+    const t = parseUtcDate(sig.targetTime).getTime();
+    if (!Number.isNaN(t) && t > 0) return t;
+  }
+  if (typeof sig.resultTime === "string" && sig.resultTime.includes("-")) {
+    const t = parseUtcDate(sig.resultTime).getTime();
+    if (!Number.isNaN(t) && t > 0) return t;
+  }
+  if (typeof sig.timestamp === "number" && !Number.isNaN(sig.timestamp) && sig.timestamp > 0) {
+    return sig.timestamp;
+  }
+  return 0;
+}
+
+/**
  * Calcula todas as janelas de congelamento com base na regra:
  * - 25 giros sem o "0": os sinais são ocultados e o painel auditor congelado.
  * - Quando aparece o "0" nos giros: são exclusos os sinais menor igual à quebra do congelamento (<= quebra).
@@ -84,8 +128,12 @@ export function getRoundTimestampMs(r: any): number {
 export function computeWhiteFreezeIntervals(rounds: any[]): WhiteFreezeInterval[] {
   if (!Array.isArray(rounds) || rounds.length === 0) return [];
 
-  // Ordena cronologicamente crescente (do mais antigo para o mais recente)
-  const sorted = [...rounds].sort((a, b) => getRoundTimestampMs(a) - getRoundTimestampMs(b));
+  // Ordena cronologicamente crescente com desempate por id
+  const sorted = [...rounds].sort((a, b) => {
+    const diff = getRoundTimestampMs(a) - getRoundTimestampMs(b);
+    if (diff !== 0) return diff;
+    return (Number(a.id) || 0) - (Number(b.id) || 0);
+  });
 
   const intervals: WhiteFreezeInterval[] = [];
   let currentStreak = 0;
@@ -128,8 +176,8 @@ export function computeWhiteFreezeIntervals(rounds: any[]): WhiteFreezeInterval[
     }
   }
 
-  // Se a mesa ainda estiver atualmente em sequência >= 25 giros sem branco
-  if (freezeStartTime !== null) {
+  // ATENÇÃO: Se a mesa ainda estiver atualmente em sequência ESTRITAMENTE >= 25 giros sem branco
+  if (freezeStartTime !== null && currentStreak >= 25) {
     intervals.push({
       streakCount: currentStreak,
       startTime: freezeStartTime,
@@ -144,6 +192,7 @@ export function computeWhiteFreezeIntervals(rounds: any[]): WhiteFreezeInterval[
 
 /**
  * Obtém o status em tempo real da sequência atual sem branco na mesa.
+ * Só deve ser congelado ESTRITAMENTE quando houver 25 ou mais giros sequentes sem o "0".
  */
 export function getCurrentWhiteStreak(rounds: any[]): WhiteStreakStatus {
   const maxAllowedWithoutWhite = 24;
@@ -182,14 +231,20 @@ export function getCurrentWhiteStreak(rounds: any[]): WhiteStreakStatus {
     }
   }
 
+  // REGRA ESTRITA: O painel de auditoria e o validador de sinais só devem ser congelados
+  // ESTRITAMENTE quando houver 25 ou mais giros sequentes sem o "0".
+  // Havendo menos de 25 giros sem o 0, estão DESCONGELADOS (destravados).
+  const isFrozen = currentStreak >= 25;
+
   const intervals = computeWhiteFreezeIntervals(rounds);
-  const active = intervals.find((inv) => inv.endTime === Number.POSITIVE_INFINITY);
-  const isFrozen = currentStreak >= 25 || !!active;
+  const active = isFrozen
+    ? intervals.find((inv) => inv.endTime === Number.POSITIVE_INFINITY)
+    : null;
   const freezeStartTime = isFrozen
-    ? (active?.startTime ?? (lastWhiteTime ? lastWhiteTime + 24 * 30000 : null))
+    ? (active?.startTime ?? round24Time ?? (lastWhiteTime ? lastWhiteTime + 24 * 30000 : null))
     : null;
 
-  const finished = intervals.filter((inv) => inv.endTime !== Number.POSITIVE_INFINITY);
+  const finished = intervals.filter((inv) => Number.isFinite(inv.endTime));
   const lastFinished = finished.length > 0 ? finished[finished.length - 1] : null;
 
   const lastUnfreezeTime = lastFinished ? lastFinished.endTime : null;
@@ -261,22 +316,22 @@ export function isSignalAuditableAfterFreeze(
 ): boolean {
   if (!signalTimeMs) return false;
 
-  // 1. Enquanto a mesa estiver congelada (25 giros sem 0):
+  const isFrozen = currentStatus ? currentStatus.isFrozen : false;
+
+  // 1. Enquanto a mesa estiver congelada (estritamente 25 ou mais giros sem o "0"):
   // O painel auditor para de contar NOVOS sinais (sinais após o início do congelamento são ignorados),
   // mas NÃO DEVE ZERAR: os sinais concluídos antes do início do congelamento permanecem válidos.
-  if (currentStatus?.isFrozen) {
-    if (currentStatus.freezeStartTime && signalTimeMs > currentStatus.freezeStartTime) {
+  if (isFrozen) {
+    if (currentStatus?.freezeStartTime && signalTimeMs > currentStatus.freezeStartTime) {
       return false;
     }
     return !isSignalInWhiteFreeze(signalTimeMs, intervals);
   }
 
-  // 2. Quando a mesa descongela (aparece o "0"):
-  // Sinais dentro do intervalo de congelamento histórico ou no período de exclusão (< quebra + 2)
-  // são excluídos (isSignalInWhiteFreeze retorna true).
-  // Sinais concluídos antes do congelamento permanecem preservados, e sinais pós-descongelamento
-  // (>= quebra + 2) são reativados e contabilizados normalmente.
-  if (isSignalInWhiteFreeze(signalTimeMs, intervals)) {
+  // 2. Quando a mesa NÃO está congelada (ou seja, descongelada/destravada com < 25 giros sem 0):
+  // Apenas janelas de congelamento passadas e fechadas podem excluir sinais históricos.
+  const closedIntervals = intervals.filter((inv) => Number.isFinite(inv.endTime));
+  if (isSignalInWhiteFreeze(signalTimeMs, closedIntervals)) {
     return false;
   }
 
@@ -298,52 +353,24 @@ export function filterSignalsExcludingWhiteFreeze<
 >(signals: T[], intervals: WhiteFreezeInterval[], currentStatus?: WhiteStreakStatus): T[] {
   if (!Array.isArray(signals) || signals.length === 0) return [];
 
-  return signals.filter((sig) => {
-    let sigTime = sig.timestamp;
-    if (!sigTime && sig.entryDate) {
-      sigTime =
-        sig.entryDate instanceof Date
-          ? sig.entryDate.getTime()
-          : parseUtcDate(sig.entryDate).getTime();
-    }
-    if (!sigTime && sig.at) {
-      sigTime = sig.at instanceof Date ? sig.at.getTime() : parseUtcDate(sig.at).getTime();
-    }
-    if (!sigTime && sig.targetIso) {
-      sigTime = parseUtcDate(sig.targetIso).getTime();
-    }
-    if (!sigTime && sig.targetTime) {
-      sigTime =
-        typeof sig.targetTime === "number"
-          ? sig.targetTime
-          : parseUtcDate(sig.targetTime).getTime();
-    }
+  const isFrozen = currentStatus ? currentStatus.isFrozen : false;
 
+  return signals.filter((sig) => {
+    const sigTime = extractSignalTimestampMs(sig);
     if (!sigTime) return true;
 
     // 1. Se estiver em congelamento ativo (25 giros sem 0), oculta todos os sinais posteriores ao início do congelamento
-    if (
-      currentStatus?.isFrozen &&
-      currentStatus.freezeStartTime &&
-      sigTime > currentStatus.freezeStartTime
-    ) {
+    if (isFrozen && currentStatus?.freezeStartTime && sigTime > currentStatus.freezeStartTime) {
       return false;
     }
 
-    // 2. Verifica se o sinal cai em janela de congelamento ou período de exclusão (< quebra + 2)
-    if (isSignalInWhiteFreeze(sigTime, intervals)) {
-      return false;
-    }
+    // 2. Se a mesa estiver congelada, verifica contra todos os intervalos (incluindo ativo)
+    // Se a mesa estiver descongelada, apenas intervalos fechados passados
+    const intervalsToCheck = isFrozen
+      ? intervals
+      : intervals.filter((inv) => Number.isFinite(inv.endTime));
 
-    // 3. Se houve descongelamento recente com quebra + 2, exclui sinais menores que quebra + 2
-    if (
-      currentStatus &&
-      !currentStatus.isFrozen &&
-      currentStatus.lastResumeTime &&
-      sigTime < currentStatus.lastResumeTime &&
-      currentStatus.lastUnfreezeTime &&
-      sigTime > (currentStatus.freezeStartTime || currentStatus.lastUnfreezeTime - 25 * 30000)
-    ) {
+    if (isSignalInWhiteFreeze(sigTime, intervalsToCheck)) {
       return false;
     }
 

@@ -28,6 +28,7 @@ import {
   getCurrentWhiteStreak,
   isSignalInWhiteFreeze,
   isSignalAuditableAfterFreeze,
+  extractSignalTimestampMs,
 } from "@/lib/whiteStreakFreeze";
 import {
   buildA2,
@@ -308,7 +309,7 @@ export default function SignalPercentageValidator() {
 
     for (const rec of recordedLive) {
       if (!rec || !rec.time) continue;
-      const recTime = rec.timestamp || Date.now();
+      const recTime = extractSignalTimestampMs(rec) || rec.timestamp || Date.now();
       if (feedMode === "from_now" && recTime < baselineTime - 60_000) continue;
 
       // Regra dos 25 giros sem o "0":

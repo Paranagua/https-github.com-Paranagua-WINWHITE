@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { SignalAuditInfo } from "./signalAuditEngine";
+import { extractSignalTimestampMs } from "./whiteStreakFreeze";
 
 export interface SignalHistoryEntry {
   key: string;
@@ -11,6 +12,8 @@ export interface SignalHistoryEntry {
   resultTime?: string;
   timestamp: number;
   targetTime?: string;
+  entryDate?: any;
+  targetIso?: string;
   strategyKey?: string;
   confirmedStrategies?: Array<{ code: string; name?: string; id?: number }>;
   windowLabel?: string;
@@ -53,6 +56,9 @@ interface SignalStatsStore {
     strategies?: string[];
     confirmedStrategies?: Array<{ code: string; name?: string; id?: number }>;
     targetTime?: string;
+    entryDate?: any;
+    targetIso?: string;
+    timestamp?: number;
     windowLabel?: string;
     checkedResults?: number;
     winningResultId?: string | null;
@@ -146,6 +152,11 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             (typeof signal.confluence === "string" &&
               signal.confluence.toUpperCase().includes("EM ALTA"));
 
+          const sigTimeMs =
+            typeof signal.timestamp === "number" && signal.timestamp > 0
+              ? signal.timestamp
+              : extractSignalTimestampMs(signal) || Date.now();
+
           const newEntry: SignalHistoryEntry = {
             key: signal.key,
             time: signal.time,
@@ -153,8 +164,17 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             label: signal.label,
             confluence: signal.confluence,
             resultTime: signal.resultTime,
-            timestamp: Date.now(),
-            targetTime: signal.targetTime || signal.time,
+            timestamp: sigTimeMs,
+            targetTime:
+              signal.targetTime ||
+              signal.targetIso ||
+              (signal.entryDate
+                ? signal.entryDate instanceof Date
+                  ? signal.entryDate.toISOString()
+                  : String(signal.entryDate)
+                : signal.time),
+            entryDate: signal.entryDate,
+            targetIso: signal.targetIso,
             strategyKey: signal.strategyKey,
             strategies: signal.strategies,
             confirmedStrategies: signal.confirmedStrategies,
