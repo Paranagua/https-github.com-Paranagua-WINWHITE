@@ -57,6 +57,7 @@ import {
 } from "@/lib/predictive";
 import { IncrementalPredictiveEngine } from "@/lib/incrementalPredictiveEngine";
 import { mergePersistedWithLiveCycles, fetchPersistedCyclesMap } from "@/lib/cyclePersistence";
+import { MAIN_ANALYSIS_IDS } from "@/lib/incrementalPredictiveEngine";
 
 type Mode1Signal = {
   key: string;
@@ -497,10 +498,7 @@ export function PredictiveSignals() {
   // 0. Carrega ciclos preditivos persistidos do Supabase/Servidor com fallback seguro
   useEffect(() => {
     let alive = true;
-    const mainIds = [
-      2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-      30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
-    ];
+    const mainIds = MAIN_ANALYSIS_IDS;
 
     const loadCycles = async () => {
       try {
@@ -646,10 +644,7 @@ export function PredictiveSignals() {
   const active = useMemo(() => {
     try {
       const out: Array<{ analysis: number; value: number; open: Cycle }> = [];
-      const mainIds = [
-        2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-        30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56, 60,
-      ];
+      const mainIds = MAIN_ANALYSIS_IDS;
       mainIds.forEach((a) => {
         const cycles = engine[a] || [];
         const openByValue = new Map<number, Cycle>();
@@ -748,11 +743,9 @@ export function PredictiveSignals() {
 
             if (targetMs >= now.getTime() - 60_000) {
               const stratKey =
-                item.analysis === 60
-                  ? "Q"
-                  : item.analysis >= 50 && item.analysis <= 56
-                    ? `Q${item.analysis - 49}`
-                    : `A${item.analysis}`;
+                item.analysis >= 50 && item.analysis <= 56
+                  ? `Q${item.analysis - 49}`
+                  : `A${item.analysis}`;
 
               tendencyCandidates.push({
                 analysis: item.analysis,
@@ -765,39 +758,33 @@ export function PredictiveSignals() {
                 triggerAt: item.open.triggerAt,
                 cycleKey: `TEND_${stratKey}_V${item.value}_T${item.open.triggerAt.getTime()}`,
                 strategyKey: stratKey,
-                label:
-                  item.analysis === 60
-                    ? `Tendência ${t.ratio} (Q)`
-                    : `Tendência ${t.ratio} (${stratKey}-${item.value})`,
+                label: `Tendência ${t.ratio} (${stratKey}-${item.value})`,
               });
             }
           }
         }
 
         // Regra de ciclos para envio de sinais padrão e confluência:
-        // - Análise "Quebra de Padrões de Cores" (IDs 50 a 56) e Análise Q (ID 60):
+        // - Análise "Quebra de Padrões de Cores" (IDs 50 a 56) e Quebra de Recuperação (IDs 60 a 114):
         //   Requer no mínimo 4 ciclos no total (3 ciclos anteriores válidos + 1 gatilho ativo).
         //   Calcula os Top Tempos Recorrentes dos 3 ciclos anteriores (slice(-3)).
         // - Demais análises padrão:
         //   Requer no mínimo 4 ciclos anteriores válidos (5 ciclos totais com o gatilho).
         //   Calcula sobre os 5 ciclos passados mais recentes (slice(-5)).
         const isColorBreakAnalysis = item.analysis >= 50 && item.analysis <= 56;
-        const isQAnalysis = item.analysis === 60;
-        const minRequiredPastValid = isColorBreakAnalysis || isQAnalysis ? 3 : 4;
+        const isRecoveryBreak = item.analysis >= 60 && item.analysis <= 114;
+        const minRequiredPastValid = isColorBreakAnalysis || isRecoveryBreak ? 3 : 4;
 
         if (pastValid.length < minRequiredPastValid) continue;
 
-        // Janela estatística: 3 ciclos anteriores para Quebra de Padrões de Cores e Análise Q, ou 5 ciclos passados para as demais
+        // Janela estatística: 3 ciclos anteriores para Quebra de Cores e Quebra de Recuperação, ou 5 ciclos passados para as demais
         const hist =
-          isColorBreakAnalysis || isQAnalysis ? pastValid.slice(-3) : pastValid.slice(-5);
+          isColorBreakAnalysis || isRecoveryBreak ? pastValid.slice(-3) : pastValid.slice(-5);
 
         const candidates = computeTop(hist, CANDIDATE_DEPTH);
         if (!candidates.length) continue;
 
-        const cycleKey =
-          item.analysis === 60
-            ? `Q_V${item.value}_T${item.open.triggerAt.getTime()}`
-            : `A${item.analysis}_V${item.value}_T${item.open.triggerAt.getTime()}`;
+        const cycleKey = `A${item.analysis}_V${item.value}_T${item.open.triggerAt.getTime()}`;
 
         // 1. Projeção Top 1 Principal (Regra: Top 1 de 80% a 100%)
         const top1Candidate = candidates[0];
@@ -823,11 +810,9 @@ export function PredictiveSignals() {
             });
 
             const stratKey =
-              item.analysis === 60
-                ? "Q"
-                : item.analysis >= 50 && item.analysis <= 56
-                  ? `Q${item.analysis - 49}`
-                  : `A${item.analysis}`;
+              item.analysis >= 50 && item.analysis <= 56
+                ? `Q${item.analysis - 49}`
+                : `A${item.analysis}`;
 
             rawCandidates.push({
               analysis: item.analysis,
@@ -863,11 +848,9 @@ export function PredictiveSignals() {
             });
 
             const stratKey =
-              item.analysis === 60
-                ? "Q"
-                : item.analysis >= 50 && item.analysis <= 56
-                  ? `Q${item.analysis - 49}`
-                  : `A${item.analysis}`;
+              item.analysis >= 50 && item.analysis <= 56
+                ? `Q${item.analysis - 49}`
+                : `A${item.analysis}`;
 
             rawCandidates.push({
               analysis: item.analysis,
@@ -904,11 +887,9 @@ export function PredictiveSignals() {
             });
 
             const candStratKey =
-              item.analysis === 60
-                ? "Q"
-                : item.analysis >= 50 && item.analysis <= 56
-                  ? `Q${item.analysis - 49}`
-                  : `A${item.analysis}`;
+              item.analysis >= 50 && item.analysis <= 56
+                ? `Q${item.analysis - 49}`
+                : `A${item.analysis}`;
 
             rawCandidates.push({
               analysis: item.analysis,

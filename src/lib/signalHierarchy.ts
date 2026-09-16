@@ -1082,7 +1082,7 @@ export function isPrimarySignalAnalysis(analysisId: number): boolean {
 }
 
 export function getAnalysisGroupName(analysisId: number): string {
-  if (analysisId === 60) {
+  if (analysisId >= 60 && analysisId <= 114) {
     return "Quebra de Recuperação";
   }
   if (analysisId === 202) {
@@ -1100,9 +1100,6 @@ export function getAnalysisGroupName(analysisId: number): string {
   ) {
     return "Gatilhos de Sequência";
   }
-  if (analysisId >= 101 && analysisId <= 115) {
-    return "Estratégias de Confirmação (E)";
-  }
   if (analysisId === 14 || analysisId === 15 || analysisId === 16) {
     return "Somas Consecutivas";
   }
@@ -1113,14 +1110,11 @@ export function getAnalysisGroupName(analysisId: number): string {
 }
 
 export function formatAnalysisCode(analysisId: number): string {
-  if (analysisId === 60) {
-    return "Q";
+  if (analysisId >= 60 && analysisId <= 114) {
+    return `A${analysisId}`;
   }
   if (analysisId === 202) {
     return "F2";
-  }
-  if (analysisId >= 101 && analysisId <= 115) {
-    return `E${analysisId - 100}`;
   }
   if (analysisId >= 50 && analysisId <= 56) {
     return `Q${analysisId - 49}`;
@@ -1623,8 +1617,8 @@ export function buildEmAltaSignals(
   // 2. Tendências com 100% (3/3): têm poder para gerar sinal no grupo 'EM ALTA'
   const valid3_3 = (tendencyCandidates || []).filter((tc) => {
     if (!tc || !tc.targetDate) return false;
-    // Análise Q (60): conforme a regra de segurança, a tendência Q sozinha NÃO gera sinal!
-    if (tc.analysis === 60) return false;
+    // Análises Q (60 a 114): conforme a regra de segurança, a tendência de Quebra de Recuperação sozinha NÃO gera sinal!
+    if (tc.analysis >= 60 && tc.analysis <= 114) return false;
     if (tc.ratio !== "3/3" || tc.pct < 100) return false;
     const t = tc.targetDate.getTime();
     if (Number.isNaN(t) || t < now - 60_000) return false;

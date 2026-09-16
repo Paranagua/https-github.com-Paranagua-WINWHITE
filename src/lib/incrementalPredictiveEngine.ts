@@ -70,6 +70,40 @@ export const ANALYSIS_ID_Q = 60;
 export const ANALYSIS_CODE_Q = "Q";
 export const ANALYSIS_NAME_Q = "Quebra de Recuperação";
 
+export const RECOVERY_BREAK_START_SPIN = 26;
+export const RECOVERY_BREAK_END_SPIN = 80;
+export const RECOVERY_BREAK_START_ANALYSIS = 60;
+export const RECOVERY_BREAK_END_ANALYSIS = 114;
+
+export function getRecoveryBreakAnalysisId(spinIndex: number): number {
+  return 60 + (spinIndex - 26);
+}
+
+export function getRecoveryBreakSpin(analysisId: number): number {
+  return analysisId - 34; // 60 -> 26, 114 -> 80
+}
+
+export function isRecoveryBreakAnalysis(analysisId: number): boolean {
+  return analysisId >= 60 && analysisId <= 114;
+}
+
+export function getRecoveryBreakCode(analysisId: number): string {
+  return `A${analysisId}`;
+}
+
+export function getRecoveryBreakName(analysisId: number): string {
+  const spin = getRecoveryBreakSpin(analysisId);
+  return `Quebra de Recuperação (Giro ${spin})`;
+}
+
+export const MAIN_ANALYSIS_IDS: number[] = [
+  2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+  30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
+];
+for (let id = 60; id <= 114; id++) {
+  MAIN_ANALYSIS_IDS.push(id);
+}
+
 function diffMinutes(a: Date, b: Date): number | null {
   if (!a || !b) return null;
   const tA = a.getTime();
@@ -302,20 +336,21 @@ export class IncrementalPredictiveEngine {
       this.openCycles.delete(k);
     }
 
-    // 2. Rastreamento da janela de recuperação para a Análise Q (Quebra de Recuperação)
-    // A análise Q identifica uma situação de RECUPERAÇÃO após 25 giros consecutivos sem Branco (0).
+    // 2. Rastreamento da janela de recuperação para a Quebra de Recuperação (A60 a A114)
+    // A recuperação ocorre após 25 giros consecutivos sem Branco (0).
     // A janela de recuperação ocorre do 26º ao 80º giro consecutivo da sequência.
-    // CADA Branco que ocorrer entre o 26º e o 80º giro gera um gatilho Q independente.
-    let qTriggerThisRow = false;
+    // CADA giro "Q" do 26 ao 80 é considerado como gatilho de uma análise diferente:
+    // Giro 26 = A60, Giro 27 = A61, Giro 28 = A62 ... Giro 80 = A114.
+    let qTriggerAnalysisId: number | null = null;
 
     if (this.recoveryWindowActive) {
       this.recoveryWindowSpinIndex++;
       if (this.recoveryWindowSpinIndex >= 26 && this.recoveryWindowSpinIndex <= 80) {
         if (isWhite) {
-          qTriggerThisRow = true;
+          qTriggerAnalysisId = 60 + (this.recoveryWindowSpinIndex - 26);
         }
       }
-      if (this.recoveryWindowSpinIndex >= 80) {
+      if (this.recoveryWindowSpinIndex >= 80 || isWhite) {
         this.recoveryWindowActive = false;
         this.recoveryWindowSpinIndex = 0;
       }
@@ -340,9 +375,9 @@ export class IncrementalPredictiveEngine {
     // 4. Detecta novos gatilhos disparados por esta linha
     const triggers = this.detectTriggersForCurrentRow(this.recentRowsBuffer);
 
-    if (qTriggerThisRow) {
+    if (qTriggerAnalysisId !== null) {
       triggers.push({
-        analysisId: ANALYSIS_ID_Q,
+        analysisId: qTriggerAnalysisId,
         value: 0,
         triggerAt: currentDate,
       });
@@ -364,7 +399,7 @@ export class IncrementalPredictiveEngine {
         lastWhiteTimeMs: trig.triggerAt.getTime(),
         cycleKey: key,
         status: "aberto",
-        isSecondary: trig.analysisId >= 100,
+        isSecondary: trig.analysisId > 115,
         isDirty: true,
       };
 
@@ -649,50 +684,12 @@ export class IncrementalPredictiveEngine {
    */
   public getAllCyclesMap(): Record<number, Cycle[]> {
     const map: Record<number, Cycle[]> = {};
-    const mainIds = [
-      2,
-      3,
-      4,
-      5,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19,
-      20,
-      21,
-      22,
-      23,
-      24,
-      25,
-      26,
-      27,
-      28,
-      29,
-      30,
-      31,
-      32,
-      33,
-      34,
-      35,
-      36,
-      50,
-      51,
-      52,
-      53,
-      54,
-      55,
-      56,
-      ANALYSIS_ID_Q,
-    ];
-    for (let i = 1; i <= 9; i++) mainIds.push(100 + i);
+    const ids = [...MAIN_ANALYSIS_IDS];
+    for (let i = 1; i <= 9; i++) {
+      if (!ids.includes(100 + i)) ids.push(100 + i);
+    }
 
-    for (const id of mainIds) {
+    for (const id of ids) {
       map[id] = [];
     }
 
@@ -708,7 +705,7 @@ export class IncrementalPredictiveEngine {
       }
     });
 
-    for (const id of mainIds) {
+    for (const id of ids) {
       map[id].sort((a, b) => a.triggerAt.getTime() - b.triggerAt.getTime());
     }
 

@@ -113,13 +113,11 @@ export const Route = createFileRoute("/api/public/predictive-cycles")({
                 analysis: Number(r.analysis),
                 analysis_code: r.analysis_code
                   ? String(r.analysis_code)
-                  : Number(r.analysis) === 60
-                    ? "Q"
-                    : `A${r.analysis}`,
+                  : `A${r.analysis}`,
                 analysis_name: r.analysis_name
                   ? String(r.analysis_name)
-                  : Number(r.analysis) === 60
-                    ? "Quebra de Recuperação"
+                  : Number(r.analysis) >= 60 && Number(r.analysis) <= 114
+                    ? `Quebra de Recuperação (Giro ${Number(r.analysis) - 34})`
                     : `Análise ${r.analysis}`,
                 value: Number(r.value),
                 trigger_at: new Date(r.trigger_at).toISOString(),
