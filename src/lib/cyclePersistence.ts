@@ -27,6 +27,9 @@ export function getCycleKey(
   triggerAt: Date | string | number,
 ): string {
   const time = triggerAt instanceof Date ? triggerAt.getTime() : new Date(triggerAt).getTime();
+  if (analysis === 60) {
+    return `Q_V${value}_T${time}`;
+  }
   return `A${analysis}_V${value}_T${time}`;
 }
 
@@ -76,11 +79,15 @@ export function cycleToRecord(
   const gaps = sanitizeMonotonicGaps(cycle.gaps);
   const status = computeCycleStatus(gaps, triggerDate);
 
+  const isQ = cycle.analysis === 60 || analysisCode === "Q";
+  const defCode = isQ ? "Q" : `A${cycle.analysis}`;
+  const defName = isQ ? "Quebra de Recuperação" : `Análise ${cycle.analysis}`;
+
   return {
     cycle_key: getCycleKey(cycle.analysis, cycle.value, triggerDate),
     analysis: cycle.analysis,
-    analysis_code: analysisCode || `A${cycle.analysis}`,
-    analysis_name: analysisName || `Análise ${cycle.analysis}`,
+    analysis_code: analysisCode || defCode,
+    analysis_name: analysisName || defName,
     value: cycle.value,
     trigger_at: triggerDate.toISOString(),
     gaps,

@@ -111,8 +111,16 @@ export const Route = createFileRoute("/api/public/predictive-cycles")({
               .map((r) => ({
                 cycle_key: String(r.cycle_key),
                 analysis: Number(r.analysis),
-                analysis_code: r.analysis_code ? String(r.analysis_code) : `A${r.analysis}`,
-                analysis_name: r.analysis_name ? String(r.analysis_name) : `Análise ${r.analysis}`,
+                analysis_code: r.analysis_code
+                  ? String(r.analysis_code)
+                  : Number(r.analysis) === 60
+                    ? "Q"
+                    : `A${r.analysis}`,
+                analysis_name: r.analysis_name
+                  ? String(r.analysis_name)
+                  : Number(r.analysis) === 60
+                    ? "Quebra de Recuperação"
+                    : `Análise ${r.analysis}`,
                 value: Number(r.value),
                 trigger_at: new Date(r.trigger_at).toISOString(),
                 gaps: Array.isArray(r.gaps) ? r.gaps.map(Number) : [],

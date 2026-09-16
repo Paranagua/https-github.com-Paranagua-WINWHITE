@@ -1082,6 +1082,9 @@ export function isPrimarySignalAnalysis(analysisId: number): boolean {
 }
 
 export function getAnalysisGroupName(analysisId: number): string {
+  if (analysisId === 60) {
+    return "Quebra de Recuperação";
+  }
   if (analysisId === 202) {
     return "Estratégia F2";
   }
@@ -1110,6 +1113,9 @@ export function getAnalysisGroupName(analysisId: number): string {
 }
 
 export function formatAnalysisCode(analysisId: number): string {
+  if (analysisId === 60) {
+    return "Q";
+  }
   if (analysisId === 202) {
     return "F2";
   }
@@ -1617,6 +1623,8 @@ export function buildEmAltaSignals(
   // 2. Tendências com 100% (3/3): têm poder para gerar sinal no grupo 'EM ALTA'
   const valid3_3 = (tendencyCandidates || []).filter((tc) => {
     if (!tc || !tc.targetDate) return false;
+    // Análise Q (60): conforme a regra de segurança, a tendência Q sozinha NÃO gera sinal!
+    if (tc.analysis === 60) return false;
     if (tc.ratio !== "3/3" || tc.pct < 100) return false;
     const t = tc.targetDate.getTime();
     if (Number.isNaN(t) || t < now - 60_000) return false;

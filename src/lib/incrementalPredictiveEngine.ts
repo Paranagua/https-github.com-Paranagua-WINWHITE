@@ -66,6 +66,10 @@ const SECOND_STONE_ANALYSIS: Record<number, number> = {
   9: 3, // A3: 2ª do Minuto 9
 };
 
+export const ANALYSIS_ID_Q = 60;
+export const ANALYSIS_CODE_Q = "Q";
+export const ANALYSIS_NAME_Q = "Quebra de Recuperação";
+
 function diffMinutes(a: Date, b: Date): number | null {
   if (!a || !b) return null;
   const tA = a.getTime();
@@ -103,6 +107,13 @@ export class IncrementalPredictiveEngine {
   private processedRowIds = new Set<number>();
   private processedRowIdentities = new Set<string>();
 
+  // --- Análise Q: Quebra de Recuperação ---
+  // Acompanha a sequência de giros sem Branco (0). Após 25 giros sem Branco,
+  // abre a janela de recuperação do 26º ao 80º giro, onde CADA Branco gera um gatilho Q independente.
+  private nonWhiteStreakCount = 0;
+  private recoveryWindowActive = false;
+  private recoveryWindowSpinIndex = 0;
+
   /**
    * Limpa todo o estado em memória (útil para testes ou reinicialização).
    */
@@ -116,6 +127,9 @@ export class IncrementalPredictiveEngine {
     this.processedColorBreakKeys.clear();
     this.processedRowIds.clear();
     this.processedRowIdentities.clear();
+    this.nonWhiteStreakCount = 0;
+    this.recoveryWindowActive = false;
+    this.recoveryWindowSpinIndex = 0;
   }
 
   /**
@@ -288,14 +302,51 @@ export class IncrementalPredictiveEngine {
       this.openCycles.delete(k);
     }
 
-    // 2. Adiciona a linha ao buffer deslizante
+    // 2. Rastreamento da janela de recuperação para a Análise Q (Quebra de Recuperação)
+    // A análise Q identifica uma situação de RECUPERAÇÃO após 25 giros consecutivos sem Branco (0).
+    // A janela de recuperação ocorre do 26º ao 80º giro consecutivo da sequência.
+    // CADA Branco que ocorrer entre o 26º e o 80º giro gera um gatilho Q independente.
+    let qTriggerThisRow = false;
+
+    if (this.recoveryWindowActive) {
+      this.recoveryWindowSpinIndex++;
+      if (this.recoveryWindowSpinIndex >= 26 && this.recoveryWindowSpinIndex <= 80) {
+        if (isWhite) {
+          qTriggerThisRow = true;
+        }
+      }
+      if (this.recoveryWindowSpinIndex >= 80) {
+        this.recoveryWindowActive = false;
+        this.recoveryWindowSpinIndex = 0;
+      }
+    }
+
+    if (isWhite) {
+      this.nonWhiteStreakCount = 0;
+    } else {
+      this.nonWhiteStreakCount++;
+      if (!this.recoveryWindowActive && this.nonWhiteStreakCount >= 25) {
+        this.recoveryWindowActive = true;
+        this.recoveryWindowSpinIndex = 25; // O próximo giro da sequência será o 26º
+      }
+    }
+
+    // 3. Adiciona a linha ao buffer deslizante
     this.recentRowsBuffer.push(row);
     if (this.recentRowsBuffer.length > this.maxBufferSize) {
       this.recentRowsBuffer.shift();
     }
 
-    // 3. Detecta novos gatilhos disparados por esta linha
+    // 4. Detecta novos gatilhos disparados por esta linha
     const triggers = this.detectTriggersForCurrentRow(this.recentRowsBuffer);
+
+    if (qTriggerThisRow) {
+      triggers.push({
+        analysisId: ANALYSIS_ID_Q,
+        value: 0,
+        triggerAt: currentDate,
+      });
+    }
 
     for (const trig of triggers) {
       const key = getCycleKey(trig.analysisId, trig.value, trig.triggerAt);
@@ -599,8 +650,45 @@ export class IncrementalPredictiveEngine {
   public getAllCyclesMap(): Record<number, Cycle[]> {
     const map: Record<number, Cycle[]> = {};
     const mainIds = [
-      2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-      30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
+      2,
+      3,
+      4,
+      5,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      ANALYSIS_ID_Q,
     ];
     for (let i = 1; i <= 9; i++) mainIds.push(100 + i);
 
