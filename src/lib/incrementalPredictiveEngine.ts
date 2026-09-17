@@ -141,12 +141,14 @@ export class IncrementalPredictiveEngine {
   private processedRowIds = new Set<number>();
   private processedRowIdentities = new Set<string>();
 
-  // --- Análise Q: Quebra de Recuperação ---
-  // Acompanha a sequência de giros sem Branco (0). Após 25 giros sem Branco,
-  // abre a janela de recuperação do 26º ao 80º giro, onde CADA Branco gera um gatilho Q independente.
+  // --- Análise Q: Quebra de Recuperação (A60 a A114) ---
+  // A quantidade de giros sem Branco está ESTRITAMENTE entre dois brancos:
+  // 0 - 3 - 6 - (+24 giros sem "0") - 0 = 26 giros sem 0 entre dois brancos -> A60
+  // 0 - 3 - 6 - (+25 giros sem "0") - 0 = 27 giros sem 0 entre dois brancos -> A61
+  // ...
+  // 0 - 3 - 6 - (+78 giros sem "0") - 0 = 80 giros sem 0 entre dois brancos -> A114
+  private nonWhiteSpinsSinceLastWhite = 0;
   private nonWhiteStreakCount = 0;
-  private recoveryWindowActive = false;
-  private recoveryWindowSpinIndex = 0;
 
   /**
    * Limpa todo o estado em memória (útil para testes ou reinicialização).
@@ -161,9 +163,8 @@ export class IncrementalPredictiveEngine {
     this.processedColorBreakKeys.clear();
     this.processedRowIds.clear();
     this.processedRowIdentities.clear();
+    this.nonWhiteSpinsSinceLastWhite = 0;
     this.nonWhiteStreakCount = 0;
-    this.recoveryWindowActive = false;
-    this.recoveryWindowSpinIndex = 0;
   }
 
   /**
@@ -337,33 +338,24 @@ export class IncrementalPredictiveEngine {
     }
 
     // 2. Rastreamento da janela de recuperação para a Quebra de Recuperação (A60 a A114)
-    // A recuperação ocorre após 25 giros consecutivos sem Branco (0).
-    // A janela de recuperação ocorre do 26º ao 80º giro consecutivo da sequência.
-    // CADA giro "Q" do 26 ao 80 é considerado como gatilho de uma análise diferente:
-    // Giro 26 = A60, Giro 27 = A61, Giro 28 = A62 ... Giro 80 = A114.
+    // Regra oficial da quebra de recuperação:
+    // A quantidade de giros sem Branco está ESTRITAMENTE entre dois brancos:
+    // 0 - 3 - 6 - (+24 giros sem "0") - 0 = 26 giros sem 0 entre dois brancos -> Gatilho A60
+    // 0 - 3 - 6 - (+25 giros sem "0") - 0 = 27 giros sem 0 entre dois brancos -> Gatilho A61
+    // ...
+    // 0 - 3 - 6 - (+78 giros sem "0") - 0 = 80 giros sem 0 entre dois brancos -> Gatilho A114
     let qTriggerAnalysisId: number | null = null;
 
-    if (this.recoveryWindowActive) {
-      this.recoveryWindowSpinIndex++;
-      if (this.recoveryWindowSpinIndex >= 26 && this.recoveryWindowSpinIndex <= 80) {
-        if (isWhite) {
-          qTriggerAnalysisId = 60 + (this.recoveryWindowSpinIndex - 26);
-        }
-      }
-      if (this.recoveryWindowSpinIndex >= 80 || isWhite) {
-        this.recoveryWindowActive = false;
-        this.recoveryWindowSpinIndex = 0;
-      }
-    }
-
     if (isWhite) {
+      const spinsBetweenWhites = this.nonWhiteSpinsSinceLastWhite;
+      if (spinsBetweenWhites >= 26 && spinsBetweenWhites <= 80) {
+        qTriggerAnalysisId = 60 + (spinsBetweenWhites - 26);
+      }
+      this.nonWhiteSpinsSinceLastWhite = 0;
       this.nonWhiteStreakCount = 0;
     } else {
+      this.nonWhiteSpinsSinceLastWhite++;
       this.nonWhiteStreakCount++;
-      if (!this.recoveryWindowActive && this.nonWhiteStreakCount >= 25) {
-        this.recoveryWindowActive = true;
-        this.recoveryWindowSpinIndex = 25; // O próximo giro da sequência será o 26º
-      }
     }
 
     // 3. Adiciona a linha ao buffer deslizante

@@ -10,13 +10,15 @@ import {
   AlertCircle,
   ShieldCheck,
   Palette,
+  RotateCcw,
 } from "lucide-react";
 import { ColorPatternBreaksPanel } from "@/components/sections/ColorPatternBreaksPanel";
+import { RecoveryBreaksPanel } from "@/components/sections/RecoveryBreaksPanel";
 import { detectAllColorPatternBreaks, colorBreaksToCycles } from "@/lib/colorPatternBreaks";
 import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
 import { Card } from "@/components/double/Card";
 import { computeTop, isValidCycle, type Cycle as EngineCycle, type Row } from "@/lib/predictive";
-import { IncrementalPredictiveEngine } from "@/lib/incrementalPredictiveEngine";
+import { IncrementalPredictiveEngine, MAIN_ANALYSIS_IDS } from "@/lib/incrementalPredictiveEngine";
 import {
   fetchPersistedCyclesMap,
   mergePersistedWithLiveCycles,
@@ -478,10 +480,7 @@ export default function AnaliseSection() {
   // Ciclos preditivos persistidos do Supabase/Servidor para sincronização contínua
   useEffect(() => {
     let alive = true;
-    const mainIds = [
-      2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-      30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
-    ];
+    const mainIds = MAIN_ANALYSIS_IDS;
 
     const loadCycles = async () => {
       try {
@@ -585,6 +584,7 @@ export default function AnaliseSection() {
 
   const categories = [
     { id: "all", label: "Todas as Análises", icon: Sparkles },
+    { id: "recovery_breaks", label: "Quebra de Recuperação (A60 a A114)", icon: RotateCcw },
     { id: "color_breaks", label: "Quebra de Padrões de Cores", icon: Palette },
     { id: "minutes", label: "Minutos (0 a 9)", icon: Clock },
     { id: "patterns", label: "Padrões de Pedra", icon: Layers },
@@ -592,6 +592,7 @@ export default function AnaliseSection() {
     { id: "sums", label: "Somas Consecutivas", icon: Plus },
   ];
 
+  const showRecoveryBreaks = activeCategory === "all" || activeCategory === "recovery_breaks";
   const showColorBreaks = activeCategory === "all" || activeCategory === "color_breaks";
   const showMinutes = activeCategory === "all" || activeCategory === "minutes";
   const showPatterns = activeCategory === "all" || activeCategory === "patterns";
@@ -1151,7 +1152,18 @@ export default function AnaliseSection() {
         </>
       )}
 
-      {/* 5. SEÇÃO DE QUEBRA DE PADRÕES DE CORES (NOVA ANÁLISE INDEPENDENTE) */}
+      {/* 5. SEÇÃO DE QUEBRA DE RECUPERAÇÃO (A60 A A114, GIROS 26 AO 80) */}
+      {showRecoveryBreaks && (
+        <RecoveryBreaksPanel
+          cyclesMap={cyclesMap}
+          selectedPedra={selected}
+          now={now}
+          loading={loading}
+          err={err}
+        />
+      )}
+
+      {/* 6. SEÇÃO DE QUEBRA DE PADRÕES DE CORES (NOVA ANÁLISE INDEPENDENTE) */}
       {showColorBreaks && (
         <ColorPatternBreaksPanel rows={rows} selectedPedra={selected} now={now} />
       )}

@@ -490,7 +490,7 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
       category: "recuperacao" as const,
       categoryLabel: "Quebra de Recuperação",
       badge: "bg-rose-500/15 text-rose-400 border-rose-500/30",
-      description: `Gatilho de quebra de recuperação no ${spin}º giro consecutivo sem Branco`,
+      description: `Gatilho de quebra de recuperação com ${spin} giros sem Branco entre dois brancos`,
       spin,
     };
   }),
