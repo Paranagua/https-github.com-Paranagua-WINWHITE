@@ -1020,13 +1020,18 @@ export function PredictiveSignals() {
     const onVisible = () => {
       if (!document.hidden) generate();
     };
+    const onConfigChange = () => {
+      generate();
+    };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
+    window.addEventListener("freitas_signal_analysis_config_changed", onConfigChange);
 
     return () => {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
+      window.removeEventListener("freitas_signal_analysis_config_changed", onConfigChange);
     };
   }, [rows, loading, generate]);
 

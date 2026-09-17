@@ -21,6 +21,7 @@ import {
   getCanonicalSignalKey,
   type RawCandidate,
 } from "../lib/signalHierarchy";
+import { DEFAULT_PRIMARY_SIGNAL_ANALYSIS_IDS } from "../lib/analysisSignalConfig";
 import { computeAnalysisTendency, type RawTendencyCandidate } from "../lib/tendencias";
 import { auditSignalWithRounds, type AuditResultItem } from "../lib/signalAuditEngine";
 import type { PredictiveSignal } from "../lib/signalsStore";
@@ -103,6 +104,20 @@ class AutonomousAuditEngine {
   // Controle de janelas de congelamento por sequências > 24 giros sem branco (pedra 0)
   private currentFreezeIntervals: WhiteFreezeInterval[] = [];
   private currentWhiteStreakStatus: WhiteStreakStatus | null = null;
+
+  // Análises ativas para envio de sinais (as desativadas servem apenas como confluência)
+  private activeSignalAnalysisIds: Set<number> = new Set<number>(
+    DEFAULT_PRIMARY_SIGNAL_ANALYSIS_IDS,
+  );
+
+  public setActiveSignalAnalysisIds(ids: number[]) {
+    this.activeSignalAnalysisIds = new Set<number>(ids);
+    console.log(`[AutonomousEngine] Análises ativas para envio atualizadas: ${ids.length} ativas`);
+  }
+
+  public getActiveSignalAnalysisIds(): number[] {
+    return Array.from(this.activeSignalAnalysisIds);
+  }
 
   private state: AutonomousAuditState = {
     status: "idle",
@@ -372,6 +387,7 @@ class AutonomousAuditEngine {
           allowHistorical: true,
           minTargetTime: now.getTime() - 5 * 3600_000,
           maxTargetTime: undefined, // Sem limite de 60 minutos
+          activeAnalysisIds: this.activeSignalAnalysisIds,
         },
         tendencyCandidates,
       );

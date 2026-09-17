@@ -79,6 +79,31 @@ export default {
         });
       }
 
+      if (url.pathname === "/api/public/analysis-signal-settings") {
+        if (request.method === "POST") {
+          try {
+            const body = await request
+              .clone()
+              .json()
+              .catch(() => null);
+            if (body && Array.isArray(body.activeAnalysisIds)) {
+              autonomousEngine.setActiveSignalAnalysisIds(body.activeAnalysisIds);
+            }
+          } catch (err) {
+            console.warn("[Server] Error updating analysis signal settings:", err);
+          }
+        }
+        const active = autonomousEngine.getActiveSignalAnalysisIds();
+        return new Response(JSON.stringify({ activeAnalysisIds: active }), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      }
+
       if (url.pathname === "/api/public/predictive-cycles") {
         const { blazeSupabase } = await import("./integrations/supabase/blaze-client");
 

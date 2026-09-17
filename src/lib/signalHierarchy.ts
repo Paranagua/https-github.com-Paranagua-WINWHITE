@@ -11,6 +11,11 @@ import {
 import type { SumTriggerProjection } from "@/lib/sum19Strategies";
 import { useSignalStatsStore } from "@/lib/signalStatsStore";
 import type { RawTendencyCandidate } from "@/lib/tendencias";
+import {
+  DEFAULT_PRIMARY_SIGNAL_ANALYSIS_IDS,
+  getActiveSignalAnalysisIds,
+  isAnalysisActiveForSignals,
+} from "@/lib/analysisSignalConfig";
 
 /**
  * Hierarquia estrita e monotônica dos sinais (do mais forte ao mais fraco):
@@ -1064,21 +1069,16 @@ export function buildSignalConfluences(rawCandidates: RawCandidate[]): Predictiv
  *
  * Todas as demais análises (Minutos 0 a 9) e estratégias (E1-E15, Somas) servem estritamente como CONFLUÊNCIA.
  */
-export const PRIMARY_SIGNAL_ANALYSIS_IDS = new Set<number>([
-  // Padrões de Pedra
-  2, 19, 20,
-  // Gatilhos de Sequência
-  10, 11, 12, 13, 21,
-  // Somas Consecutivas
-  14, 15, 16,
-  // Quebra de Padrões de Cores
-  50, 51, 52, 53, 54, 55, 56,
-  // Estratégia F2
-  202,
-]);
+export const PRIMARY_SIGNAL_ANALYSIS_IDS = DEFAULT_PRIMARY_SIGNAL_ANALYSIS_IDS;
 
-export function isPrimarySignalAnalysis(analysisId: number): boolean {
-  return PRIMARY_SIGNAL_ANALYSIS_IDS.has(analysisId);
+export function isPrimarySignalAnalysis(
+  analysisId: number,
+  customActiveIds?: Set<number> | null,
+): boolean {
+  if (customActiveIds) {
+    return customActiveIds.has(analysisId);
+  }
+  return isAnalysisActiveForSignals(analysisId);
 }
 
 export function getAnalysisGroupName(analysisId: number): string {
@@ -1123,8 +1123,8 @@ export function formatAnalysisCode(analysisId: number): string {
 }
 
 /**
- * MOTOR DE SINAIS: GERADO EXCLUSIVAMENTE PELAS 4 ANÁLISES PRIMÁRIAS
- * COM DEMAIS ANÁLISES E ESTRATÉGIAS SERVINDO ESTREITAMENTE DE CONFLUÊNCIA.
+ * MOTOR DE SINAIS: GERADO EXCLUSIVAMENTE PELAS ANÁLISES ATIVAS
+ * COM DEMAIS ANÁLISES E ESTRATÉGIAS DESATIVADAS SERVINDO ESTREITAMENTE DE CONFLUÊNCIA.
  */
 export function buildStrategyTriggeredSignals(
   sumProjections: SumTriggerProjection[],
@@ -1132,17 +1132,24 @@ export function buildStrategyTriggeredSignals(
   confirmationProjections: StrategyProjection[] = [],
   activeRecAlerts: Array<{ type: string; start: number; end: number }> = [],
   now: number = Date.now(),
-  options?: { allowHistorical?: boolean; minTargetTime?: number; maxTargetTime?: number },
+  options?: {
+    allowHistorical?: boolean;
+    minTargetTime?: number;
+    maxTargetTime?: number;
+    activeAnalysisIds?: Set<number>;
+  },
   tendencyCandidates: RawTendencyCandidate[] = [],
 ): PredictiveSignal[] {
   // 1. Isola candidatos primários elegíveis para GERAR sinais:
-  // - Apenas Análises Primárias
+  // - Apenas Análises Ativas para Envio de Sinais
   // - Apenas Top 1 (isTop1 === true e rank === 1)
   // - Assertividade de 80% a 100%
   // - Padrões de pedras (A2, A19, A20) elegíveis para qualquer pedra (0 a 14)
+  const activeIds = options?.activeAnalysisIds ?? getActiveSignalAnalysisIds();
+
   const isEligiblePrimary = (ac: RawCandidate) => {
     if (!ac || !ac.targetDate) return false;
-    if (!isPrimarySignalAnalysis(ac.analysis)) return false;
+    if (!activeIds.has(ac.analysis)) return false;
     if (!ac.isTop1 || ac.rank !== 1) return false;
     if (ac.pct < 80 || ac.pct > 100) return false;
     return true;

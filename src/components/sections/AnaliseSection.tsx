@@ -11,7 +11,15 @@ import {
   ShieldCheck,
   Palette,
   RotateCcw,
+  Zap,
+  Shield,
+  SlidersHorizontal,
+  Search,
+  CheckCheck,
+  XCircle,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { ALL_ANALYSIS_DEFINITIONS, useAnalysisSignalConfig } from "@/lib/analysisSignalConfig";
 import { ColorPatternBreaksPanel } from "@/components/sections/ColorPatternBreaksPanel";
 import { RecoveryBreaksPanel } from "@/components/sections/RecoveryBreaksPanel";
 import { detectAllColorPatternBreaks, colorBreaksToCycles } from "@/lib/colorPatternBreaks";
@@ -87,6 +95,9 @@ function AnalysisPanel({
   now,
   maxZeros = MAX_ZEROS,
   detailFormatter,
+  analysisId,
+  isSignalActive,
+  onToggleSignal,
 }: {
   eyebrow: string;
   title: string;
@@ -99,6 +110,9 @@ function AnalysisPanel({
   now: Date;
   maxZeros?: number;
   detailFormatter?: (c: EngineCycle) => string;
+  analysisId?: number;
+  isSignalActive?: boolean;
+  onToggleSignal?: () => void;
 }) {
   // Todos os ciclos desta pedra com gaps normalizados (apenas positivos > 0, valores 0 ou não carregados deixados em branco)
   const allStoneCycles = useMemo(() => {
@@ -190,13 +204,42 @@ function AnalysisPanel({
           </h3>
           <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
         </div>
-        <div className="flex flex-col items-end gap-1 text-xs font-bold text-muted-foreground">
-          <span>
-            {uiCycles.length} de {allStoneCycles.length} ciclos totais
-          </span>
-          <span className="text-[10px] text-muted-foreground/80 font-mono">
-            {pastValidCycles.length} ciclos válidos registrados
-          </span>
+        <div className="flex flex-wrap items-center gap-3">
+          {analysisId !== undefined && onToggleSignal && (
+            <div className="flex items-center gap-2.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 shadow-sm">
+              <div className="flex flex-col text-right">
+                <span className="text-[10px] font-bold leading-tight">
+                  {isSignalActive ? (
+                    <span className="text-emerald-400 flex items-center justify-end gap-1">
+                      <Zap className="h-3 w-3" /> Envio de Sinais
+                    </span>
+                  ) : (
+                    <span className="text-amber-400/90 flex items-center justify-end gap-1">
+                      <Shield className="h-3 w-3" /> Apenas Confluência
+                    </span>
+                  )}
+                </span>
+                <span className="text-[8px] text-muted-foreground font-medium">
+                  {isSignalActive ? "Ativa para gerar sinais" : "Atua como confluência"}
+                </span>
+              </div>
+              <Switch
+                checked={Boolean(isSignalActive)}
+                onCheckedChange={onToggleSignal}
+                id={`switch-panel-${analysisId}`}
+                className="data-[state=checked]:bg-emerald-500"
+              />
+            </div>
+          )}
+
+          <div className="flex flex-col items-end gap-1 text-xs font-bold text-muted-foreground">
+            <span>
+              {uiCycles.length} de {allStoneCycles.length} ciclos totais
+            </span>
+            <span className="text-[10px] text-muted-foreground/80 font-mono">
+              {pastValidCycles.length} ciclos válidos registrados
+            </span>
+          </div>
         </div>
       </div>
 
@@ -592,6 +635,29 @@ export default function AnaliseSection() {
     { id: "sums", label: "Somas Consecutivas", icon: Plus },
   ];
 
+  const { isActive, toggle, activateAll, deactivateAll, resetToDefault, countActive, totalCount } =
+    useAnalysisSignalConfig();
+
+  const [filterSearch, setFilterSearch] = useState("");
+
+  const displayedFilterAnalyses = useMemo(() => {
+    let list = ALL_ANALYSIS_DEFINITIONS;
+    if (activeCategory !== "all") {
+      list = list.filter((a) => a.category === activeCategory);
+    }
+    if (filterSearch.trim()) {
+      const q = filterSearch.toLowerCase().trim();
+      list = list.filter(
+        (a) =>
+          a.name.toLowerCase().includes(q) ||
+          a.code.toLowerCase().includes(q) ||
+          a.categoryLabel.toLowerCase().includes(q) ||
+          String(a.id).includes(q),
+      );
+    }
+    return list;
+  }, [activeCategory, filterSearch]);
+
   const showRecoveryBreaks = activeCategory === "all" || activeCategory === "recovery_breaks";
   const showColorBreaks = activeCategory === "all" || activeCategory === "color_breaks";
   const showMinutes = activeCategory === "all" || activeCategory === "minutes";
@@ -664,6 +730,132 @@ export default function AnaliseSection() {
             );
           })}
         </div>
+
+        {/* Interruptores de Envio de Sinais por Análise */}
+        <div className="mt-5 rounded-xl border border-white/10 bg-black/30 p-4 backdrop-blur-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <SlidersHorizontal className="h-4 w-4 text-primary" />
+                <h4 className="text-xs font-black uppercase tracking-wider text-white font-outfit">
+                  Interruptores para Envio de Sinais
+                </h4>
+                <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-400 font-mono">
+                  {countActive} ativas para envio
+                </span>
+                <span className="rounded-full bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold text-amber-300 font-mono">
+                  {totalCount - countActive} apenas confluência
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Interruptor ao lado de cada análise para ativar/desativar o envio de sinais. As
+                análises desativadas servirão{" "}
+                <strong className="text-amber-300 font-bold">apenas como confluência</strong>.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={activateAll}
+                className="flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-400 hover:bg-emerald-500/20 transition-all"
+              >
+                <CheckCheck className="h-3.5 w-3.5" />
+                <span>Ativar Todas</span>
+              </button>
+              <button
+                type="button"
+                onClick={deactivateAll}
+                className="flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold text-amber-300 hover:bg-amber-500/20 transition-all"
+              >
+                <XCircle className="h-3.5 w-3.5" />
+                <span>Todas Confluência</span>
+              </button>
+              <button
+                type="button"
+                onClick={resetToDefault}
+                className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-bold text-muted-foreground hover:bg-white/10 hover:text-white transition-all"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span>Restaurar Padrão</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Filtrar análises por nome ou código (ex: A2, Q1, Minuto, 26)..."
+                value={filterSearch}
+                onChange={(e) => setFilterSearch(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-white/5 pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+              />
+            </div>
+            <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
+              {displayedFilterAnalyses.length} análises no filtro
+            </span>
+          </div>
+
+          {/* Lista com interruptor ao lado de cada análise */}
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 max-h-72 overflow-y-auto pr-1">
+            {displayedFilterAnalyses.map((item) => {
+              const isAct = isActive(item.id);
+              return (
+                <div
+                  key={item.id}
+                  className={`flex items-center justify-between gap-2.5 rounded-lg border p-2.5 transition-all ${
+                    isAct
+                      ? "border-emerald-500/30 bg-emerald-500/[0.05] hover:bg-emerald-500/[0.09]"
+                      : "border-white/10 bg-white/[0.02] hover:bg-white/[0.04]"
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-black ${
+                          isAct
+                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                            : "bg-white/10 text-muted-foreground"
+                        }`}
+                      >
+                        {item.code}
+                      </span>
+                      <span className="truncate text-xs font-bold text-white" title={item.name}>
+                        {item.name}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-1.5 text-[9.5px]">
+                      <span className="text-muted-foreground/70 truncate">
+                        {item.categoryLabel}
+                      </span>
+                      <span>•</span>
+                      {isAct ? (
+                        <span className="text-emerald-400 font-bold flex items-center gap-0.5 whitespace-nowrap">
+                          <Zap className="h-2.5 w-2.5" /> Envio Ativo
+                        </span>
+                      ) : (
+                        <span className="text-amber-400/90 font-medium flex items-center gap-0.5 whitespace-nowrap">
+                          <Shield className="h-2.5 w-2.5" /> Confluência
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center pl-1">
+                    <Switch
+                      checked={isAct}
+                      onCheckedChange={() => toggle(item.id)}
+                      id={`switch-filter-${item.id}`}
+                      className="data-[state=checked]:bg-emerald-500"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </Card>
 
       {/* 1. SEÇÃO DE MINUTOS (0 A 9 EM ORDEM CRONOLÓGICA) */}
@@ -681,6 +873,9 @@ export default function AnaliseSection() {
             cycles={a4Cycles}
             pedra={selected}
             now={now}
+            analysisId={4}
+            isSignalActive={isActive(4)}
+            onToggleSignal={() => toggle(4)}
             detailFormatter={(c) =>
               `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -696,6 +891,9 @@ export default function AnaliseSection() {
             cycles={a5Cycles}
             pedra={selected}
             now={now}
+            analysisId={5}
+            isSignalActive={isActive(5)}
+            onToggleSignal={() => toggle(5)}
             detailFormatter={(c) =>
               `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -713,6 +911,9 @@ export default function AnaliseSection() {
             cycles={a1Min1Cycles}
             pedra={selected}
             now={now}
+            analysisId={22}
+            isSignalActive={isActive(22)}
+            onToggleSignal={() => toggle(22)}
             detailFormatter={(c) =>
               `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -728,6 +929,9 @@ export default function AnaliseSection() {
             cycles={a2Min1Cycles}
             pedra={selected}
             now={now}
+            analysisId={23}
+            isSignalActive={isActive(23)}
+            onToggleSignal={() => toggle(23)}
             detailFormatter={(c) =>
               `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -745,6 +949,9 @@ export default function AnaliseSection() {
             cycles={a1Min2Cycles}
             pedra={selected}
             now={now}
+            analysisId={24}
+            isSignalActive={isActive(24)}
+            onToggleSignal={() => toggle(24)}
             detailFormatter={(c) =>
               `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -760,6 +967,9 @@ export default function AnaliseSection() {
             cycles={a2Min2Cycles}
             pedra={selected}
             now={now}
+            analysisId={25}
+            isSignalActive={isActive(25)}
+            onToggleSignal={() => toggle(25)}
             detailFormatter={(c) =>
               `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -777,6 +987,9 @@ export default function AnaliseSection() {
             cycles={a1Min3Cycles}
             pedra={selected}
             now={now}
+            analysisId={26}
+            isSignalActive={isActive(26)}
+            onToggleSignal={() => toggle(26)}
             detailFormatter={(c) =>
               `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -792,6 +1005,9 @@ export default function AnaliseSection() {
             cycles={a2Min3Cycles}
             pedra={selected}
             now={now}
+            analysisId={27}
+            isSignalActive={isActive(27)}
+            onToggleSignal={() => toggle(27)}
             detailFormatter={(c) =>
               `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -809,6 +1025,9 @@ export default function AnaliseSection() {
             cycles={a1Min4Cycles}
             pedra={selected}
             now={now}
+            analysisId={28}
+            isSignalActive={isActive(28)}
+            onToggleSignal={() => toggle(28)}
             detailFormatter={(c) =>
               `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -824,6 +1043,9 @@ export default function AnaliseSection() {
             cycles={a2Min4Cycles}
             pedra={selected}
             now={now}
+            analysisId={29}
+            isSignalActive={isActive(29)}
+            onToggleSignal={() => toggle(29)}
             detailFormatter={(c) =>
               `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -841,6 +1063,9 @@ export default function AnaliseSection() {
             cycles={a1Min5Cycles}
             pedra={selected}
             now={now}
+            analysisId={17}
+            isSignalActive={isActive(17)}
+            onToggleSignal={() => toggle(17)}
             detailFormatter={(c) =>
               `1ª min 5 (${String(c.triggerAt.getMinutes()).padStart(2, "0")})`
             }
@@ -856,6 +1081,9 @@ export default function AnaliseSection() {
             cycles={a2Min5Cycles}
             pedra={selected}
             now={now}
+            analysisId={18}
+            isSignalActive={isActive(18)}
+            onToggleSignal={() => toggle(18)}
             detailFormatter={(c) =>
               `2ª min 5 (${String(c.triggerAt.getMinutes()).padStart(2, "0")})`
             }
@@ -873,6 +1101,9 @@ export default function AnaliseSection() {
             cycles={a1Min6Cycles}
             pedra={selected}
             now={now}
+            analysisId={30}
+            isSignalActive={isActive(30)}
+            onToggleSignal={() => toggle(30)}
             detailFormatter={(c) =>
               `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -888,6 +1119,9 @@ export default function AnaliseSection() {
             cycles={a2Min6Cycles}
             pedra={selected}
             now={now}
+            analysisId={31}
+            isSignalActive={isActive(31)}
+            onToggleSignal={() => toggle(31)}
             detailFormatter={(c) =>
               `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -905,6 +1139,9 @@ export default function AnaliseSection() {
             cycles={a1Min7Cycles}
             pedra={selected}
             now={now}
+            analysisId={32}
+            isSignalActive={isActive(32)}
+            onToggleSignal={() => toggle(32)}
             detailFormatter={(c) =>
               `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -920,6 +1157,9 @@ export default function AnaliseSection() {
             cycles={a2Min7Cycles}
             pedra={selected}
             now={now}
+            analysisId={33}
+            isSignalActive={isActive(33)}
+            onToggleSignal={() => toggle(33)}
             detailFormatter={(c) =>
               `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -937,6 +1177,9 @@ export default function AnaliseSection() {
             cycles={a1Min8Cycles}
             pedra={selected}
             now={now}
+            analysisId={34}
+            isSignalActive={isActive(34)}
+            onToggleSignal={() => toggle(34)}
             detailFormatter={(c) =>
               `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -952,6 +1195,9 @@ export default function AnaliseSection() {
             cycles={a2Min8Cycles}
             pedra={selected}
             now={now}
+            analysisId={35}
+            isSignalActive={isActive(35)}
+            onToggleSignal={() => toggle(35)}
             detailFormatter={(c) =>
               `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -969,6 +1215,9 @@ export default function AnaliseSection() {
             cycles={a1Min9Cycles}
             pedra={selected}
             now={now}
+            analysisId={36}
+            isSignalActive={isActive(36)}
+            onToggleSignal={() => toggle(36)}
             detailFormatter={(c) =>
               `1ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -984,6 +1233,9 @@ export default function AnaliseSection() {
             cycles={a3Cycles}
             pedra={selected}
             now={now}
+            analysisId={3}
+            isSignalActive={isActive(3)}
+            onToggleSignal={() => toggle(3)}
             detailFormatter={(c) =>
               `2ª pedra min ${String(c.triggerAt.getMinutes()).padStart(2, "0")}`
             }
@@ -1005,6 +1257,9 @@ export default function AnaliseSection() {
             cycles={a2Cycles}
             pedra={selected}
             now={now}
+            analysisId={2}
+            isSignalActive={isActive(2)}
+            onToggleSignal={() => toggle(2)}
             detailFormatter={(c) => `Repetição ${c.value}→${c.value}`}
           />
           <AnalysisPanel
@@ -1018,6 +1273,9 @@ export default function AnaliseSection() {
             cycles={aSandwichPontasCycles}
             pedra={selected}
             now={now}
+            analysisId={19}
+            isSignalActive={isActive(19)}
+            onToggleSignal={() => toggle(19)}
             detailFormatter={(c) => `Sanduíche Ponta (${c.value})`}
           />
           <AnalysisPanel
@@ -1031,6 +1289,9 @@ export default function AnaliseSection() {
             cycles={aSandwichMeioCycles}
             pedra={selected}
             now={now}
+            analysisId={20}
+            isSignalActive={isActive(20)}
+            onToggleSignal={() => toggle(20)}
             detailFormatter={(c) => `Sanduíche Meio (${c.value})`}
           />
         </>
@@ -1050,6 +1311,9 @@ export default function AnaliseSection() {
             cycles={a8_11Cycles}
             pedra={selected}
             now={now}
+            analysisId={10}
+            isSignalActive={isActive(10)}
+            onToggleSignal={() => toggle(10)}
             detailFormatter={(c) => `8→11 (ant. ${c.value}) às ${fmtTime(c.triggerAt)}`}
           />
           <AnalysisPanel
@@ -1063,6 +1327,9 @@ export default function AnaliseSection() {
             cycles={a11_11Cycles}
             pedra={selected}
             now={now}
+            analysisId={11}
+            isSignalActive={isActive(11)}
+            onToggleSignal={() => toggle(11)}
             detailFormatter={(c) => `11→11 (ant. ${c.value}) às ${fmtTime(c.triggerAt)}`}
           />
           <AnalysisPanel
@@ -1076,6 +1343,9 @@ export default function AnaliseSection() {
             cycles={a4_11Cycles}
             pedra={selected}
             now={now}
+            analysisId={12}
+            isSignalActive={isActive(12)}
+            onToggleSignal={() => toggle(12)}
             detailFormatter={(c) => `4→11 (ant. ${c.value}) às ${fmtTime(c.triggerAt)}`}
           />
           <AnalysisPanel
@@ -1089,6 +1359,9 @@ export default function AnaliseSection() {
             cycles={a4_14Cycles}
             pedra={selected}
             now={now}
+            analysisId={13}
+            isSignalActive={isActive(13)}
+            onToggleSignal={() => toggle(13)}
             detailFormatter={(c) => `4↔14 (ant. ${c.value}) às ${fmtTime(c.triggerAt)}`}
           />
           <AnalysisPanel
@@ -1102,6 +1375,9 @@ export default function AnaliseSection() {
             cycles={a7_11Cycles}
             pedra={selected}
             now={now}
+            analysisId={21}
+            isSignalActive={isActive(21)}
+            onToggleSignal={() => toggle(21)}
             detailFormatter={(c) => `7↔11 (ant. ${c.value}) às ${fmtTime(c.triggerAt)}`}
           />
         </>
@@ -1121,6 +1397,9 @@ export default function AnaliseSection() {
             cycles={aSoma17Cycles}
             pedra={selected}
             now={now}
+            analysisId={14}
+            isSignalActive={isActive(14)}
+            onToggleSignal={() => toggle(14)}
             detailFormatter={(c) => `Soma 17 (ant. ${c.value}) às ${fmtTime(c.triggerAt)}`}
           />
           <AnalysisPanel
@@ -1134,6 +1413,9 @@ export default function AnaliseSection() {
             cycles={aSoma19Cycles}
             pedra={selected}
             now={now}
+            analysisId={15}
+            isSignalActive={isActive(15)}
+            onToggleSignal={() => toggle(15)}
             detailFormatter={(c) => `Soma 19 (ant. ${c.value}) às ${fmtTime(c.triggerAt)}`}
           />
           <AnalysisPanel
@@ -1147,6 +1429,9 @@ export default function AnaliseSection() {
             cycles={aSoma21Cycles}
             pedra={selected}
             now={now}
+            analysisId={16}
+            isSignalActive={isActive(16)}
+            onToggleSignal={() => toggle(16)}
             detailFormatter={(c) => `Soma 21 (ant. ${c.value}) às ${fmtTime(c.triggerAt)}`}
           />
         </>
@@ -1155,6 +1440,7 @@ export default function AnaliseSection() {
       {/* 5. SEÇÃO DE QUEBRA DE RECUPERAÇÃO (A60 A A114, GIROS 26 AO 80) */}
       {showRecoveryBreaks && (
         <RecoveryBreaksPanel
+          key={`recovery-breaks-panel-${selected}`}
           cyclesMap={cyclesMap}
           selectedPedra={selected}
           now={now}
@@ -1165,7 +1451,12 @@ export default function AnaliseSection() {
 
       {/* 6. SEÇÃO DE QUEBRA DE PADRÕES DE CORES (NOVA ANÁLISE INDEPENDENTE) */}
       {showColorBreaks && (
-        <ColorPatternBreaksPanel rows={rows} selectedPedra={selected} now={now} />
+        <ColorPatternBreaksPanel
+          key={`color-pattern-breaks-${selected}`}
+          rows={rows}
+          selectedPedra={selected}
+          now={now}
+        />
       )}
     </main>
   );

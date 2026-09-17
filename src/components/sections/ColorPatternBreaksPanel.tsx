@@ -7,7 +7,15 @@ import {
   getColorLabelPt,
 } from "@/lib/colorPatternBreaks";
 import { Card } from "@/components/double/Card";
-import { Sparkles, ShieldCheck, Clock, Table as TableIcon, LayoutGrid } from "lucide-react";
+import {
+  Sparkles,
+  ShieldCheck,
+  Clock,
+  Table as TableIcon,
+  LayoutGrid,
+  Zap,
+  Shield,
+} from "lucide-react";
 import { fmtDateTime } from "@/components/double/types";
 import { computeTop, isValidCycle, type Row, type Cycle } from "@/lib/predictive";
 import {
@@ -15,6 +23,8 @@ import {
   mergePersistedWithLiveCycles,
   sanitizeMonotonicGaps,
 } from "@/lib/cyclePersistence";
+import { useAnalysisSignalConfig } from "@/lib/analysisSignalConfig";
+import { Switch } from "@/components/ui/switch";
 
 interface ColorPatternBreaksPanelProps {
   rows: Row[];
@@ -24,6 +34,7 @@ interface ColorPatternBreaksPanelProps {
 
 export function ColorPatternBreaksPanel({ rows, selectedPedra }: ColorPatternBreaksPanelProps) {
   const [activePattern, setActivePattern] = useState<ColorPatternType>("alternados");
+  const { isActive, toggle } = useAnalysisSignalConfig();
 
   // Detecção completa dos 7 padrões
   const allBreaks = useMemo(() => {
@@ -184,13 +195,42 @@ export function ColorPatternBreaksPanel({ rows, selectedPedra }: ColorPatternBre
             <p className="text-xs text-muted-foreground">{patternDef.description}</p>
           </div>
 
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-muted-foreground">Quebras da Pedra {selectedPedra}:</span>
-            <span className="font-mono font-black text-white px-2 py-0.5 rounded bg-primary/20 text-primary border border-primary/30">
-              {breaksForSelectedStone.length}
-            </span>
-            <span className="text-muted-foreground ml-2">Total do Padrão:</span>
-            <span className="font-mono font-bold text-white/80">{activeBreaks.length}</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 shadow-sm">
+              <div className="flex flex-col text-right">
+                <span className="text-[10px] font-bold leading-tight">
+                  {isActive(patternDef.analysisId) ? (
+                    <span className="text-emerald-400 flex items-center justify-end gap-1">
+                      <Zap className="h-3 w-3" /> Envio de Sinais
+                    </span>
+                  ) : (
+                    <span className="text-amber-400/90 flex items-center justify-end gap-1">
+                      <Shield className="h-3 w-3" /> Apenas Confluência
+                    </span>
+                  )}
+                </span>
+                <span className="text-[8px] text-muted-foreground font-medium">
+                  {isActive(patternDef.analysisId)
+                    ? "Ativa para gerar sinais"
+                    : "Atua como confluência"}
+                </span>
+              </div>
+              <Switch
+                checked={isActive(patternDef.analysisId)}
+                onCheckedChange={() => toggle(patternDef.analysisId)}
+                id={`switch-color-${patternDef.analysisId}`}
+                className="data-[state=checked]:bg-emerald-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-muted-foreground">Quebras da Pedra {selectedPedra}:</span>
+              <span className="font-mono font-black text-white px-2 py-0.5 rounded bg-primary/20 text-primary border border-primary/30">
+                {breaksForSelectedStone.length}
+              </span>
+              <span className="text-muted-foreground ml-2">Total do Padrão:</span>
+              <span className="font-mono font-bold text-white/80">{activeBreaks.length}</span>
+            </div>
           </div>
         </div>
       </Card>

@@ -10,11 +10,15 @@ import {
   Search,
   ShieldCheck,
   Table as TableIcon,
+  Zap,
+  Shield,
 } from "lucide-react";
 import { Card } from "@/components/double/Card";
 import { computeTop, isValidCycle, type Cycle as EngineCycle } from "@/lib/predictive";
 import { sanitizeMonotonicGaps } from "@/lib/cyclePersistence";
 import { parseUtcDate } from "@/lib/utils";
+import { useAnalysisSignalConfig } from "@/lib/analysisSignalConfig";
+import { Switch } from "@/components/ui/switch";
 
 const BRAZIL_TIME_ZONE = "America/Sao_Paulo";
 const MAX_ZEROS = 14;
@@ -94,6 +98,7 @@ export function RecoveryBreaksPanel({
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [viewMode, setViewMode] = useState<"detail" | "overview">("detail");
   const [showAllCycles, setShowAllCycles] = useState<boolean>(false);
+  const { isActive, toggle } = useAnalysisSignalConfig();
 
   const selectedAnalysisId = 60 + (selectedSpin - 26);
   const selectedMeta = useMemo(() => {
@@ -269,7 +274,7 @@ export function RecoveryBreaksPanel({
               </span>
               {SPIN_RANGES.map((rg, idx) => (
                 <button
-                  key={rg.label}
+                  key={`spin-range-${rg.label}-${idx}`}
                   type="button"
                   onClick={() => setActiveRange(idx)}
                   className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
@@ -320,7 +325,7 @@ export function RecoveryBreaksPanel({
 
           {/* Grid Interativo de Seleção dos Giros */}
           <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-11 gap-1.5 max-h-48 overflow-y-auto p-1 rounded-xl border border-white/5 bg-black/20">
-            {filteredSpins.map((item) => {
+            {filteredSpins.map((item, fIdx) => {
               const cyclesForStone = (cyclesMap[item.analysisId] || []).filter(
                 (c) => c.value === selectedPedra || (selectedPedra !== 0 && c.value === 0),
               );
@@ -331,7 +336,7 @@ export function RecoveryBreaksPanel({
 
               return (
                 <button
-                  key={item.spin}
+                  key={`rec-spin-btn-${item.spin}-${item.analysisId}-${fIdx}`}
                   type="button"
                   onClick={() => setSelectedSpin(item.spin)}
                   className={`flex flex-col items-center justify-between rounded-lg p-2 text-center transition-all relative ${
@@ -394,18 +399,47 @@ export function RecoveryBreaksPanel({
               </p>
             </div>
 
-            <div className="flex flex-col items-end gap-1 text-xs font-bold text-muted-foreground">
-              <span className="text-white font-mono">
-                {displayedCycles.length} de {allStoneCycles.length} ciclos totais
-              </span>
-              <span className="text-[10px] text-muted-foreground/80 font-mono">
-                {pastValidCycles.length} ciclos anteriores válidos registrados
-              </span>
-              {openCycle && (
-                <span className="rounded bg-rose-500/20 border border-rose-500/40 px-2 py-0.5 text-[10px] font-black text-rose-300 animate-pulse">
-                  Gatilho Aberto Ativo ({openCycle.gaps.length}/14 Brancos)
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 shadow-sm">
+                <div className="flex flex-col text-right">
+                  <span className="text-[10px] font-bold leading-tight">
+                    {isActive(selectedAnalysisId) ? (
+                      <span className="text-emerald-400 flex items-center justify-end gap-1">
+                        <Zap className="h-3 w-3" /> Envio de Sinais
+                      </span>
+                    ) : (
+                      <span className="text-amber-400/90 flex items-center justify-end gap-1">
+                        <Shield className="h-3 w-3" /> Apenas Confluência
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-[8px] text-muted-foreground font-medium">
+                    {isActive(selectedAnalysisId)
+                      ? "Ativa para gerar sinais"
+                      : "Atua como confluência"}
+                  </span>
+                </div>
+                <Switch
+                  checked={isActive(selectedAnalysisId)}
+                  onCheckedChange={() => toggle(selectedAnalysisId)}
+                  id={`switch-rec-${selectedAnalysisId}`}
+                  className="data-[state=checked]:bg-emerald-500"
+                />
+              </div>
+
+              <div className="flex flex-col items-end gap-1 text-xs font-bold text-muted-foreground">
+                <span className="text-white font-mono">
+                  {displayedCycles.length} de {allStoneCycles.length} ciclos totais
                 </span>
-              )}
+                <span className="text-[10px] text-muted-foreground/80 font-mono">
+                  {pastValidCycles.length} ciclos anteriores válidos registrados
+                </span>
+                {openCycle && (
+                  <span className="rounded bg-rose-500/20 border border-rose-500/40 px-2 py-0.5 text-[10px] font-black text-rose-300 animate-pulse">
+                    Gatilho Aberto Ativo ({openCycle.gaps.length}/14 Brancos)
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -438,7 +472,7 @@ export function RecoveryBreaksPanel({
 
                   return (
                     <div
-                      key={`top-group-${idx}-${t.m}`}
+                      key={`top-group-${selectedAnalysisId}-${idx}-${t.label || t.m || idx}`}
                       className={`rounded-xl border p-3 flex items-center justify-between transition-all ${
                         qualifiesTop1
                           ? "border-emerald-500/40 bg-emerald-500/10"
@@ -527,8 +561,8 @@ export function RecoveryBreaksPanel({
                       const inBase = baseSet.has(c);
                       const elapsed = diffMinutes(dt, now);
                       const pending = Math.max(0, MAX_ZEROS - c.gaps.length);
-                      const dtMs = dt instanceof Date ? dt.getTime() : new Date(dt).getTime();
-                      const rowKey = `cycle-${c.value}-${dtMs}-${i}`;
+                      const dtMs = dt instanceof Date ? dt.getTime() : new Date(dt || 0).getTime();
+                      const rowKey = `rec-cycle-${selectedAnalysisId}-${selectedPedra}-${dtMs}-${i}`;
 
                       return (
                         <tr
@@ -556,7 +590,7 @@ export function RecoveryBreaksPanel({
                             <div className="flex flex-wrap items-center gap-1">
                               {c.gaps.map((g, gIdx) => (
                                 <span
-                                  key={`gap-${rowKey}-${gIdx}-${g}`}
+                                  key={`rec-gap-${rowKey}-${gIdx}-${g}`}
                                   className="inline-flex items-center justify-center min-w-[24px] px-1 py-0.5 rounded bg-white/10 text-[10px] font-mono font-bold text-white"
                                   title={`Branco #${gIdx + 1}: ${g} min após gatilho`}
                                 >
@@ -622,12 +656,12 @@ export function RecoveryBreaksPanel({
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.05]">
-                {overviewStats.map((st) => {
+                {overviewStats.map((st, stIdx) => {
                   const isSelected = selectedSpin === st.spin;
 
                   return (
                     <tr
-                      key={`overview-spin-${st.spin}-${st.analysisId}`}
+                      key={`rec-overview-spin-${st.spin}-${st.analysisId}-${stIdx}`}
                       onClick={() => {
                         setSelectedSpin(st.spin);
                         setViewMode("detail");
