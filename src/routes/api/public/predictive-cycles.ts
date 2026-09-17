@@ -111,9 +111,7 @@ export const Route = createFileRoute("/api/public/predictive-cycles")({
               .map((r) => ({
                 cycle_key: String(r.cycle_key),
                 analysis: Number(r.analysis),
-                analysis_code: r.analysis_code
-                  ? String(r.analysis_code)
-                  : `A${r.analysis}`,
+                analysis_code: r.analysis_code ? String(r.analysis_code) : `A${r.analysis}`,
                 analysis_name: r.analysis_name
                   ? String(r.analysis_name)
                   : Number(r.analysis) >= 60 && Number(r.analysis) <= 114

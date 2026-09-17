@@ -299,10 +299,10 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             signal.sources.forEach((src) => {
               if (src && src.analysis) {
                 let code = "";
-                if (src.analysis === 202) {
+                if (src.analysis >= 60 && src.analysis <= 114) {
+                  code = `A${src.analysis}`;
+                } else if (src.analysis === 202) {
                   code = "F2";
-                } else if (src.analysis >= 101 && src.analysis <= 115) {
-                  code = `E${src.analysis - 100}`;
                 } else if (src.analysis >= 50 && src.analysis <= 56) {
                   code = `Q${src.analysis - 49}`;
                 } else {

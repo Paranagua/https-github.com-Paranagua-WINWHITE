@@ -45,11 +45,12 @@ interface PrimaryAnalysisMetadataItem {
   analysisId?: number;
   name: string;
   shortLabel: string;
-  category: "pedras" | "sequencia" | "somas" | "cores" | "minutos" | "estrategias";
+  category: "pedras" | "sequencia" | "somas" | "cores" | "minutos" | "recuperacao" | "estrategias";
   categoryLabel: string;
   badge: string;
   description: string;
   minute?: number;
+  spin?: number;
   strategyGroup?: "f2" | "soma19" | "soma17" | "confirmacao" | "b";
   parentKey?: string;
   ponta?: number;
@@ -477,7 +478,24 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
     minute: 9,
   },
 
-  // 6. Estratégias Ativas (F2, Somas 19, Somas 17, Confirmações E1 a E15, Estratégias B)
+  // 6. Quebra de Recuperação (55 análises - A60 a A114, giros 26 ao 80)
+  ...Array.from({ length: 55 }, (_, i) => {
+    const spin = 26 + i;
+    const analysisId = 60 + i;
+    return {
+      key: `A${analysisId}`,
+      analysisId,
+      name: `Análise ${analysisId} · Quebra de Recuperação (Giro ${spin})`,
+      shortLabel: `A${analysisId}`,
+      category: "recuperacao" as const,
+      categoryLabel: "Quebra de Recuperação",
+      badge: "bg-rose-500/15 text-rose-400 border-rose-500/30",
+      description: `Gatilho de quebra de recuperação no ${spin}º giro consecutivo sem Branco`,
+      spin,
+    };
+  }),
+
+  // 7. Estratégias Ativas (F2, Somas 19, Somas 17, Confirmações E1 a E15, Estratégias B)
   // Estratégia F2 (Principal)
   {
     key: "F2",
@@ -629,7 +647,6 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   // Confirmações E1 a E15
   {
     key: "E1",
-    analysisId: 101,
     name: "Estratégia E1 · Pedras 3-5-6-7",
     shortLabel: "E1",
     category: "estrategias",
@@ -640,7 +657,6 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "E2",
-    analysisId: 102,
     name: "Estratégia E2 · Pedras 2-3-4-8-11",
     shortLabel: "E2",
     category: "estrategias",
@@ -651,7 +667,6 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "E3",
-    analysisId: 103,
     name: "Estratégia E3 · Pedras 1-2-6-8-9",
     shortLabel: "E3",
     category: "estrategias",
@@ -662,7 +677,6 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "E4",
-    analysisId: 104,
     name: "Estratégia E4 · Pedras 2-5-7-10-13",
     shortLabel: "E4",
     category: "estrategias",
@@ -673,7 +687,6 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "E5",
-    analysisId: 105,
     name: "Estratégia E5 · Pedras 1-5-6-8-9",
     shortLabel: "E5",
     category: "estrategias",
@@ -684,7 +697,6 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "E6",
-    analysisId: 106,
     name: "Estratégia E6 · Pedras 1-4-8-12-13",
     shortLabel: "E6",
     category: "estrategias",
@@ -695,7 +707,6 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "E7",
-    analysisId: 107,
     name: "Estratégia E7 · Pedras 3-5-7-8-14",
     shortLabel: "E7",
     category: "estrategias",
@@ -706,7 +717,6 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "E8",
-    analysisId: 108,
     name: "Estratégia E8 · Pedras 2-4-8-9-11",
     shortLabel: "E8",
     category: "estrategias",
@@ -717,7 +727,6 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "E9",
-    analysisId: 109,
     name: "Estratégia E9 · Pedras 2-4-6-10-14",
     shortLabel: "E9",
     category: "estrategias",
@@ -728,7 +737,6 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "E10",
-    analysisId: 110,
     name: "Estratégia E10 · Pedras 2-5-9-10-13",
     shortLabel: "E10",
     category: "estrategias",
@@ -739,7 +747,6 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "E11",
-    analysisId: 111,
     name: "Estratégia E11 · Pedras 3-5-6-7-10",
     shortLabel: "E11",
     category: "estrategias",
@@ -750,7 +757,6 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "E12",
-    analysisId: 112,
     name: "Estratégia E12 · Pedras 1-2-6-8-11",
     shortLabel: "E12",
     category: "estrategias",
@@ -761,7 +767,6 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "E13",
-    analysisId: 113,
     name: "Estratégia E13 · Pedras 4-6-7-8-12",
     shortLabel: "E13",
     category: "estrategias",
@@ -772,7 +777,6 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "E14",
-    analysisId: 114,
     name: "Estratégia E14 · Pedras 1-3-4-7-13",
     shortLabel: "E14",
     category: "estrategias",
@@ -783,7 +787,6 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
   },
   {
     key: "E15",
-    analysisId: 115,
     name: "Estratégia E15 · Pedras 2-4-6-9-11",
     shortLabel: "E15",
     category: "estrategias",
@@ -1089,7 +1092,7 @@ function SinaisSectionContent() {
   const [predictiveList, setPredictiveList] = useState<PredictiveSignal[]>(getPredictiveSignals());
   const [auditFilter, setAuditFilter] = useState<"geral" | "hoje">("geral");
   const [primaryTabFilter, setPrimaryTabFilter] = useState<
-    "todas" | "pedras" | "sequencia" | "somas" | "cores" | "minutos" | "estrategias"
+    "todas" | "pedras" | "sequencia" | "somas" | "cores" | "minutos" | "recuperacao" | "estrategias"
   >("todas");
   const [selectedMinuteFilter, setSelectedMinuteFilter] = useState<number | null>(null);
   const [selectedStrategyGroup, setSelectedStrategyGroup] = useState<
@@ -2009,6 +2012,21 @@ function SinaisSectionContent() {
                     >
                       Minutos (0 a 9) (
                       {primaryAnalysisStats.filter((s) => s.category === "minutos").length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPrimaryTabFilter("recuperacao");
+                        setActiveSubcategoryParent(null);
+                      }}
+                      className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                        primaryTabFilter === "recuperacao"
+                          ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                          : "text-rose-400/50 hover:text-rose-300"
+                      }`}
+                    >
+                      Quebra de Recuperação (
+                      {primaryAnalysisStats.filter((s) => s.category === "recuperacao").length})
                     </button>
                     <button
                       type="button"

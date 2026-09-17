@@ -97,8 +97,8 @@ export function getRecoveryBreakName(analysisId: number): string {
 }
 
 export const MAIN_ANALYSIS_IDS: number[] = [
-  2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-  30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
+  2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+  31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
 ];
 for (let id = 60; id <= 114; id++) {
   MAIN_ANALYSIS_IDS.push(id);
