@@ -24,6 +24,27 @@ import {
   type ColorBreakResult,
 } from "@/lib/colorPatternBreaks";
 import { getCycleKey, computeCycleStatus, type PersistedCycleRecord } from "@/lib/cyclePersistence";
+import {
+  detectAllRecoveryBreaks,
+  RECOVERY_BREAK_START_SPIN,
+  RECOVERY_BREAK_END_SPIN,
+  RECOVERY_BREAK_START_ANALYSIS,
+  RECOVERY_BREAK_END_ANALYSIS,
+  getRecoveryBreakAnalysisId,
+  getRecoveryBreakSpin,
+  isRecoveryBreakAnalysis,
+} from "@/lib/recoveryBreaks";
+
+export {
+  detectAllRecoveryBreaks,
+  RECOVERY_BREAK_START_SPIN,
+  RECOVERY_BREAK_END_SPIN,
+  RECOVERY_BREAK_START_ANALYSIS,
+  RECOVERY_BREAK_END_ANALYSIS,
+  getRecoveryBreakAnalysisId,
+  getRecoveryBreakSpin,
+  isRecoveryBreakAnalysis,
+};
 
 export interface IncrementalCycle extends Cycle {
   cycleKey: string;
@@ -69,32 +90,6 @@ const SECOND_STONE_ANALYSIS: Record<number, number> = {
 export const ANALYSIS_ID_Q = 60;
 export const ANALYSIS_CODE_Q = "Q";
 export const ANALYSIS_NAME_Q = "Quebra de Recuperação";
-
-export const RECOVERY_BREAK_START_SPIN = 26;
-export const RECOVERY_BREAK_END_SPIN = 80;
-export const RECOVERY_BREAK_START_ANALYSIS = 60;
-export const RECOVERY_BREAK_END_ANALYSIS = 114;
-
-export function getRecoveryBreakAnalysisId(spinIndex: number): number {
-  return 60 + (spinIndex - 26);
-}
-
-export function getRecoveryBreakSpin(analysisId: number): number {
-  return analysisId - 34; // 60 -> 26, 114 -> 80
-}
-
-export function isRecoveryBreakAnalysis(analysisId: number): boolean {
-  return analysisId >= 60 && analysisId <= 114;
-}
-
-export function getRecoveryBreakCode(analysisId: number): string {
-  return `A${analysisId}`;
-}
-
-export function getRecoveryBreakName(analysisId: number): string {
-  const spin = getRecoveryBreakSpin(analysisId);
-  return `Quebra de Recuperação (Giro ${spin})`;
-}
 
 export const MAIN_ANALYSIS_IDS: number[] = [
   2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
@@ -143,10 +138,11 @@ export class IncrementalPredictiveEngine {
 
   // --- Análise Q: Quebra de Recuperação (A60 a A114) ---
   // A quantidade de giros sem Branco está ESTRITAMENTE entre dois brancos:
-  // 0 - 3 - 6 - (+24 giros sem "0") - 0 = 26 giros sem 0 entre dois brancos -> A60
-  // 0 - 3 - 6 - (+25 giros sem "0") - 0 = 27 giros sem 0 entre dois brancos -> A61
+  // 0 - 26 giros sem aparecer o "0" - 0 = A60
+  // 0 - 27 giros sem aparecer o "0" - 0 = A61
   // ...
-  // 0 - 3 - 6 - (+78 giros sem "0") - 0 = 80 giros sem 0 entre dois brancos -> A114
+  // 0 - 80 giros sem aparecer o "0" - 0 = A114
+  private hasSeenFirstWhite = false;
   private nonWhiteSpinsSinceLastWhite = 0;
   private nonWhiteStreakCount = 0;
 
@@ -163,6 +159,7 @@ export class IncrementalPredictiveEngine {
     this.processedColorBreakKeys.clear();
     this.processedRowIds.clear();
     this.processedRowIdentities.clear();
+    this.hasSeenFirstWhite = false;
     this.nonWhiteSpinsSinceLastWhite = 0;
     this.nonWhiteStreakCount = 0;
   }
@@ -339,22 +336,30 @@ export class IncrementalPredictiveEngine {
 
     // 2. Rastreamento da janela de recuperação para a Quebra de Recuperação (A60 a A114)
     // Regra oficial da quebra de recuperação:
-    // A quantidade de giros sem Branco está ESTRITAMENTE entre dois brancos:
-    // 0 - 3 - 6 - (+24 giros sem "0") - 0 = 26 giros sem 0 entre dois brancos -> Gatilho A60
-    // 0 - 3 - 6 - (+25 giros sem "0") - 0 = 27 giros sem 0 entre dois brancos -> Gatilho A61
+    // O intervalo entre dois "0" deve conter ESTRITAMENTE de 26 a 80 giros sem nenhum "0" entre eles:
+    // Ex. 0 - 26 giros sem aparecer o "0" - 0 = A60
+    // Ex. 0 - 27 giros sem aparecer o "0" - 0 = A61
     // ...
-    // 0 - 3 - 6 - (+78 giros sem "0") - 0 = 80 giros sem 0 entre dois brancos -> Gatilho A114
+    // Ex. 0 - 80 giros sem aparecer o "0" - 0 = A114
     let qTriggerAnalysisId: number | null = null;
 
     if (isWhite) {
-      const spinsBetweenWhites = this.nonWhiteSpinsSinceLastWhite;
-      if (spinsBetweenWhites >= 26 && spinsBetweenWhites <= 80) {
-        qTriggerAnalysisId = 60 + (spinsBetweenWhites - 26);
+      if (this.hasSeenFirstWhite) {
+        const spinsBetweenWhites = this.nonWhiteSpinsSinceLastWhite;
+        if (
+          spinsBetweenWhites >= RECOVERY_BREAK_START_SPIN &&
+          spinsBetweenWhites <= RECOVERY_BREAK_END_SPIN
+        ) {
+          qTriggerAnalysisId = getRecoveryBreakAnalysisId(spinsBetweenWhites);
+        }
       }
+      this.hasSeenFirstWhite = true;
       this.nonWhiteSpinsSinceLastWhite = 0;
       this.nonWhiteStreakCount = 0;
     } else {
-      this.nonWhiteSpinsSinceLastWhite++;
+      if (this.hasSeenFirstWhite) {
+        this.nonWhiteSpinsSinceLastWhite++;
+      }
       this.nonWhiteStreakCount++;
     }
 
@@ -696,6 +701,25 @@ export class IncrementalPredictiveEngine {
         });
       }
     });
+
+    // Mescla ciclos computados a partir das linhas do buffer para as Análises de Quebra de Recuperação (A60 a A114)
+    if (this.recentRowsBuffer.length >= 2) {
+      const recMap = detectAllRecoveryBreaks(this.recentRowsBuffer);
+      for (let a = RECOVERY_BREAK_START_ANALYSIS; a <= RECOVERY_BREAK_END_ANALYSIS; a++) {
+        const batchCycles = recMap[a] || [];
+        if (batchCycles.length > 0) {
+          const currentList = map[a] || [];
+          const seenTimes = new Set(currentList.map((c) => c.triggerAt.getTime()));
+          for (const bc of batchCycles) {
+            if (!seenTimes.has(bc.triggerAt.getTime())) {
+              currentList.push(bc);
+              seenTimes.add(bc.triggerAt.getTime());
+            }
+          }
+          map[a] = currentList;
+        }
+      }
+    }
 
     for (const id of ids) {
       map[id].sort((a, b) => a.triggerAt.getTime() - b.triggerAt.getTime());

@@ -22,6 +22,7 @@ import { Switch } from "@/components/ui/switch";
 import { ALL_ANALYSIS_DEFINITIONS, useAnalysisSignalConfig } from "@/lib/analysisSignalConfig";
 import { ColorPatternBreaksPanel } from "@/components/sections/ColorPatternBreaksPanel";
 import { RecoveryBreaksPanel } from "@/components/sections/RecoveryBreaksPanel";
+import { detectAllRecoveryBreaks } from "@/lib/recoveryBreaks";
 import { detectAllColorPatternBreaks, colorBreaksToCycles } from "@/lib/colorPatternBreaks";
 import { blazeSupabase as supabase } from "@/integrations/supabase/blaze-client";
 import { Card } from "@/components/double/Card";
@@ -467,12 +468,12 @@ export default function AnaliseSection() {
           // Fallback silencioso para prosseguir com o carregamento dos giros
         }
 
-        // 2. Carrega os últimos 500 resultados para alimentação incremental da janela viva
+        // 2. Carrega os últimos 2000 resultados para alimentação incremental da janela viva
         const { data, error } = await supabase
           .from("blaze_results")
           .select("id, roll, color, created_at")
           .order("id", { ascending: false })
-          .limit(500);
+          .limit(2000);
 
         if (error) throw error;
         if (!alive) return;
@@ -506,7 +507,7 @@ export default function AnaliseSection() {
             incrementalEngineRef.current.processBatch(fresh);
             setCyclesMap(incrementalEngineRef.current.getAllCyclesMap());
             const updated = [...prev, ...fresh];
-            return updated.length > 500 ? updated.slice(-500) : updated;
+            return updated.length > 2000 ? updated.slice(-2000) : updated;
           });
         }
       } catch {
@@ -1441,7 +1442,7 @@ export default function AnaliseSection() {
       {showRecoveryBreaks && (
         <RecoveryBreaksPanel
           key={`recovery-breaks-panel-${selected}`}
-          cyclesMap={cyclesMap}
+          cyclesMap={{ ...cyclesMap, ...detectAllRecoveryBreaks(rows) }}
           selectedPedra={selected}
           now={now}
           loading={loading}

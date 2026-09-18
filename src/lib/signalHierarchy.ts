@@ -1554,6 +1554,7 @@ export function buildStrategyTriggeredSignals(
       isSupreme: evaluation.isSupreme,
       isNoConfluence: false,
       strategyKey: computedStrategyKey,
+      primaryAnalyses: Array.from(new Set(clusterPrimary.map((p) => p.analysis))),
       sources: allSources,
       clusterTimestamps: cluster,
       allowsOscillation: cluster.length === 2,
@@ -1873,6 +1874,24 @@ export function mergeSignalsLifecycle(
           cat !== "no_confluence"))
     ) {
       continue;
+    }
+
+    // Se o sinal está pendente e foi gerado por análises primárias desativadas pelo usuário, descarta
+    const activeIds = options?.activeAnalysisIds ?? getActiveSignalAnalysisIds();
+    if (sig.outcome === "pending" && activeIds) {
+      if (cat !== "em_alta" && !sig.isEmAlta) {
+        const primaryList =
+          sig.primaryAnalyses && sig.primaryAnalyses.length > 0
+            ? sig.primaryAnalyses
+            : (sig.sources || [])
+                .filter((s) => !s.top3 && s.rank === 1 && (s.pct ?? 0) >= 80)
+                .map((s) => s.analysis);
+
+        if (primaryList.length > 0 && !primaryList.some((aId) => activeIds.has(aId))) {
+          // Nenhuma análise primária do sinal está ativa no momento -> remove da exibição
+          continue;
+        }
+      }
     }
 
     // Se o horário (sinal - 1 minuto) já chegou, o sinal é congelado (isLocked)

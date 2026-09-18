@@ -168,6 +168,7 @@ export type PredictiveSignal = {
   clusterTimestamps?: number[];
   allowsOscillation?: boolean;
   audit?: SignalAuditInfo;
+  primaryAnalyses?: number[];
   sources?: Array<{
     analysis: number;
     value: number;

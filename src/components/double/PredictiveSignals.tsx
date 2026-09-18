@@ -58,6 +58,8 @@ import {
 import { IncrementalPredictiveEngine } from "@/lib/incrementalPredictiveEngine";
 import { mergePersistedWithLiveCycles, fetchPersistedCyclesMap } from "@/lib/cyclePersistence";
 import { MAIN_ANALYSIS_IDS } from "@/lib/incrementalPredictiveEngine";
+import { useAnalysisSignalConfig, getActiveSignalAnalysisIds } from "@/lib/analysisSignalConfig";
+import { detectAllRecoveryBreaks } from "@/lib/recoveryBreaks";
 
 type Mode1Signal = {
   key: string;
@@ -472,6 +474,7 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
 };
 
 export function PredictiveSignals() {
+  const { activeSet } = useAnalysisSignalConfig();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -532,7 +535,7 @@ export function PredictiveSignals() {
           .from("blaze_results")
           .select("id, roll, color, created_at")
           .order("id", { ascending: false })
-          .limit(500);
+          .limit(2000);
 
         if (error) throw error;
         if (!alive) return;
@@ -633,7 +636,8 @@ export function PredictiveSignals() {
       for (let i = 1; i <= 9; i++) {
         secondary[100 + i] = buildSecondary(rows, i);
       }
-      return { ...cyclesMap, ...secondary } as Record<number, Cycle[]>;
+      const recoveryBreaks = detectAllRecoveryBreaks(rows);
+      return { ...cyclesMap, ...recoveryBreaks, ...secondary } as Record<number, Cycle[]>;
     } catch (err) {
       console.error("[PredictiveSignals] Engine build error:", err);
       return {} as Record<number, Cycle[]>;
@@ -926,7 +930,9 @@ export function PredictiveSignals() {
         confProjections,
         alertWindow,
         now.getTime(),
-        undefined,
+        {
+          activeAnalysisIds: activeSet,
+        },
         tendencyCandidates,
       );
 
@@ -989,7 +995,7 @@ export function PredictiveSignals() {
     } catch (err) {
       console.error("[PredictiveSignals] Signal generation error:", err);
     }
-  }, [rows, active, engine, whiteStreakStatus.isFrozen]);
+  }, [rows, active, engine, whiteStreakStatus.isFrozen, activeSet]);
 
   // Inscrição em tempo real para sincronizar o status de validação dos sinais (WIN/LOSS/PENDENTE)
   const [liveStoredMap, setLiveStoredMap] = useState<Map<string, PredictiveSignal>>(() => {
@@ -1021,6 +1027,23 @@ export function PredictiveSignals() {
       if (!document.hidden) generate();
     };
     const onConfigChange = () => {
+      const activeIds = getActiveSignalAnalysisIds();
+      // Limpa imediatamente sinais pendentes que não tenham mais fonte primária ativa
+      const currentStored = getPredictiveSignals();
+      const cleaned = currentStored.filter((sig) => {
+        if (sig.outcome !== "pending") return true;
+        if (sig.category === "em_alta" || sig.isEmAlta) return true;
+        const primaries =
+          sig.primaryAnalyses && sig.primaryAnalyses.length > 0
+            ? sig.primaryAnalyses
+            : (sig.sources || [])
+                .filter((s) => !s.top3 && s.rank === 1 && (s.pct ?? 0) >= 80)
+                .map((s) => s.analysis);
+        if (primaries.length === 0) return false;
+        return primaries.some((aId) => activeIds.has(aId));
+      });
+      setPredictiveSignals(cleaned);
+      setLiveStoredMap(new Map(cleaned.map((s) => [s.key, s])));
       generate();
     };
     document.addEventListener("visibilitychange", onVisible);
@@ -1294,7 +1317,9 @@ export function PredictiveSignals() {
         .filter(Boolean) as PredictiveSignal[];
 
       // Mescla com ciclo de vida monotônico garantindo que NADA é perdido e promoções são respeitadas
-      const mergedList = mergeSignalsLifecycle(existing, candidateSignals, rows, Date.now());
+      const mergedList = mergeSignalsLifecycle(existing, candidateSignals, rows, Date.now(), {
+        activeAnalysisIds: activeSet,
+      });
 
       const filteredMerged = filterSignalsExcludingWhiteFreeze(
         mergedList,
@@ -1340,7 +1365,7 @@ export function PredictiveSignals() {
       });
       setSignals(storedSignalsList);
     }
-  }, [rows, loading, mode1, activeRecAlerts, whiteStreakStatus, freezeIntervals]);
+  }, [rows, loading, mode1, activeRecAlerts, whiteStreakStatus, freezeIntervals, activeSet]);
 
   return (
     <Card className="glass-card !p-0 overflow-hidden">

@@ -389,7 +389,7 @@ export function getActiveSignalAnalysisIds(): Set<number> {
       return new Set(DEFAULT_PRIMARY_SIGNAL_ANALYSIS_IDS);
     }
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
+    if (Array.isArray(parsed)) {
       return new Set(parsed.map(Number));
     }
   } catch (err) {

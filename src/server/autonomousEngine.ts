@@ -11,7 +11,7 @@ import {
   type Cycle,
   type Row,
 } from "../lib/predictive";
-import { IncrementalPredictiveEngine } from "../lib/incrementalPredictiveEngine";
+import { IncrementalPredictiveEngine, MAIN_ANALYSIS_IDS } from "../lib/incrementalPredictiveEngine";
 import { computeAllSumTriggerProjections } from "../lib/sum19Strategies";
 import { computeConfirmationProjections } from "../lib/confirmationStrategies";
 import {
@@ -41,7 +41,6 @@ import {
   fetchPersistedCycles,
   fetchPersistedCyclesMap,
 } from "../lib/cyclePersistence";
-import { MAIN_ANALYSIS_IDS } from "../lib/incrementalPredictiveEngine";
 
 const BLAZE_SUPABASE_URL = "https://fprjzaawmhadvwdlyfun.supabase.co";
 const BLAZE_SUPABASE_ANON_KEY = "sb_publishable_6_SYqk2nwh4IyEgwLGtiuQ_JI_Zf9Ov";
@@ -112,7 +111,25 @@ class AutonomousAuditEngine {
 
   public setActiveSignalAnalysisIds(ids: number[]) {
     this.activeSignalAnalysisIds = new Set<number>(ids);
-    console.log(`[AutonomousEngine] Análises ativas para envio atualizadas: ${ids.length} ativas`);
+    const activeSet = this.activeSignalAnalysisIds;
+
+    // Remove imediatamente da lista ativa qualquer sinal pendente cujas fontes primárias não estejam mais ativas
+    this.state.activeSignals = this.state.activeSignals.filter((sig) => {
+      if (!sig || sig.outcome !== "pending") return true;
+      if (sig.category === "em_alta" || sig.isEmAlta) return true;
+      const primaryList =
+        sig.primaryAnalyses && sig.primaryAnalyses.length > 0
+          ? sig.primaryAnalyses
+          : (sig.sources || [])
+              .filter((s) => !s.top3 && s.rank === 1 && (s.pct ?? 0) >= 80)
+              .map((s) => s.analysis);
+      if (primaryList.length === 0) return false;
+      return primaryList.some((aId) => activeSet.has(aId));
+    });
+
+    console.log(
+      `[AutonomousEngine] Análises ativas para envio atualizadas: ${ids.length} ativas, ${this.state.activeSignals.length} sinais pendentes mantidos`,
+    );
   }
 
   public getActiveSignalAnalysisIds(): number[] {
@@ -166,10 +183,7 @@ class AutonomousAuditEngine {
           `[AutonomousEngine] Rehydrated IncrementalPredictiveEngine with ${persisted.length} persisted cycles.`,
         );
       }
-      const mainIds = [
-        2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-        30, 31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
-      ];
+      const mainIds = MAIN_ANALYSIS_IDS;
       this.persistedCyclesCache = await fetchPersistedCyclesMap(mainIds, 100);
       this.lastCycleRefreshAt = Date.now();
     } catch (err) {
@@ -417,6 +431,7 @@ class AutonomousAuditEngine {
         {
           allowHistorical: true,
           maxPastWindowMs: 5 * 3600_000,
+          activeAnalysisIds: this.activeSignalAnalysisIds,
         },
       );
 
