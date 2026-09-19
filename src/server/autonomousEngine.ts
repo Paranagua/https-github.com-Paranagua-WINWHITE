@@ -116,7 +116,19 @@ class AutonomousAuditEngine {
     // Remove imediatamente da lista ativa qualquer sinal pendente cujas fontes primárias não estejam mais ativas
     this.state.activeSignals = this.state.activeSignals.filter((sig) => {
       if (!sig || sig.outcome !== "pending") return true;
-      if (sig.category === "em_alta" || sig.isEmAlta) return true;
+      if (sig.category === "em_alta" || sig.isEmAlta) {
+        const primaryTendencies = (sig.sources || []).filter(
+          (s: any) => !s.top3 && (s.pct ?? 0) >= 100,
+        );
+        const primaryList =
+          primaryTendencies.length > 0
+            ? primaryTendencies.map((s: any) => s.analysis)
+            : sig.primaryAnalyses && sig.primaryAnalyses.length > 0
+              ? sig.primaryAnalyses
+              : [];
+        if (primaryList.length === 0) return false;
+        return primaryList.some((aId: number) => activeSet.has(aId));
+      }
       const primaryList =
         sig.primaryAnalyses && sig.primaryAnalyses.length > 0
           ? sig.primaryAnalyses
@@ -406,7 +418,14 @@ class AutonomousAuditEngine {
         tendencyCandidates,
       );
 
-      const emAltaSignals = buildEmAltaSignals(tendencyCandidates, triggeredSignals, now.getTime());
+      const emAltaSignals = buildEmAltaSignals(
+        tendencyCandidates,
+        triggeredSignals,
+        now.getTime(),
+        {
+          activeAnalysisIds: this.activeSignalAnalysisIds,
+        },
+      );
 
       // 4. Todas as estratégias ativas servindo apenas de confluência
       const allAutonomousSignals = [...triggeredSignals, ...emAltaSignals];
@@ -435,13 +454,23 @@ class AutonomousAuditEngine {
         },
       );
 
+      // Aplica o filtro de congelamento de branco aos sinais mesclados antes de auditar
+      const filteredFinal = filterSignalsExcludingWhiteFreeze(
+        mergedSignals,
+        this.currentFreezeIntervals,
+        this.currentWhiteStreakStatus,
+      );
+
+      // Se o sistema estiver congelado por 24 giros sem branco, a lista final ativa é vazia!
+      const finalAutonomousSignals = this.currentWhiteStreakStatus.isFrozen ? [] : filteredFinal;
+
       let hasStateChanges = false;
       const nowMs = now.getTime();
 
       // 5. Auditoria rigorosa e captura autônoma de resultados (WIN / LOSS)
       const updatedActiveSignals: PredictiveSignal[] = [];
 
-      for (const sig of mergedSignals) {
+      for (const sig of finalAutonomousSignals) {
         if (!sig || !sig.entryDate) continue;
 
         const sigTime =

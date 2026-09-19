@@ -946,6 +946,9 @@ export function PredictiveSignals() {
         tendencyCandidates,
         strategySignals,
         now.getTime(),
+        {
+          activeAnalysisIds: activeSet,
+        },
       );
 
       // 5. Todas as estratégias ativas servindo apenas de confluência (não geram sinais avulsos)

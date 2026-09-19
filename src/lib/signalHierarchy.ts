@@ -1521,10 +1521,12 @@ export function buildStrategyTriggeredSignals(
         : `${primaryGroupName} (${primaryCodesLabel})`;
 
     const isHighTendency = allMatchingAnalyses.some((a) => a.isHighTendency);
-    const isPossibleRec = activeRecAlerts.some((alert) => {
-      const signalTime = repDate.getTime();
-      return signalTime >= alert.start && signalTime <= alert.end;
-    });
+    const isPossibleRec = Array.isArray(activeRecAlerts)
+      ? activeRecAlerts.some((alert) => {
+          const signalTime = repDate.getTime();
+          return signalTime >= alert.start && signalTime <= alert.end;
+        })
+      : false;
 
     const canonicalKey = getCanonicalSignalKey(repDate);
     const computedStrategyKey =
@@ -1590,7 +1592,16 @@ export function buildEmAltaSignals(
   tendencyCandidates: RawTendencyCandidate[],
   higherTierSignals: PredictiveSignal[],
   now: number = Date.now(),
+  options?: {
+    activeAnalysisIds?: Set<number> | number[];
+  },
 ): PredictiveSignal[] {
+  const activeIds = options?.activeAnalysisIds
+    ? options.activeAnalysisIds instanceof Set
+      ? options.activeAnalysisIds
+      : new Set<number>(options.activeAnalysisIds)
+    : undefined;
+
   // 1. Horários já ocupados pelos grupos de maior hierarquia e rastreamento de tendências utilizadas
   const occupiedMinutes = new Set<number>();
   const occupiedClocks = new Set<string>();
@@ -1622,12 +1633,19 @@ export function buildEmAltaSignals(
     }
   }
 
-  // 2. Tendências com 100% (3/3): têm poder para gerar sinal no grupo 'EM ALTA'
+  // 2. Tendências com 100% (3/3):
+  // REGRAS DEFINITIVAS:
+  // - ANÁLISE LIGADA = pode gerar sinal primário.
+  // - ANÁLISE DESLIGADA = NÃO pode gerar sinal primário.
+  // - TENDÊNCIA de uma análise desligada = NÃO pode gerar sinal por conta própria.
+  // - TENDÊNCIA de uma análise desligada = pode participar de CONFLUÊNCIA de uma análise ligada.
   const valid3_3 = (tendencyCandidates || []).filter((tc) => {
     if (!tc || !tc.targetDate) return false;
     // Análises Q (60 a 114): conforme a regra de segurança, a tendência de Quebra de Recuperação sozinha NÃO gera sinal!
     if (tc.analysis >= 60 && tc.analysis <= 114) return false;
     if (tc.ratio !== "3/3" || tc.pct < 100) return false;
+    // Se a análise estiver DESLIGADA, NÃO tem poder de gerar sinal por conta própria!
+    if (activeIds && !activeIds.has(tc.analysis)) return false;
     const t = tc.targetDate.getTime();
     if (Number.isNaN(t) || t < now - 60_000) return false;
 
@@ -1661,6 +1679,23 @@ export function buildEmAltaSignals(
 
   if (valid3_3.length === 0) return [];
 
+  // Tendências 3/3 de análises DESLIGADAS: NÃO podem gerar sinal por conta própria,
+  // mas PODEM participar de confluência de uma análise ligada que gerou sinal no mesmo minuto!
+  const inactive3_3ForConfluence = (tendencyCandidates || []).filter((tc) => {
+    if (!tc || !tc.targetDate) return false;
+    if (tc.analysis >= 60 && tc.analysis <= 114) return false;
+    if (tc.ratio !== "3/3" || tc.pct < 100) return false;
+    // Só entram aqui se a análise estiver DESLIGADA
+    if (!activeIds || activeIds.has(tc.analysis)) return false;
+    const t = tc.targetDate.getTime();
+    if (Number.isNaN(t) || t < now - 60_000) return false;
+    const tcKey =
+      tc.cycleKey ||
+      `TEND_A${tc.analysis}_V${tc.value}_T${tc.triggerAt?.getTime?.() || tc.targetDate.getTime()}`;
+    if (usedTendencyKeysInHigherTier.has(tcKey)) return false;
+    return true;
+  });
+
   // 3. Tendências acima de 60% e abaixo de 100% (2/3): confluência exclusiva no grupo 'EM ALTA'
   const valid2_3 = (tendencyCandidates || []).filter((tc) => {
     if (!tc || !tc.targetDate) return false;
@@ -1669,7 +1704,7 @@ export function buildEmAltaSignals(
     return !Number.isNaN(t) && t >= now - 60_000;
   });
 
-  // Agrupa tendências 3/3 por minuto
+  // Agrupa tendências 3/3 ativas por minuto
   const minuteMap = new Map<number, RawTendencyCandidate[]>();
   for (const cand of valid3_3) {
     const minStart = Math.floor(cand.targetDate.getTime() / 60_000) * 60_000;
@@ -1708,7 +1743,7 @@ export function buildEmAltaSignals(
     }
   }
 
-  // Atribuição exclusiva de confluências 2/3 ao minuto mais próximo de 'EM ALTA'
+  // Atribuição de confluências 2/3 e 3/3 (de análises desligadas) ao minuto de 'EM ALTA'
   const conf2_3Map = new Map<number, RawTendencyCandidate[]>();
   const activeMinutes = Array.from(filteredMinuteMap.keys());
 
@@ -1742,21 +1777,29 @@ export function buildEmAltaSignals(
     const repDate = new Date(minStart);
     const conf2_3 = conf2_3Map.get(minStart) || [];
 
-    const allClusterTendencies = [...primaryTendencies, ...conf2_3];
+    // Inclui tendências 3/3 de análises desligadas no mesmo minuto estritamente como confluência
+    const inactiveSameMin = inactive3_3ForConfluence.filter(
+      (tc) => Math.floor(tc.targetDate.getTime() / 60_000) * 60_000 === minStart,
+    );
+
+    const allClusterTendencies = [...primaryTendencies, ...inactiveSameMin, ...conf2_3];
 
     const primaryCodes = Array.from(
       new Set(primaryTendencies.map((t) => formatAnalysisCode(t.analysis))),
     );
     const confCodes = Array.from(
-      new Set(conf2_3.map((t) => `${formatAnalysisCode(t.analysis)} (2/3)`)),
+      new Set([
+        ...inactiveSameMin.map((t) => `${formatAnalysisCode(t.analysis)} (3/3 conf)`),
+        ...conf2_3.map((t) => `${formatAnalysisCode(t.analysis)} (2/3)`),
+      ]),
     );
 
     const sources = allClusterTendencies.map((t) => ({
       analysis: t.analysis,
       value: t.value,
       pct: t.pct,
-      top3: t.ratio === "2/3",
-      rank: t.ratio === "3/3" ? 1 : 2,
+      top3: t.ratio === "2/3" || inactiveSameMin.includes(t),
+      rank: primaryTendencies.includes(t) ? 1 : 2,
       cycleKey: t.cycleKey,
     }));
 
@@ -1764,7 +1807,7 @@ export function buildEmAltaSignals(
       (t) => `${formatAnalysisCode(t.analysis)}-${t.value} (${t.ratio} · Gap ${t.gap}m)`,
     );
 
-    const canonicalKey = `EM_ALTA_${getCanonicalSignalKey(repDate)}`;
+    const canonicalKey = getCanonicalSignalKey(repDate);
 
     emAltaSignals.push({
       key: canonicalKey,
@@ -1786,6 +1829,7 @@ export function buildEmAltaSignals(
       isSupreme: false,
       isNoConfluence: false,
       strategyKey: primaryCodes[0] || "A",
+      primaryAnalyses: primaryTendencies.map((t) => t.analysis),
       sources,
       clusterTimestamps: [minStart],
       allowsOscillation: false,
@@ -1879,7 +1923,22 @@ export function mergeSignalsLifecycle(
     // Se o sinal está pendente e foi gerado por análises primárias desativadas pelo usuário, descarta
     const activeIds = options?.activeAnalysisIds ?? getActiveSignalAnalysisIds();
     if (sig.outcome === "pending" && activeIds) {
-      if (cat !== "em_alta" && !sig.isEmAlta) {
+      if (cat === "em_alta" || sig.isEmAlta) {
+        const primaryTendencies = (sig.sources || []).filter(
+          (s: any) => !s.top3 && (s.pct ?? 0) >= 100,
+        );
+        const primaryList =
+          primaryTendencies.length > 0
+            ? primaryTendencies.map((s: any) => s.analysis)
+            : sig.primaryAnalyses && sig.primaryAnalyses.length > 0
+              ? sig.primaryAnalyses
+              : [];
+
+        if (primaryList.length > 0 && !primaryList.some((aId: number) => activeIds.has(aId))) {
+          // Nenhuma análise primária de tendência do sinal Em Alta está ativa -> remove
+          continue;
+        }
+      } else {
         const primaryList =
           sig.primaryAnalyses && sig.primaryAnalyses.length > 0
             ? sig.primaryAnalyses
@@ -1904,6 +1963,16 @@ export function mergeSignalsLifecycle(
       isLocked,
     };
 
+    // Se já existe um sinal no mapa para este mesmo minuto canônico, preserva o de maior hierarquia
+    const prevInMap = resultMap.get(canonicalKey);
+    if (prevInMap) {
+      const prevRank = getSignalRank(prevInMap);
+      const currRank = getSignalRank(sig);
+      if (prevRank > currRank) {
+        continue;
+      }
+    }
+
     resultMap.set(canonicalKey, normalizedSig);
   }
 
@@ -1917,7 +1986,7 @@ export function mergeSignalsLifecycle(
         : parseUtcDate(cand.entryDate as any).getTime();
 
     // Procura sinal existente correspondente:
-    // Primeiro por chave canônica exata; se não houver, por proximidade de ±1 minuto (60.000 ms) entre sinais pendentes
+    // Primeiro por chave canônica exata; se não houver, por proximidade de ±1 minuto (60.000 ms)
     let existingKey: string | undefined = undefined;
     let existing: PredictiveSignal | undefined = undefined;
 
@@ -1925,14 +1994,14 @@ export function mergeSignalsLifecycle(
       existingKey = canonicalKey;
       existing = resultMap.get(canonicalKey);
     } else {
-      // Busca sinal pendente existente em janela de ±1 minuto (confluência temporal)
+      // Busca QUALQUER sinal existente em janela de ±1 minuto (confluência temporal ou conflito)
       for (const [k, s] of resultMap.entries()) {
         if (!s || !s.entryDate) continue;
         const sTime =
           s.entryDate instanceof Date
             ? s.entryDate.getTime()
             : parseUtcDate(s.entryDate as any).getTime();
-        if (Math.abs(candTime - sTime) <= 60_000 && s.outcome === "pending") {
+        if (Math.abs(candTime - sTime) <= 60_000) {
           existingKey = k;
           existing = s;
           break;
@@ -1944,6 +2013,36 @@ export function mergeSignalsLifecycle(
     const whiteInM1 = hasWhiteInPreviousMinute(cand.entryDate, results);
 
     if (!existing) {
+      // Verifica se a análise primária do candidato está ativa
+      const activeIds = options?.activeAnalysisIds ?? getActiveSignalAnalysisIds();
+      if (activeIds) {
+        const isCandEmAlta = cand.category === "em_alta" || cand.isEmAlta;
+        if (isCandEmAlta) {
+          const primaryTendencies = (cand.sources || []).filter(
+            (s: any) => !s.top3 && (s.pct ?? 0) >= 100,
+          );
+          const primaryList =
+            primaryTendencies.length > 0
+              ? primaryTendencies.map((s: any) => s.analysis)
+              : cand.primaryAnalyses && cand.primaryAnalyses.length > 0
+                ? cand.primaryAnalyses
+                : [];
+          if (primaryList.length > 0 && !primaryList.some((aId: number) => activeIds.has(aId))) {
+            continue;
+          }
+        } else {
+          const primaryList =
+            cand.primaryAnalyses && cand.primaryAnalyses.length > 0
+              ? cand.primaryAnalyses
+              : (cand.sources || [])
+                  .filter((s: any) => !s.top3 && s.rank === 1 && (s.pct ?? 0) >= 80)
+                  .map((s: any) => s.analysis);
+          if (primaryList.length > 0 && !primaryList.some((aId: number) => activeIds.has(aId))) {
+            continue;
+          }
+        }
+      }
+
       // Novo candidato:
       // Se o horário (sinal - 1) já passou para esse novo candidato, não publica novo sinal de última hora
       // (a menos que seja o motor autônomo auditando sinais históricos recentes)
@@ -2011,6 +2110,23 @@ export function mergeSignalsLifecycle(
         continue;
       }
 
+      // Verifica proximidade estrita: se já existe QUALQUER sinal a <= 60s, não cria novo sinal avulso
+      let hasProximityConflict = false;
+      for (const s of resultMap.values()) {
+        if (!s || !s.entryDate) continue;
+        const sTime =
+          s.entryDate instanceof Date
+            ? s.entryDate.getTime()
+            : parseUtcDate(s.entryDate as any).getTime();
+        if (Math.abs(candTime - sTime) <= 60_000) {
+          hasProximityConflict = true;
+          break;
+        }
+      }
+      if (hasProximityConflict) {
+        continue;
+      }
+
       resultMap.set(canonicalKey, {
         ...cand,
         key: canonicalKey,
@@ -2020,7 +2136,7 @@ export function mergeSignalsLifecycle(
       });
     } else {
       // Sinal já existente:
-      // A. Se já está concluído (WIN ou LOSS), é estritamente imutável!
+      // A. Se já está concluído (WIN ou LOSS), é estritamente imutável! Candidatos adjacentes são descartados!
       if (existing.outcome && existing.outcome !== "pending") {
         continue;
       }
@@ -2462,47 +2578,6 @@ export function mergeSignalsLifecycle(
         sig.winningResultId = auditRes.winningResultId || sig.winningResultId;
         sig.completedAt = sig.completedAt || auditRes.completedAt || now;
         sig.audit = auditRes.audit || sig.audit;
-
-        // Captura e grava no validador/estatísticas (apenas sinais com confluência)
-        if (!sig.isNoConfluence && sig.category !== "no_confluence") {
-          try {
-            const isEmAlta =
-              sig.isEmAlta ||
-              sig.category === "em_alta" ||
-              sig.groupName === "Em Alta" ||
-              (typeof sig.key === "string" && sig.key.startsWith("EM_ALTA_")) ||
-              (typeof sig.label === "string" &&
-                (sig.label.toUpperCase().includes("EM ALTA") ||
-                  sig.label.startsWith("Tendência 3/3"))) ||
-              (typeof sig.confluence === "string" &&
-                sig.confluence.toUpperCase().includes("EM ALTA"));
-
-            useSignalStatsStore.getState().recordCompletedSignal({
-              key: sig.key || getCanonicalSignalKey(sig.entryDate),
-              time: sig.time,
-              outcome: auditRes.outcome,
-              label: sig.label,
-              confluence: sig.confluence,
-              resultTime: sig.resultTime,
-              strategyKey: sig.strategyKey,
-              confirmedStrategies: sig.confirmedStrategies,
-              targetTime: sig.time,
-              checkedResults: auditRes.audit?.checkedResults,
-              winningResultId: sig.winningResultId,
-              winningResultCreatedAt: auditRes.audit?.winningResultCreatedAt,
-              audit: sig.audit,
-              sources: sig.sources,
-              category: isEmAlta ? "em_alta" : sig.category,
-              isSupreme: isEmAlta ? false : sig.isSupreme,
-              isRare: isEmAlta ? false : sig.isRare,
-              isAlavancagem: isEmAlta ? false : sig.isAlavancagem,
-              isTop1: isEmAlta ? false : sig.isTop1,
-              isEmAlta: isEmAlta,
-            });
-          } catch {
-            // fallback silencioso caso store não esteja disponível
-          }
-        }
       }
     }
   }
