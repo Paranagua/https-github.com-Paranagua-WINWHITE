@@ -142,16 +142,6 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             };
           }
 
-          const isEmAltaSignal =
-            signal.isEmAlta === true ||
-            signal.category === "em_alta" ||
-            (typeof signal.key === "string" && signal.key.startsWith("EM_ALTA_")) ||
-            (typeof signal.label === "string" &&
-              (signal.label.toUpperCase().includes("EM ALTA") ||
-                signal.label.startsWith("Tendência 3/3"))) ||
-            (typeof signal.confluence === "string" &&
-              signal.confluence.toUpperCase().includes("EM ALTA"));
-
           const sigTimeMs =
             typeof signal.timestamp === "number" && signal.timestamp > 0
               ? signal.timestamp
@@ -184,12 +174,12 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             winningResultCreatedAt: signal.winningResultCreatedAt,
             audit: signal.audit,
             sources: signal.sources,
-            category: isEmAltaSignal ? "em_alta" : signal.category,
-            isSupreme: isEmAltaSignal ? false : signal.isSupreme,
-            isRare: isEmAltaSignal ? false : signal.isRare,
-            isAlavancagem: isEmAltaSignal ? false : signal.isAlavancagem,
-            isEmAlta: isEmAltaSignal,
-            isTop1: isEmAltaSignal ? false : signal.isTop1,
+            category: signal.category,
+            isSupreme: signal.isSupreme,
+            isRare: signal.isRare,
+            isAlavancagem: signal.isAlavancagem,
+            isEmAlta: false,
+            isTop1: signal.isTop1,
             bType: signal.bType,
             ponta: signal.ponta,
             pProx: signal.pProx,
@@ -399,30 +389,6 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
             });
 
           const mergedRecent = Array.from(signalMap.values())
-            .map((sig) => {
-              const isEmAltaSignal =
-                sig.isEmAlta === true ||
-                sig.category === "em_alta" ||
-                (typeof sig.key === "string" && sig.key.startsWith("EM_ALTA_")) ||
-                (typeof sig.label === "string" &&
-                  (sig.label.toUpperCase().includes("EM ALTA") ||
-                    sig.label.startsWith("Tendência 3/3"))) ||
-                (typeof sig.confluence === "string" &&
-                  sig.confluence.toUpperCase().includes("EM ALTA"));
-
-              if (isEmAltaSignal) {
-                return {
-                  ...sig,
-                  category: "em_alta",
-                  isEmAlta: true,
-                  isAlavancagem: false,
-                  isSupreme: false,
-                  isRare: false,
-                  isTop1: false,
-                };
-              }
-              return sig;
-            })
             .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
             .slice(0, 100);
 

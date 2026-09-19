@@ -1036,7 +1036,6 @@ export default function SignalPercentageValidator() {
 
     // Estatísticas por Categoria de Confluência
     const catKeys: SignalAuditItem["category"][] = [
-      "em_alta",
       "alavancagem",
       "supreme",
       "rare",
@@ -1447,7 +1446,6 @@ export default function SignalPercentageValidator() {
                 className="rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-white focus:outline-none focus:border-primary"
               >
                 <option value="all">Todas Categorias</option>
-                <option value="em_alta">🔥 Em Alta (Tendência 3/3)</option>
                 <option value="alavancagem">🚀 Alavancagem (4+ Top 1)</option>
                 <option value="supreme">👑 Supremo (2-3x Top 1 + 2+ Top 2/3)</option>
                 <option value="rare">💎 Raro (2-3x Top 1)</option>

@@ -1355,7 +1355,7 @@ export function buildStrategyTriggeredSignals(
         rank: SignalRank.SUPREME,
         category: "supreme",
         groupName: "Supremo",
-        label: `Supremo (${primaryCodesLabel}${hasStrategyConfluence ? ` + ${strategyCodesLabel}` : ""}${hasTendencyConfluence ? " + Em Alta" : ""})`,
+        label: `Supremo (${primaryCodesLabel}${hasStrategyConfluence ? ` + ${strategyCodesLabel}` : ""}${hasTendencyConfluence ? " + Tendência" : ""})`,
         medal: `👑 Supremo (${top1Count}x Top 1 · ${primaryGroupName})`,
         isAlavancagem: false,
         isSupreme: true,
@@ -1371,7 +1371,7 @@ export function buildStrategyTriggeredSignals(
         rank: SignalRank.RARE,
         category: "rare",
         groupName: "Raro",
-        label: `Raro (${primaryCodesLabel}${hasStrategyConfluence ? ` + ${strategyCodesLabel}` : ""}${hasTendencyConfluence ? " + Em Alta" : ""})`,
+        label: `Raro (${primaryCodesLabel}${hasStrategyConfluence ? ` + ${strategyCodesLabel}` : ""}${hasTendencyConfluence ? " + Tendência" : ""})`,
         medal: `💎 Raro (${top1Count}x Top 1 · ${primaryGroupName})`,
         isAlavancagem: false,
         isSupreme: false,
@@ -1589,266 +1589,17 @@ export function buildStrategyTriggeredSignals(
  * - Regra 5: Confluência e painel de auditoria seguem a mesma lógica para esse novo grupo.
  */
 export function buildEmAltaSignals(
-  tendencyCandidates: RawTendencyCandidate[],
-  higherTierSignals: PredictiveSignal[],
-  now: number = Date.now(),
-  options?: {
+  _tendencyCandidates: RawTendencyCandidate[],
+  _higherTierSignals: PredictiveSignal[],
+  _now: number = Date.now(),
+  _options?: {
     activeAnalysisIds?: Set<number> | number[];
   },
 ): PredictiveSignal[] {
-  const activeIds = options?.activeAnalysisIds
-    ? options.activeAnalysisIds instanceof Set
-      ? options.activeAnalysisIds
-      : new Set<number>(options.activeAnalysisIds)
-    : undefined;
-
-  // 1. Horários já ocupados pelos grupos de maior hierarquia e rastreamento de tendências utilizadas
-  const occupiedMinutes = new Set<number>();
-  const occupiedClocks = new Set<string>();
-  const usedTendencyKeysInHigherTier = new Set<string>();
-  const higherTierTendencyAnalysesByMinute = new Map<number, Set<number>>();
-
-  for (const sig of higherTierSignals || []) {
-    const dt = sig.entryDate instanceof Date ? sig.entryDate : new Date(sig.entryDate || 0);
-    const sigMs = dt.getTime();
-    if (!Number.isNaN(sigMs)) {
-      const minStart = Math.floor(sigMs / 60_000) * 60_000;
-      occupiedMinutes.add(minStart);
-      occupiedClocks.add(fmtClock(dt));
-
-      for (const src of sig.sources || []) {
-        if (src.cycleKey) {
-          usedTendencyKeysInHigherTier.add(src.cycleKey);
-        }
-        if (
-          src.cycleKey?.startsWith("TEND_") ||
-          src.cycleKey?.startsWith("T3/3") ||
-          (src.rank === 1 && src.pct === 100)
-        ) {
-          const set = higherTierTendencyAnalysesByMinute.get(minStart) || new Set<number>();
-          set.add(src.analysis);
-          higherTierTendencyAnalysesByMinute.set(minStart, set);
-        }
-      }
-    }
-  }
-
-  // 2. Tendências com 100% (3/3):
-  // REGRAS DEFINITIVAS:
-  // - ANÁLISE LIGADA = pode gerar sinal primário.
-  // - ANÁLISE DESLIGADA = NÃO pode gerar sinal primário.
-  // - TENDÊNCIA de uma análise desligada = NÃO pode gerar sinal por conta própria.
-  // - TENDÊNCIA de uma análise desligada = pode participar de CONFLUÊNCIA de uma análise ligada.
-  const valid3_3 = (tendencyCandidates || []).filter((tc) => {
-    if (!tc || !tc.targetDate) return false;
-    // Análises Q (60 a 114): conforme a regra de segurança, a tendência de Quebra de Recuperação sozinha NÃO gera sinal!
-    if (tc.analysis >= 60 && tc.analysis <= 114) return false;
-    if (tc.ratio !== "3/3" || tc.pct < 100) return false;
-    // Se a análise estiver DESLIGADA, NÃO tem poder de gerar sinal por conta própria!
-    if (activeIds && !activeIds.has(tc.analysis)) return false;
-    const t = tc.targetDate.getTime();
-    if (Number.isNaN(t) || t < now - 60_000) return false;
-
-    const tcKey =
-      tc.cycleKey ||
-      `TEND_A${tc.analysis}_V${tc.value}_T${tc.triggerAt?.getTime?.() || tc.targetDate.getTime()}`;
-
-    // A mesma tendência já foi utilizada por um grupo de maior hierarquia
-    if (usedTendencyKeysInHigherTier.has(tcKey)) return false;
-
-    const candMin = Math.floor(t / 60_000) * 60_000;
-    const clockStr = fmtClock(tc.targetDate);
-
-    // Regra 4: se algum outro grupo mostrar mesmo horário (sinal), o sinal do grupo 'em alta' some
-    if (occupiedMinutes.has(candMin) || occupiedClocks.has(clockStr)) {
-      return false;
-    }
-
-    // Regra de Não Duplicação a 1 minuto:
-    // Se um sinal de maior hierarquia a 1 minuto de diferença utilizou essa mesma análise de tendência, bloqueia
-    for (let offset = -60_000; offset <= 60_000; offset += 60_000) {
-      const neighborMin = candMin + offset;
-      const analyses = higherTierTendencyAnalysesByMinute.get(neighborMin);
-      if (analyses && analyses.has(tc.analysis)) {
-        return false;
-      }
-    }
-
-    return true;
-  });
-
-  if (valid3_3.length === 0) return [];
-
-  // Tendências 3/3 de análises DESLIGADAS: NÃO podem gerar sinal por conta própria,
-  // mas PODEM participar de confluência de uma análise ligada que gerou sinal no mesmo minuto!
-  const inactive3_3ForConfluence = (tendencyCandidates || []).filter((tc) => {
-    if (!tc || !tc.targetDate) return false;
-    if (tc.analysis >= 60 && tc.analysis <= 114) return false;
-    if (tc.ratio !== "3/3" || tc.pct < 100) return false;
-    // Só entram aqui se a análise estiver DESLIGADA
-    if (!activeIds || activeIds.has(tc.analysis)) return false;
-    const t = tc.targetDate.getTime();
-    if (Number.isNaN(t) || t < now - 60_000) return false;
-    const tcKey =
-      tc.cycleKey ||
-      `TEND_A${tc.analysis}_V${tc.value}_T${tc.triggerAt?.getTime?.() || tc.targetDate.getTime()}`;
-    if (usedTendencyKeysInHigherTier.has(tcKey)) return false;
-    return true;
-  });
-
-  // 3. Tendências acima de 60% e abaixo de 100% (2/3): confluência exclusiva no grupo 'EM ALTA'
-  const valid2_3 = (tendencyCandidates || []).filter((tc) => {
-    if (!tc || !tc.targetDate) return false;
-    if (tc.ratio !== "2/3") return false;
-    const t = tc.targetDate.getTime();
-    return !Number.isNaN(t) && t >= now - 60_000;
-  });
-
-  // Agrupa tendências 3/3 ativas por minuto
-  const minuteMap = new Map<number, RawTendencyCandidate[]>();
-  for (const cand of valid3_3) {
-    const minStart = Math.floor(cand.targetDate.getTime() / 60_000) * 60_000;
-    const list = minuteMap.get(minStart) || [];
-    list.push(cand);
-    minuteMap.set(minStart, list);
-  }
-
-  // Ordena os minutos candidatos
-  const sortedMinutes = Array.from(minuteMap.keys()).sort((a, b) => a - b);
-
-  // Exclusividade de tendências da mesma análise com 1 minuto de diferença entre sinais do próprio grupo 'EM ALTA'
-  const emAltaEmittedAnalysesByMinute = new Map<number, Set<number>>();
-  const filteredMinuteMap = new Map<number, RawTendencyCandidate[]>();
-
-  for (const minStart of sortedMinutes) {
-    const tendencies = minuteMap.get(minStart) || [];
-    const validForThisMinute: RawTendencyCandidate[] = [];
-
-    for (const cand of tendencies) {
-      // Verifica se a mesma análise já foi aceita em minStart - 60_000 (1 minuto antes)
-      const prevMin = minStart - 60_000;
-      const prevAnalyses = emAltaEmittedAnalysesByMinute.get(prevMin);
-      if (prevAnalyses && prevAnalyses.has(cand.analysis)) {
-        // Já foi enviado um sinal da mesma análise 1 minuto antes! Ignora neste minuto.
-        continue;
-      }
-      validForThisMinute.push(cand);
-    }
-
-    if (validForThisMinute.length > 0) {
-      filteredMinuteMap.set(minStart, validForThisMinute);
-      const set = emAltaEmittedAnalysesByMinute.get(minStart) || new Set<number>();
-      validForThisMinute.forEach((c) => set.add(c.analysis));
-      emAltaEmittedAnalysesByMinute.set(minStart, set);
-    }
-  }
-
-  // Atribuição de confluências 2/3 e 3/3 (de análises desligadas) ao minuto de 'EM ALTA'
-  const conf2_3Map = new Map<number, RawTendencyCandidate[]>();
-  const activeMinutes = Array.from(filteredMinuteMap.keys());
-
-  for (const tc of valid2_3) {
-    const t = tc.targetDate.getTime();
-    let bestMin = -1;
-    let bestDist = Infinity;
-
-    for (const m of activeMinutes) {
-      if (t >= m - 60_000 && t <= m + 60_000) {
-        const dist = Math.abs(m - t);
-        if (dist < bestDist) {
-          bestDist = dist;
-          bestMin = m;
-        }
-      }
-    }
-
-    if (bestMin !== -1) {
-      const list = conf2_3Map.get(bestMin) || [];
-      list.push(tc);
-      conf2_3Map.set(bestMin, list);
-    }
-  }
-
-  const emAltaSignals: PredictiveSignal[] = [];
-
-  for (const [minStart, primaryTendencies] of filteredMinuteMap.entries()) {
-    if (primaryTendencies.length === 0) continue;
-
-    const repDate = new Date(minStart);
-    const conf2_3 = conf2_3Map.get(minStart) || [];
-
-    // Inclui tendências 3/3 de análises desligadas no mesmo minuto estritamente como confluência
-    const inactiveSameMin = inactive3_3ForConfluence.filter(
-      (tc) => Math.floor(tc.targetDate.getTime() / 60_000) * 60_000 === minStart,
-    );
-
-    const allClusterTendencies = [...primaryTendencies, ...inactiveSameMin, ...conf2_3];
-
-    const primaryCodes = Array.from(
-      new Set(primaryTendencies.map((t) => formatAnalysisCode(t.analysis))),
-    );
-    const confCodes = Array.from(
-      new Set([
-        ...inactiveSameMin.map((t) => `${formatAnalysisCode(t.analysis)} (3/3 conf)`),
-        ...conf2_3.map((t) => `${formatAnalysisCode(t.analysis)} (2/3)`),
-      ]),
-    );
-
-    const sources = allClusterTendencies.map((t) => ({
-      analysis: t.analysis,
-      value: t.value,
-      pct: t.pct,
-      top3: t.ratio === "2/3" || inactiveSameMin.includes(t),
-      rank: primaryTendencies.includes(t) ? 1 : 2,
-      cycleKey: t.cycleKey,
-    }));
-
-    const confluenceItems = allClusterTendencies.map(
-      (t) => `${formatAnalysisCode(t.analysis)}-${t.value} (${t.ratio} · Gap ${t.gap}m)`,
-    );
-
-    const canonicalKey = getCanonicalSignalKey(repDate);
-
-    emAltaSignals.push({
-      key: canonicalKey,
-      time: fmtClock(repDate),
-      pct: 100.0,
-      label: `Tendência 3/3 (${primaryCodes.join("/")})${confCodes.length > 0 ? ` + ${confCodes.join(", ")}` : ""}`,
-      confluence: confluenceItems.join(" · "),
-      strategies: [],
-      medal: `🥈 EM ALTA (${primaryTendencies.length}x Tendência 3/3)`,
-      entryDate: repDate,
-      outcome: "pending" as const,
-      isHighTendency: true,
-      category: "em_alta",
-      groupName: "Em Alta",
-      isEmAlta: true,
-      isTop1: false,
-      isAlavancagem: false,
-      isRare: false,
-      isSupreme: false,
-      isNoConfluence: false,
-      strategyKey: primaryCodes[0] || "A",
-      primaryAnalyses: primaryTendencies.map((t) => t.analysis),
-      sources,
-      clusterTimestamps: [minStart],
-      allowsOscillation: false,
-      isConsecutive: false,
-      levelOffset: 0,
-      confirmedStrategies: [],
-      hasYellowSeal: false,
-      hasBlueSeal: false,
-      isVerified: false,
-    });
-  }
-
-  return emAltaSignals.sort((a, b) => {
-    const tA =
-      a.entryDate instanceof Date ? a.entryDate.getTime() : new Date(a.entryDate || 0).getTime();
-    const tB =
-      b.entryDate instanceof Date ? b.entryDate.getTime() : new Date(b.entryDate || 0).getTime();
-    return tA - tB;
-  });
+  // O grupo "Em Alta" deixou de existir.
+  // Todas as análises agora aderiram ao método de tendência atual e se organizam
+  // diretamente na hierarquia padrão (Alavancagem, Supremo, Raro, Top 1 & Top 3).
+  return [];
 }
 
 /**
