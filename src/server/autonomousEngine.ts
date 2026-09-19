@@ -16,6 +16,7 @@ import { computeAllSumTriggerProjections } from "../lib/sum19Strategies";
 import { computeConfirmationProjections } from "../lib/confirmationStrategies";
 import {
   buildStrategyTriggeredSignals,
+  buildEmAltaSignals,
   mergeSignalsLifecycle,
   getCanonicalSignalKey,
   type RawCandidate,
@@ -115,6 +116,19 @@ class AutonomousAuditEngine {
     // Remove imediatamente da lista ativa qualquer sinal pendente cujas fontes primárias não estejam mais ativas
     this.state.activeSignals = this.state.activeSignals.filter((sig) => {
       if (!sig || sig.outcome !== "pending") return true;
+      if (sig.category === "em_alta" || sig.isEmAlta) {
+        const primaryTendencies = (sig.sources || []).filter(
+          (s: any) => !s.top3 && (s.pct ?? 0) >= 100,
+        );
+        const primaryList =
+          primaryTendencies.length > 0
+            ? primaryTendencies.map((s: any) => s.analysis)
+            : sig.primaryAnalyses && sig.primaryAnalyses.length > 0
+              ? sig.primaryAnalyses
+              : [];
+        if (primaryList.length === 0) return false;
+        return primaryList.some((aId: number) => activeSet.has(aId));
+      }
       const primaryList =
         sig.primaryAnalyses && sig.primaryAnalyses.length > 0
           ? sig.primaryAnalyses
@@ -404,8 +418,17 @@ class AutonomousAuditEngine {
         tendencyCandidates,
       );
 
-      // Todas as análises aderiram à Tendência Atual; o grupo 'Em Alta' deixa de existir
-      const allAutonomousSignals = triggeredSignals;
+      const emAltaSignals = buildEmAltaSignals(
+        tendencyCandidates,
+        triggeredSignals,
+        now.getTime(),
+        {
+          activeAnalysisIds: this.activeSignalAnalysisIds,
+        },
+      );
+
+      // 4. Todas as estratégias ativas servindo apenas de confluência
+      const allAutonomousSignals = [...triggeredSignals, ...emAltaSignals];
 
       // Filtra sinais que caem em janelas com mais de 24 giros sem o 0 (branco)
       const validAutonomousSignals = filterSignalsExcludingWhiteFreeze(
@@ -495,12 +518,15 @@ class AutonomousAuditEngine {
             winningResultCreatedAt: sig.winningResultCreatedAt,
             audit: sig.audit,
             sources: sig.sources,
-            category: (sig as any).category,
-            isSupreme: sig.isSupreme,
-            isRare: sig.isRare,
-            isAlavancagem: sig.isAlavancagem,
-            isEmAlta: false,
-            isTop1: sig.isTop1,
+            category:
+              (sig as any).isEmAlta || (sig as any).category === "em_alta"
+                ? "em_alta"
+                : (sig as any).category,
+            isSupreme: (sig as any).isEmAlta ? false : sig.isSupreme,
+            isRare: (sig as any).isEmAlta ? false : sig.isRare,
+            isAlavancagem: (sig as any).isEmAlta ? false : sig.isAlavancagem,
+            isEmAlta: (sig as any).isEmAlta || (sig as any).category === "em_alta",
+            isTop1: (sig as any).isEmAlta ? false : sig.isTop1,
           });
           hasStateChanges = true;
 
@@ -513,16 +539,28 @@ class AutonomousAuditEngine {
 
         // Executa a conferência estrita de 6 rodadas nas janelas M-1, M, M+1
         const auditRes = auditSignalWithRounds(sig, auditRounds);
-        const cat = (sig as any).category ||
-          (sig.isAlavancagem
-            ? "alavancagem"
-            : sig.isSupreme
-              ? "supreme"
-              : sig.isRare
-                ? "rare"
-                : sig.isTop1
-                  ? "top1_top3"
-                  : undefined);
+        const isEmAltaSignal =
+          (sig as any).isEmAlta === true ||
+          (sig as any).category === "em_alta" ||
+          (sig as any).groupName === "Em Alta" ||
+          (typeof sig.key === "string" && sig.key.startsWith("EM_ALTA_")) ||
+          (typeof sig.label === "string" &&
+            (sig.label.toUpperCase().includes("EM ALTA") ||
+              sig.label.startsWith("Tendência 3/3"))) ||
+          (typeof sig.confluence === "string" && sig.confluence.toUpperCase().includes("EM ALTA"));
+
+        const cat = isEmAltaSignal
+          ? "em_alta"
+          : (sig as any).category ||
+            (sig.isAlavancagem
+              ? "alavancagem"
+              : sig.isSupreme
+                ? "supreme"
+                : sig.isRare
+                  ? "rare"
+                  : sig.isTop1
+                    ? "top1_isolated"
+                    : undefined);
 
         if (auditRes.outcome === "green") {
           // CAPTURADO: WIN (Branco confirmado)
@@ -550,10 +588,11 @@ class AutonomousAuditEngine {
             audit: auditRes.audit,
             sources: sig.sources,
             category: cat,
-            isSupreme: sig.isSupreme,
-            isRare: sig.isRare,
-            isAlavancagem: sig.isAlavancagem,
-            isTop1: sig.isTop1,
+            isSupreme: isEmAltaSignal ? false : sig.isSupreme,
+            isRare: isEmAltaSignal ? false : sig.isRare,
+            isAlavancagem: isEmAltaSignal ? false : sig.isAlavancagem,
+            isEmAlta: isEmAltaSignal,
+            isTop1: isEmAltaSignal ? false : sig.isTop1,
           });
 
           hasStateChanges = true;
@@ -583,10 +622,11 @@ class AutonomousAuditEngine {
             audit: auditRes.audit,
             sources: sig.sources,
             category: cat,
-            isSupreme: sig.isSupreme,
-            isRare: sig.isRare,
-            isAlavancagem: sig.isAlavancagem,
-            isTop1: sig.isTop1,
+            isSupreme: isEmAltaSignal ? false : sig.isSupreme,
+            isRare: isEmAltaSignal ? false : sig.isRare,
+            isAlavancagem: isEmAltaSignal ? false : sig.isAlavancagem,
+            isEmAlta: isEmAltaSignal,
+            isTop1: isEmAltaSignal ? false : sig.isTop1,
           });
 
           hasStateChanges = true;
@@ -614,10 +654,11 @@ class AutonomousAuditEngine {
               audit: auditRes.audit,
               sources: sig.sources,
               category: cat,
-              isSupreme: sig.isSupreme,
-              isRare: sig.isRare,
-              isAlavancagem: sig.isAlavancagem,
-              isTop1: sig.isTop1,
+              isSupreme: isEmAltaSignal ? false : sig.isSupreme,
+              isRare: isEmAltaSignal ? false : sig.isRare,
+              isAlavancagem: isEmAltaSignal ? false : sig.isAlavancagem,
+              isEmAlta: isEmAltaSignal,
+              isTop1: isEmAltaSignal ? false : sig.isTop1,
             });
             hasStateChanges = true;
           } else {
@@ -743,6 +784,16 @@ class AutonomousAuditEngine {
       return;
     }
 
+    const isEmAltaSignal =
+      signal.isEmAlta === true ||
+      signal.category === "em_alta" ||
+      (typeof signal.key === "string" && signal.key.startsWith("EM_ALTA_")) ||
+      (typeof signal.label === "string" &&
+        (signal.label.toUpperCase().includes("EM ALTA") ||
+          signal.label.startsWith("Tendência 3/3"))) ||
+      (typeof signal.confluence === "string" &&
+        signal.confluence.toUpperCase().includes("EM ALTA"));
+
     const newEntry: SignalHistoryEntry = {
       key: signal.key,
       time: signal.time,
@@ -768,11 +819,12 @@ class AutonomousAuditEngine {
       winningResultCreatedAt: signal.winningResultCreatedAt,
       audit: signal.audit,
       sources: signal.sources,
-      category: signal.category,
-      isSupreme: signal.isSupreme,
-      isRare: signal.isRare,
-      isAlavancagem: signal.isAlavancagem,
-      isTop1: signal.isTop1,
+      category: isEmAltaSignal ? "em_alta" : signal.category,
+      isSupreme: isEmAltaSignal ? false : signal.isSupreme,
+      isRare: isEmAltaSignal ? false : signal.isRare,
+      isAlavancagem: isEmAltaSignal ? false : signal.isAlavancagem,
+      isEmAlta: isEmAltaSignal,
+      isTop1: isEmAltaSignal ? false : signal.isTop1,
     };
 
     if (isCorrectionFromRedToGreen && existingIndex >= 0) {
@@ -989,31 +1041,73 @@ class AutonomousAuditEngine {
           isValidCycle(c),
       );
 
-      // MÉTODO DE TENDÊNCIA ATUAL (3 ciclos anteriores válidos mais recentes)
-      // Substitui integralmente o modelo antigo de contagem em 5 ciclos
-      if (pastValid.length < 3) continue;
+      // TENDÊNCIA: baseada exclusivamente nos 3 ciclos mais recentes daquela mesma análise
+      if (pastValid.length >= 3) {
+        const tendencyResult = computeAnalysisTendency(pastValid, item.open.triggerAt);
+        if (tendencyResult.hasTendency && tendencyResult.tendency) {
+          const t = tendencyResult.tendency;
+          let targetMinutes = t.gap;
+          if ([17, 18].includes(item.analysis)) targetMinutes += 1;
+          const at = addMinutes(item.open.triggerAt, targetMinutes);
+          const targetMs = at.getTime();
 
-      const tendencyResult = computeAnalysisTendency(pastValid, item.open.triggerAt);
-      if (!tendencyResult.hasTendency || !tendencyResult.tendency) continue;
+          if (targetMs >= now.getTime() - 5 * 3600_000) {
+            const stratKey =
+              item.analysis >= 50 && item.analysis <= 56
+                ? `Q${item.analysis - 49}`
+                : `A${item.analysis}`;
 
-      const stratKey =
-        item.analysis >= 50 && item.analysis <= 56
-          ? `Q${item.analysis - 49}`
-          : `A${item.analysis}`;
+            tendencyCandidates.push({
+              analysis: item.analysis,
+              value: item.value,
+              gap: t.gap,
+              targetDate: at,
+              ratio: t.ratio,
+              count: t.count,
+              pct: t.pct,
+              triggerAt: item.open.triggerAt,
+              cycleKey: `TEND_${stratKey}_V${item.value}_T${item.open.triggerAt.getTime()}`,
+              strategyKey: stratKey,
+              label: `Tendência ${t.ratio} (${stratKey}-${item.value})`,
+            });
+          }
+        }
+      }
+
+      // Regra de ciclos para envio de sinais padrão e confluência:
+      // - Análise "Quebra de Padrões de Cores" (IDs 50 a 56) e Quebra de Recuperação (IDs 60 a 114):
+      //   Requer no mínimo 4 ciclos no total (3 ciclos anteriores válidos + 1 gatilho ativo).
+      //   Calcula os Top Tempos Recorrentes dos 3 ciclos anteriores (slice(-3)).
+      // - Demais análises padrão:
+      //   Requer no mínimo 4 ciclos anteriores válidos (5 ciclos totais com o gatilho).
+      //   Calcula sobre os 5 ciclos passados mais recentes (slice(-5)).
+      const isColorBreakAnalysis = item.analysis >= 50 && item.analysis <= 56;
+      const isRecoveryBreak = item.analysis >= 60 && item.analysis <= 114;
+      const minRequiredPastValid = isColorBreakAnalysis || isRecoveryBreak ? 3 : 4;
+
+      if (pastValid.length < minRequiredPastValid) continue;
+
+      const hist =
+        isColorBreakAnalysis || isRecoveryBreak ? pastValid.slice(-3) : pastValid.slice(-5);
+      const candidates = computeTop(hist, CANDIDATE_DEPTH);
+      if (!candidates.length) continue;
 
       const cycleKey = `A${item.analysis}_V${item.value}_T${item.open.triggerAt.getTime()}`;
 
-      // Lista de tendências identificadas (3/3 prioritário, seguido de 2/3 e directHits)
-      const allTendencies = tendencyResult.allTendencies || [tendencyResult.tendency];
-      const best = allTendencies[0] || tendencyResult.tendency;
+      // 1. Projeção Top 1 Principal (Regra: Top 1 de 80% a 100%)
+      const top1Candidate = candidates[0];
 
-      // 1. Projeção Primária: Tendência 3/3 (100% de confluência nos 3 ciclos)
-      if (best.ratio === "3/3") {
-        let targetMinutes = best.gap;
+      if (
+        top1Candidate &&
+        top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP1 &&
+        top1Candidate.pct <= MAX_ASSERTIVIDADE_TOP1
+      ) {
+        let targetMinutes = top1Candidate.m;
         if ([17, 18].includes(item.analysis)) targetMinutes += 1;
         const at = addMinutes(item.open.triggerAt, targetMinutes);
         const t = at.getTime();
 
+        // Sem limite superior de 60 minutos
         if (t >= now.getTime() - 5 * 3600_000) {
           const isTendency = checkHighTendency(engine[item.analysis] || [], item.value);
           const isPossibleRec = recAlerts.some((alert) => {
@@ -1023,10 +1117,15 @@ class AutonomousAuditEngine {
             return sigTime >= alertStart && sigTime <= alertEnd;
           });
 
+          const stratKey =
+            item.analysis >= 50 && item.analysis <= 56
+              ? `Q${item.analysis - 49}`
+              : `A${item.analysis}`;
+
           rawCandidates.push({
             analysis: item.analysis,
             value: item.value,
-            pct: best.pct, // 100%
+            pct: top1Candidate.pct,
             targetDate: at,
             isTop1: true,
             rank: 1,
@@ -1035,31 +1134,14 @@ class AutonomousAuditEngine {
             strategyKey: stratKey,
             cycleKey,
           });
-
-          tendencyCandidates.push({
-            analysis: item.analysis,
-            value: item.value,
-            gap: best.gap,
-            targetDate: at,
-            ratio: best.ratio,
-            count: best.count,
-            pct: best.pct,
-            triggerAt: item.open.triggerAt,
-            cycleKey: `TEND_${stratKey}_V${item.value}_T${item.open.triggerAt.getTime()}`,
-            strategyKey: stratKey,
-            label: `Tendência ${best.ratio} (${stratKey}-${item.value})`,
-          });
         }
-      }
-
-      // 2. Projeções Secundárias / Confluência (Tendências 2/3 ou secundárias do mesmo gatilho)
-      const secondaryTendencies =
-        best.ratio === "3/3"
-          ? allTendencies.slice(1)
-          : allTendencies;
-
-      secondaryTendencies.forEach((cand, idx) => {
-        let targetMinutes = cand.gap;
+      } else if (
+        top1Candidate &&
+        top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP3 &&
+        top1Candidate.pct <= MAX_ASSERTIVIDADE_TOP3
+      ) {
+        // Se estiver na faixa de 75-79%, atua estritamente como confluência (rank 2)
+        let targetMinutes = top1Candidate.m;
         if ([17, 18].includes(item.analysis)) targetMinutes += 1;
         const at = addMinutes(item.open.triggerAt, targetMinutes);
         const t = at.getTime();
@@ -1073,31 +1155,60 @@ class AutonomousAuditEngine {
             return sigTime >= alertStart && sigTime <= alertEnd;
           });
 
+          const stratKey =
+            item.analysis >= 50 && item.analysis <= 56
+              ? `Q${item.analysis - 49}`
+              : `A${item.analysis}`;
+
           rawCandidates.push({
             analysis: item.analysis,
             value: item.value,
-            pct: cand.pct, // 66.7% para 2/3
+            pct: top1Candidate.pct,
+            targetDate: at,
+            isTop1: false,
+            rank: 2,
+            isHighTendency: isTendency,
+            isRecAlert: isPossibleRec,
+            strategyKey: stratKey,
+            cycleKey,
+          });
+        }
+      }
+
+      // 2. Projeções Secundárias Top 2 ao Top 3 (Validadores: Regra Top 2/3 de 75% a 79%)
+      candidates.slice(1, TOP3_DEPTH).forEach((cand, idx) => {
+        if (cand.pct < MIN_ASSERTIVIDADE_TOP3 || cand.pct > MAX_ASSERTIVIDADE_TOP3) return;
+        let m = cand.m;
+        if ([17, 18].includes(item.analysis)) m += 1;
+        const at = addMinutes(item.open.triggerAt, m);
+        const t = at.getTime();
+
+        // Sem limite superior de 60 minutos
+        if (t >= now.getTime() - 5 * 3600_000) {
+          const isTendency = checkHighTendency(engine[item.analysis] || [], item.value);
+          const isPossibleRec = recAlerts.some((alert) => {
+            const sigTime = at.getTime();
+            const alertStart = alert.triggerAt.getTime();
+            const alertEnd = alertStart + alert.duration * 60000;
+            return sigTime >= alertStart && sigTime <= alertEnd;
+          });
+
+          const candStratKey =
+            item.analysis >= 50 && item.analysis <= 56
+              ? `Q${item.analysis - 49}`
+              : `A${item.analysis}`;
+
+          rawCandidates.push({
+            analysis: item.analysis,
+            value: item.value,
+            pct: cand.pct,
             targetDate: at,
             isTop1: false,
             rank: idx + 2,
             isHighTendency: isTendency,
             isRecAlert: isPossibleRec,
-            strategyKey: stratKey,
-            cycleKey: `${cycleKey}_G${cand.gap}`,
-          });
-
-          tendencyCandidates.push({
-            analysis: item.analysis,
-            value: item.value,
-            gap: cand.gap,
-            targetDate: at,
-            ratio: cand.ratio,
-            count: cand.count,
-            pct: cand.pct,
-            triggerAt: item.open.triggerAt,
-            cycleKey: `TEND_${stratKey}_V${item.value}_T${item.open.triggerAt.getTime()}_G${cand.gap}`,
-            strategyKey: stratKey,
-            label: `Tendência ${cand.ratio} (${stratKey}-${item.value})`,
+            strategyKey: candStratKey,
+            cycleKey,
           });
         }
       });

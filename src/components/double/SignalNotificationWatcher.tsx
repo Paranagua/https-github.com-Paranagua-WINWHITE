@@ -18,6 +18,7 @@ function getGroupDisplayName(sig: Partial<PredictiveSignal>): string {
   if (rank === SignalRank.ALAVANCAGEM || sig.isAlavancagem) return "🚀 Alavancagem";
   if (rank === SignalRank.SUPREME || sig.isSupreme) return "👑 Supremo";
   if (rank === SignalRank.RARE || sig.isRare) return "💎 Raro";
+  if (rank === SignalRank.EM_ALTA || sig.isEmAlta) return "🔥 Em Alta";
   return "⚡ Top 1 & Top 3";
 }
 

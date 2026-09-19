@@ -25,6 +25,7 @@ import {
   mergeSignalsLifecycle,
   buildSignalConfluences,
   buildStrategyTriggeredSignals,
+  buildEmAltaSignals,
   type RawCandidate,
   SignalRank,
   extractSignalStrategies,
@@ -422,9 +423,11 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
             (ana.text.startsWith("A18") || ana.analysis === 18) &&
             (ana.isTendency ||
               (ana.pct && ana.pct.includes("100%")) ||
+              s.isEmAlta ||
+              s.category === "em_alta" ||
               s.isHighTendency);
           const isOtherTendency =
-            !isA18Tendency && ana.isTendency;
+            !isA18Tendency && (ana.isTendency || s.isEmAlta || s.category === "em_alta");
 
           return (
             <span
@@ -732,31 +735,75 @@ export function PredictiveSignals() {
             isValidCycle(c),
         );
 
-        // MÉTODO DE TENDÊNCIA ATUAL (3 ciclos anteriores válidos mais recentes)
-        // Substitui integralmente o modelo antigo de contagem em 5 ciclos
-        if (pastValid.length < 3) continue;
+        // TENDÊNCIA: baseada exclusivamente nos 3 ciclos mais recentes daquela mesma análise
+        if (pastValid.length >= 3) {
+          const tendencyResult = computeAnalysisTendency(pastValid, item.open.triggerAt);
+          if (tendencyResult.hasTendency && tendencyResult.tendency) {
+            const t = tendencyResult.tendency;
+            let targetMinutes = t.gap;
+            if ([17, 18].includes(item.analysis)) targetMinutes += 1;
+            const at = addMinutes(item.open.triggerAt, targetMinutes);
+            const targetMs = at.getTime();
 
-        const tendencyResult = computeAnalysisTendency(pastValid, item.open.triggerAt);
-        if (!tendencyResult.hasTendency || !tendencyResult.tendency) continue;
+            if (targetMs >= now.getTime() - 60_000) {
+              const stratKey =
+                item.analysis >= 50 && item.analysis <= 56
+                  ? `Q${item.analysis - 49}`
+                  : `A${item.analysis}`;
 
-        const stratKey =
-          item.analysis >= 50 && item.analysis <= 56
-            ? `Q${item.analysis - 49}`
-            : `A${item.analysis}`;
+              tendencyCandidates.push({
+                analysis: item.analysis,
+                value: item.value,
+                gap: t.gap,
+                targetDate: at,
+                ratio: t.ratio,
+                count: t.count,
+                pct: t.pct,
+                triggerAt: item.open.triggerAt,
+                cycleKey: `TEND_${stratKey}_V${item.value}_T${item.open.triggerAt.getTime()}`,
+                strategyKey: stratKey,
+                label: `Tendência ${t.ratio} (${stratKey}-${item.value})`,
+              });
+            }
+          }
+        }
+
+        // Regra de ciclos para envio de sinais padrão e confluência:
+        // - Análise "Quebra de Padrões de Cores" (IDs 50 a 56) e Quebra de Recuperação (IDs 60 a 114):
+        //   Requer no mínimo 4 ciclos no total (3 ciclos anteriores válidos + 1 gatilho ativo).
+        //   Calcula os Top Tempos Recorrentes dos 3 ciclos anteriores (slice(-3)).
+        // - Demais análises padrão:
+        //   Requer no mínimo 4 ciclos anteriores válidos (5 ciclos totais com o gatilho).
+        //   Calcula sobre os 5 ciclos passados mais recentes (slice(-5)).
+        const isColorBreakAnalysis = item.analysis >= 50 && item.analysis <= 56;
+        const isRecoveryBreak = item.analysis >= 60 && item.analysis <= 114;
+        const minRequiredPastValid = isColorBreakAnalysis || isRecoveryBreak ? 3 : 4;
+
+        if (pastValid.length < minRequiredPastValid) continue;
+
+        // Janela estatística: 3 ciclos anteriores para Quebra de Cores e Quebra de Recuperação, ou 5 ciclos passados para as demais
+        const hist =
+          isColorBreakAnalysis || isRecoveryBreak ? pastValid.slice(-3) : pastValid.slice(-5);
+
+        const candidates = computeTop(hist, CANDIDATE_DEPTH);
+        if (!candidates.length) continue;
 
         const cycleKey = `A${item.analysis}_V${item.value}_T${item.open.triggerAt.getTime()}`;
 
-        // Lista de tendências identificadas (3/3 prioritário, seguido de 2/3 e directHits)
-        const allTendencies = tendencyResult.allTendencies || [tendencyResult.tendency];
-        const best = allTendencies[0] || tendencyResult.tendency;
+        // 1. Projeção Top 1 Principal (Regra: Top 1 de 80% a 100%)
+        const top1Candidate = candidates[0];
 
-        // 1. Projeção Primária: Tendência 3/3 (100% de confluência nos 3 ciclos)
-        if (best.ratio === "3/3") {
-          let targetMinutes = best.gap;
+        if (
+          top1Candidate &&
+          top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP1 &&
+          top1Candidate.pct <= MAX_ASSERTIVIDADE_TOP1
+        ) {
+          let targetMinutes = top1Candidate.m;
           if ([17, 18].includes(item.analysis)) targetMinutes += 1;
           const at = addMinutes(item.open.triggerAt, targetMinutes);
           const t = at.getTime();
 
+          // Sem limite superior de 60 minutos: captura projeções futuras em qualquer horizonte
           if (t >= now.getTime() - 60_000) {
             const isTendency = checkHighTendency(engine[item.analysis] || [], item.value);
             const isPossibleRec = activeAlerts.some((alert) => {
@@ -766,10 +813,15 @@ export function PredictiveSignals() {
               return signalTime >= alertStart && signalTime <= alertEnd;
             });
 
+            const stratKey =
+              item.analysis >= 50 && item.analysis <= 56
+                ? `Q${item.analysis - 49}`
+                : `A${item.analysis}`;
+
             rawCandidates.push({
               analysis: item.analysis,
               value: item.value,
-              pct: best.pct, // 100%
+              pct: top1Candidate.pct,
               targetDate: at,
               isTop1: true,
               rank: 1,
@@ -778,31 +830,14 @@ export function PredictiveSignals() {
               strategyKey: stratKey,
               cycleKey,
             });
-
-            tendencyCandidates.push({
-              analysis: item.analysis,
-              value: item.value,
-              gap: best.gap,
-              targetDate: at,
-              ratio: best.ratio,
-              count: best.count,
-              pct: best.pct,
-              triggerAt: item.open.triggerAt,
-              cycleKey: `TEND_${stratKey}_V${item.value}_T${item.open.triggerAt.getTime()}`,
-              strategyKey: stratKey,
-              label: `Tendência ${best.ratio} (${stratKey}-${item.value})`,
-            });
           }
-        }
-
-        // 2. Projeções Secundárias / Confluência (Tendências 2/3 ou secundárias do mesmo gatilho)
-        const secondaryTendencies =
-          best.ratio === "3/3"
-            ? allTendencies.slice(1)
-            : allTendencies;
-
-        secondaryTendencies.forEach((cand, idx) => {
-          let targetMinutes = cand.gap;
+        } else if (
+          top1Candidate &&
+          top1Candidate.pct >= MIN_ASSERTIVIDADE_TOP3 &&
+          top1Candidate.pct <= MAX_ASSERTIVIDADE_TOP3
+        ) {
+          // Se estiver na faixa de 75-79%, atua estritamente como confluência (rank 2)
+          let targetMinutes = top1Candidate.m;
           if ([17, 18].includes(item.analysis)) targetMinutes += 1;
           const at = addMinutes(item.open.triggerAt, targetMinutes);
           const t = at.getTime();
@@ -816,31 +851,61 @@ export function PredictiveSignals() {
               return signalTime >= alertStart && signalTime <= alertEnd;
             });
 
+            const stratKey =
+              item.analysis >= 50 && item.analysis <= 56
+                ? `Q${item.analysis - 49}`
+                : `A${item.analysis}`;
+
             rawCandidates.push({
               analysis: item.analysis,
               value: item.value,
-              pct: cand.pct, // 66.7% para 2/3
+              pct: top1Candidate.pct,
+              targetDate: at,
+              isTop1: false,
+              rank: 2,
+              isHighTendency: isTendency,
+              isRecAlert: isPossibleRec,
+              strategyKey: stratKey,
+              cycleKey,
+            });
+          }
+        }
+
+        // 2. Projeções Secundárias Top 2 ao Top 3 (Validadores: Regra Top 2/3 de 75% a 79%)
+        candidates.slice(1, TOP3_DEPTH).forEach((cand, idx) => {
+          if (cand.pct < MIN_ASSERTIVIDADE_TOP3 || cand.pct > MAX_ASSERTIVIDADE_TOP3) return;
+
+          let m = cand.m;
+          if ([17, 18].includes(item.analysis)) m += 1;
+          const at = addMinutes(item.open.triggerAt, m);
+          const t = at.getTime();
+
+          // Sem limite superior de 60 minutos: captura projeções futuras em qualquer horizonte
+          if (t >= now.getTime() - 60_000) {
+            const isTendency = checkHighTendency(engine[item.analysis] || [], item.value);
+            const isPossibleRec = activeAlerts.some((alert) => {
+              const signalTime = at.getTime();
+              const alertStart = alert.triggerAt.getTime();
+              const alertEnd = alertStart + alert.duration * 60000;
+              return signalTime >= alertStart && signalTime <= alertEnd;
+            });
+
+            const candStratKey =
+              item.analysis >= 50 && item.analysis <= 56
+                ? `Q${item.analysis - 49}`
+                : `A${item.analysis}`;
+
+            rawCandidates.push({
+              analysis: item.analysis,
+              value: item.value,
+              pct: cand.pct,
               targetDate: at,
               isTop1: false,
               rank: idx + 2,
               isHighTendency: isTendency,
               isRecAlert: isPossibleRec,
-              strategyKey: stratKey,
-              cycleKey: `${cycleKey}_G${cand.gap}`,
-            });
-
-            tendencyCandidates.push({
-              analysis: item.analysis,
-              value: item.value,
-              gap: cand.gap,
-              targetDate: at,
-              ratio: cand.ratio,
-              count: cand.count,
-              pct: cand.pct,
-              triggerAt: item.open.triggerAt,
-              cycleKey: `TEND_${stratKey}_V${item.value}_T${item.open.triggerAt.getTime()}_G${cand.gap}`,
-              strategyKey: stratKey,
-              label: `Tendência ${cand.ratio} (${stratKey}-${item.value})`,
+              strategyKey: candStratKey,
+              cycleKey,
             });
           }
         });
@@ -871,8 +936,23 @@ export function PredictiveSignals() {
         tendencyCandidates,
       );
 
-      // 4. Todas as análises aderiram à Tendência Atual; o grupo 'Em Alta' deixa de existir
-      const allGeneratedSignals = strategySignals;
+      // 4. Grupo 'EM ALTA':
+      // - Fica abaixo de todos os outros grupos (Alavancagem, Supremo, Raro, Top 1 & Top 3).
+      // - Só recebe sinais da "TENDÊNCIA".
+      // - Regra 3: Apenas tendências com 100% de 3/3 têm poder para enviar sinal no grupo 'EM ALTA'.
+      // - Regra 3: Tendências acima de 60% e abaixo de 100% (2/3) só servem de confluência exclusivamente no grupo 'EM ALTA'.
+      // - Regra 4: Se algum outro grupo mostrar mesmo horário (sinal), o sinal do grupo 'em alta' some.
+      const emAltaSignalsGenerated = buildEmAltaSignals(
+        tendencyCandidates,
+        strategySignals,
+        now.getTime(),
+        {
+          activeAnalysisIds: activeSet,
+        },
+      );
+
+      // 5. Todas as estratégias ativas servindo apenas de confluência (não geram sinais avulsos)
+      const allGeneratedSignals = [...strategySignals, ...emAltaSignalsGenerated];
 
       // Constrói lista m1 (sinais elegíveis)
       const m1: Mode1Signal[] = allGeneratedSignals.map((s) => {
@@ -955,6 +1035,7 @@ export function PredictiveSignals() {
       const currentStored = getPredictiveSignals();
       const cleaned = currentStored.filter((sig) => {
         if (sig.outcome !== "pending") return true;
+        if (sig.category === "em_alta" || sig.isEmAlta) return true;
         const primaries =
           sig.primaryAnalyses && sig.primaryAnalyses.length > 0
             ? sig.primaryAnalyses
@@ -1002,8 +1083,10 @@ export function PredictiveSignals() {
                   ? "supreme"
                   : s.isRare
                     ? "rare"
-                    : "top1_top3",
-            isTop1: !s.isNoConfluence,
+                    : s.isEmAlta || s.category === "em_alta"
+                      ? "em_alta"
+                      : "top1_top3",
+            isTop1: !s.isNoConfluence && !s.isEmAlta && s.category !== "em_alta",
             times: [s.at],
             entryDate: s.at,
             outcome: "pending" as const,
@@ -1029,25 +1112,32 @@ export function PredictiveSignals() {
         const rank = getSignalRank(s);
         const isNoConf =
           !!s.isNoConfluence || rank === SignalRank.NO_CONFLUENCE || s.category === "no_confluence";
+        const isEmAlta =
+          !isNoConf &&
+          (rank === SignalRank.EM_ALTA || s.category === "em_alta" || !!(s as any).isEmAlta);
 
         const category = isNoConf
           ? "no_confluence"
-          : rank === SignalRank.ALAVANCAGEM
-            ? "alavancagem"
-            : rank === SignalRank.SUPREME
-              ? "supreme"
-              : rank === SignalRank.RARE
-                ? "rare"
-                : "top1_top3";
+          : isEmAlta
+            ? "em_alta"
+            : rank === SignalRank.ALAVANCAGEM
+              ? "alavancagem"
+              : rank === SignalRank.SUPREME
+                ? "supreme"
+                : rank === SignalRank.RARE
+                  ? "rare"
+                  : "top1_top3";
         const groupName = isNoConf
           ? "E1–E15 (Sem Confluência)"
-          : rank === SignalRank.ALAVANCAGEM
-            ? "Alavancagem"
-            : rank === SignalRank.SUPREME
-              ? "Supremo"
-              : rank === SignalRank.RARE
-                ? "Raro"
-                : "Top 1 & Top 3";
+          : isEmAlta
+            ? "Em Alta"
+            : rank === SignalRank.ALAVANCAGEM
+              ? "Alavancagem"
+              : rank === SignalRank.SUPREME
+                ? "Supremo"
+                : rank === SignalRank.RARE
+                  ? "Raro"
+                  : "Top 1 & Top 3";
 
         return {
           ...s,
@@ -1059,7 +1149,8 @@ export function PredictiveSignals() {
           isAlavancagem: !isNoConf && rank === SignalRank.ALAVANCAGEM,
           isSupreme: !isNoConf && rank === SignalRank.SUPREME,
           isRare: !isNoConf && rank === SignalRank.RARE,
-          isTop1: !isNoConf,
+          isEmAlta,
+          isTop1: !isNoConf && !isEmAlta,
         };
       })
       .filter((s) => {
@@ -1074,7 +1165,8 @@ export function PredictiveSignals() {
           rank === SignalRank.ALAVANCAGEM ||
           rank === SignalRank.SUPREME ||
           rank === SignalRank.RARE ||
-          rank === SignalRank.TOP1_TOP3
+          rank === SignalRank.TOP1_TOP3 ||
+          rank === SignalRank.EM_ALTA
         );
       })
       .sort((a, b) => {
@@ -1120,6 +1212,16 @@ export function PredictiveSignals() {
     });
   }, [activeSignals]);
 
+  // 5. 🔥 EM ALTA (Rank 1: Sinais exclusivos de Tendência 3/3 gerados pelo módulo de tendências)
+  const emAltaSignals = useMemo(() => {
+    return activeSignals.filter((s) => {
+      if (s.isNoConfluence || s.category === "no_confluence") return false;
+      if (s.isAlavancagem || s.isSupreme || s.isRare) return false;
+      const rank = getSignalRank(s);
+      return rank === SignalRank.EM_ALTA || s.category === "em_alta" || s.isEmAlta === true;
+    });
+  }, [activeSignals]);
+
   // Sincroniza os sinais gerados no `signalsStore` garantindo ciclo de vida e não-desaparecimento
   useEffect(() => {
     if (!loading && rows.length > 0) {
@@ -1146,36 +1248,44 @@ export function PredictiveSignals() {
             s.category === "no_confluence" ||
             evalLevel?.category === "no_confluence";
 
+          const isEmAlta = !isNoConf && (s.isEmAlta || s.category === "em_alta");
+
           const category = isNoConf
             ? "no_confluence"
-            : s.isAlavancagem
-              ? "alavancagem"
-              : s.isSupreme
-                ? "supreme"
-                : s.isRare
-                  ? "rare"
-                  : evalLevel?.category || "top1_top3";
+            : isEmAlta
+              ? "em_alta"
+              : s.isAlavancagem
+                ? "alavancagem"
+                : s.isSupreme
+                  ? "supreme"
+                  : s.isRare
+                    ? "rare"
+                    : evalLevel?.category || "top1_top3";
 
           const groupName = isNoConf
             ? "E1–E15 (Sem Confluência)"
-            : s.isAlavancagem
-              ? "Alavancagem"
-              : s.isSupreme
-                ? "Supremo"
-                : s.isRare
-                  ? "Raro"
-                  : evalLevel?.groupName || "Top 1 & Top 3";
+            : isEmAlta
+              ? "Em Alta"
+              : s.isAlavancagem
+                ? "Alavancagem"
+                : s.isSupreme
+                  ? "Supremo"
+                  : s.isRare
+                    ? "Raro"
+                    : evalLevel?.groupName || "Top 1 & Top 3";
 
           const medal = isNoConf
             ? "⚪ SEM CONFLUÊNCIA"
-            : evalLevel?.medal ||
-              (s.isAlavancagem
-                ? "🚀 ALAVANCAGEM"
-                : s.isSupreme
-                  ? "👑 SUPREMO"
-                  : s.isRare
-                    ? "💎 RARO"
-                    : "⚡ TOP 1 & TOP 3");
+            : isEmAlta
+              ? s.medal || s.label || "🔥 EM ALTA (Tendência 3/3)"
+              : evalLevel?.medal ||
+                (s.isAlavancagem
+                  ? "🚀 ALAVANCAGEM"
+                  : s.isSupreme
+                    ? "👑 SUPREMO"
+                    : s.isRare
+                      ? "💎 RARO"
+                      : "⚡ TOP 1 & TOP 3");
 
           return {
             key: canonicalKey,
@@ -1370,11 +1480,26 @@ export function PredictiveSignals() {
                 </section>
               )}
 
+              {/* 5. 🔥 EM ALTA (Tendência 3/3) - Fica abaixo de todos os outros grupos */}
+              {emAltaSignals.length > 0 && (
+                <section className="space-y-3">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-orange-400">
+                    <Flame className="h-3.5 w-3.5 text-orange-400 animate-pulse" /> 🔥 EM ALTA
+                    (Tendência 3/3)
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {emAltaSignals.map((s) => (
+                      <SignalCard key={s.key} signal={s} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
               {activeSignals.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-10">
                   {loading
                     ? "Carregando resultados e calculando sinais..."
-                    : "Sem sinais ativos no momento (aguardando confluências Top 1 & Top 3, Raro, Supremo ou Alavancagem)."}
+                    : "Sem sinais ativos no momento (aguardando confluências Top 1 & Top 3, Raro, Supremo, Alavancagem ou Em Alta)."}
                 </p>
               )}
             </div>
