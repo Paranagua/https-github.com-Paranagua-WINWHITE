@@ -137,14 +137,14 @@ function AnalysisPanel({
     return allStoneCycles.filter((c) => c !== openCycle && isValidCycle(c));
   }, [allStoneCycles, openCycle]);
 
-  // Regra Estrita dos 5 Ciclos:
-  // - Requer no mínimo 4 ciclos anteriores válidos (+ gatilho ativo = 5 ciclos no total)
-  const isEligible = pastValidCycles.length >= 4;
+  // Regra dos 3 Ciclos:
+  // - Requer no mínimo 3 ciclos anteriores válidos
+  const isEligible = pastValidCycles.length >= 3;
 
-  // Janela estatística usada para o cálculo: 4 ciclos passados (se total for 5) ou 5 ciclos passados mais recentes (se total for 6+)
+  // Janela estatística usada para o cálculo: 3 ciclos passados anteriores ao gatilho
   const calculationBase = useMemo(() => {
     if (!isEligible) return [];
-    return pastValidCycles.slice(-5);
+    return pastValidCycles.slice(-3);
   }, [isEligible, pastValidCycles]);
 
   const baseSet = useMemo(() => new Set(calculationBase), [calculationBase]);
@@ -196,7 +196,7 @@ function AnalysisPanel({
             ) : (
               <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-400">
                 <AlertCircle className="h-2.5 w-2.5" />
-                Bloqueada ({pastValidCycles.length}/4 ciclos válidos)
+                Bloqueada ({pastValidCycles.length}/3 ciclos válidos)
               </span>
             )}
           </div>
@@ -414,7 +414,7 @@ function AnalysisPanel({
                     Análise Bloqueada para Sinais
                   </span>
                   <p className="mt-1 text-[11px] text-muted-foreground max-w-[240px]">
-                    Requer no mínimo 5 ciclos no total (4 passados válidos + 1 gatilho ativo).
+                    Requer no mínimo 4 ciclos no total (3 passados válidos + 1 gatilho ativo).
                     Atualmente possui apenas {pastValidCycles.length} ciclo(s) válido(s).
                   </p>
                 </div>

@@ -418,14 +418,8 @@ class AutonomousAuditEngine {
         tendencyCandidates,
       );
 
-      const emAltaSignals = buildEmAltaSignals(
-        tendencyCandidates,
-        triggeredSignals,
-        now.getTime(),
-        {
-          activeAnalysisIds: this.activeSignalAnalysisIds,
-        },
-      );
+      // Grupo Em Alta e cálculo de tendência pausados a pedido do usuário
+      const emAltaSignals: PredictiveSignal[] = [];
 
       // 4. Todas as estratégias ativas servindo apenas de confluência
       const allAutonomousSignals = [...triggeredSignals, ...emAltaSignals];
@@ -1041,7 +1035,8 @@ class AutonomousAuditEngine {
           isValidCycle(c),
       );
 
-      // TENDÊNCIA: baseada exclusivamente nos 3 ciclos mais recentes daquela mesma análise
+      // TENDÊNCIA: cálculo pausado a pedido do usuário (mantendo tendencyCandidates vazio)
+      /*
       if (pastValid.length >= 3) {
         const tendencyResult = computeAnalysisTendency(pastValid, item.open.triggerAt);
         if (tendencyResult.hasTendency && tendencyResult.tendency) {
@@ -1073,22 +1068,16 @@ class AutonomousAuditEngine {
           }
         }
       }
+      */
 
-      // Regra de ciclos para envio de sinais padrão e confluência:
-      // - Análise "Quebra de Padrões de Cores" (IDs 50 a 56) e Quebra de Recuperação (IDs 60 a 114):
-      //   Requer no mínimo 4 ciclos no total (3 ciclos anteriores válidos + 1 gatilho ativo).
-      //   Calcula os Top Tempos Recorrentes dos 3 ciclos anteriores (slice(-3)).
-      // - Demais análises padrão:
-      //   Requer no mínimo 4 ciclos anteriores válidos (5 ciclos totais com o gatilho).
-      //   Calcula sobre os 5 ciclos passados mais recentes (slice(-5)).
-      const isColorBreakAnalysis = item.analysis >= 50 && item.analysis <= 56;
-      const isRecoveryBreak = item.analysis >= 60 && item.analysis <= 114;
-      const minRequiredPastValid = isColorBreakAnalysis || isRecoveryBreak ? 3 : 4;
+      // Regra de ciclos para cálculo dos Tops:
+      // Calcula estritamente sobre os 3 ciclos passados anteriores ao gatilho (slice(-3)).
+      // Requer no mínimo 3 ciclos anteriores válidos.
+      const minRequiredPastValid = 3;
 
       if (pastValid.length < minRequiredPastValid) continue;
 
-      const hist =
-        isColorBreakAnalysis || isRecoveryBreak ? pastValid.slice(-3) : pastValid.slice(-5);
+      const hist = pastValid.slice(-3);
       const candidates = computeTop(hist, CANDIDATE_DEPTH);
       if (!candidates.length) continue;
 

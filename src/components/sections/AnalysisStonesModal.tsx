@@ -380,7 +380,7 @@ export function AnalysisStonesModal({
       const pastValid = cList.filter((c) => c !== openCycle && isValidCycle(c));
       const validCycles = pastValid.length;
       const isColorBreak = key.startsWith("Q");
-      const isEligible = isColorBreak ? totalCycles >= 4 && validCycles >= 3 : validCycles >= 4;
+      const isEligible = isColorBreak ? totalCycles >= 4 && validCycles >= 3 : validCycles >= 3;
 
       let top1Pct: number | null = null;
       let top1Minute: number | null = null;
@@ -389,7 +389,7 @@ export function AnalysisStonesModal({
       let status: StoneStatItem["status"] = "bloqueada";
 
       if (isEligible) {
-        const calculationBase = isColorBreak ? pastValid.slice(-3) : pastValid.slice(-5);
+        const calculationBase = pastValid.slice(-3);
         const topGroups = computeTop(calculationBase, 3);
         if (topGroups.length > 0) {
           const t1 = topGroups[0];

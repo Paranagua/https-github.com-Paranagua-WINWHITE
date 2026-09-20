@@ -1596,6 +1596,9 @@ export function buildEmAltaSignals(
     activeAnalysisIds?: Set<number> | number[];
   },
 ): PredictiveSignal[] {
+  // Grupo 'Em Alta' e cálculo de tendência pausados a pedido do usuário
+  return [];
+
   const activeIds = options?.activeAnalysisIds
     ? options.activeAnalysisIds instanceof Set
       ? options.activeAnalysisIds
