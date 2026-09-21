@@ -11,7 +11,8 @@ export interface AnalysisDefinition {
     | "color_breaks"
     | "minutes"
     | "recovery_breaks"
-    | "strategies";
+    | "strategies"
+    | "white_neighbors";
   categoryLabel: string;
   defaultActive: boolean;
   spin?: number;
@@ -28,6 +29,8 @@ export const DEFAULT_PRIMARY_SIGNAL_ANALYSIS_IDS = new Set<number>([
   50, 51, 52, 53, 54, 55, 56,
   // Estratégia F2
   202,
+  // Pedras do Branco (0)
+  37, 38,
 ]);
 
 // Catálogo estruturado de todas as análises do sistema
@@ -368,6 +371,24 @@ export const ALL_ANALYSIS_DEFINITIONS: AnalysisDefinition[] = [
     name: "Estratégia F2 (Virada de Cor)",
     category: "strategies",
     categoryLabel: "Estratégias",
+    defaultActive: true,
+  },
+
+  // 8. Pedras do Branco (0) — Anterior e Posterior
+  {
+    id: 37,
+    code: "A37",
+    name: "Pedra Anterior ao 0",
+    category: "white_neighbors",
+    categoryLabel: "Pedras do Branco",
+    defaultActive: true,
+  },
+  {
+    id: 38,
+    code: "A38",
+    name: "Pedra Posterior ao 0",
+    category: "white_neighbors",
+    categoryLabel: "Pedras do Branco",
     defaultActive: true,
   },
 ];

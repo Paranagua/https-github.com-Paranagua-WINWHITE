@@ -583,6 +583,9 @@ export default function AnaliseSection() {
   const aSoma19Cycles = cyclesMap[15] || [];
   const aSoma21Cycles = cyclesMap[16] || [];
 
+  const a37Cycles = cyclesMap[37] || [];
+  const a38Cycles = cyclesMap[38] || [];
+
   // Estatísticas agregadas para o seletor superior de pedras 0..14
   const stats = useMemo(() => {
     const s: Record<
@@ -628,6 +631,7 @@ export default function AnaliseSection() {
 
   const categories = [
     { id: "all", label: "Todas as Análises", icon: Sparkles },
+    { id: "white_neighbors", label: "Pedras do Branco (A37 e A38)", icon: Shield },
     { id: "recovery_breaks", label: "Quebra de Recuperação (A60 a A114)", icon: RotateCcw },
     { id: "color_breaks", label: "Quebra de Padrões de Cores", icon: Palette },
     { id: "minutes", label: "Minutos (0 a 9)", icon: Clock },
@@ -659,6 +663,7 @@ export default function AnaliseSection() {
     return list;
   }, [activeCategory, filterSearch]);
 
+  const showWhiteNeighbors = activeCategory === "all" || activeCategory === "white_neighbors";
   const showRecoveryBreaks = activeCategory === "all" || activeCategory === "recovery_breaks";
   const showColorBreaks = activeCategory === "all" || activeCategory === "color_breaks";
   const showMinutes = activeCategory === "all" || activeCategory === "minutes";
@@ -1458,6 +1463,44 @@ export default function AnaliseSection() {
           selectedPedra={selected}
           now={now}
         />
+      )}
+
+      {/* 7. SEÇÃO DE PEDRAS DO BRANCO (A37 E A38) */}
+      {showWhiteNeighbors && (
+        <>
+          <AnalysisPanel
+            key={`${selected}-a37`}
+            eyebrow="Análise 37 · Pedra Anterior ao 0"
+            title={`PEDRA ${selected}`}
+            subtitle="Gatilho: Pedra (1 a 14) anterior ao '0' (Branco). Verifica os próximos 14 gaps até os próximos Brancos."
+            loading={loading}
+            err={err}
+            emptyLabel={`Nenhum gatilho de pedra ${selected} anterior ao 0 registrado recentemente.`}
+            cycles={a37Cycles}
+            pedra={selected}
+            now={now}
+            analysisId={37}
+            isSignalActive={isActive(37)}
+            onToggleSignal={() => toggle(37)}
+            detailFormatter={(c) => `Pedra ${c.value} anterior ao Branco`}
+          />
+          <AnalysisPanel
+            key={`${selected}-a38`}
+            eyebrow="Análise 38 · Pedra Posterior ao 0"
+            title={`PEDRA ${selected}`}
+            subtitle="Gatilho: Pedra (1 a 14) posterior ao '0' (Branco). Verifica os próximos 14 gaps até os próximos Brancos."
+            loading={loading}
+            err={err}
+            emptyLabel={`Nenhum gatilho de pedra ${selected} posterior ao 0 registrado recentemente.`}
+            cycles={a38Cycles}
+            pedra={selected}
+            now={now}
+            analysisId={38}
+            isSignalActive={isActive(38)}
+            onToggleSignal={() => toggle(38)}
+            detailFormatter={(c) => `Pedra ${c.value} posterior ao Branco`}
+          />
+        </>
       )}
     </main>
   );

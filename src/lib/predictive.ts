@@ -408,6 +408,58 @@ export function buildA1Minuto9(rows: Row[]): Cycle[] {
 }
 
 /**
+ * Análise 37 — Gatilho: pedra (1 a 14) anterior ao "0". Verifica os próximos 14 gaps.
+ * Segue o mesmo modelo da análise de "minutos".
+ */
+export function buildA37(rows: Row[]): Cycle[] {
+  const out: Cycle[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const currentRoll = Number(rows[i].roll);
+    if (currentRoll !== 0) continue;
+
+    const prevRoll = Number(rows[i - 1].roll);
+    if (!Number.isFinite(prevRoll) || prevRoll < 1 || prevRoll > 14) continue;
+
+    const dt = parseUtcDate(rows[i].created_at);
+    if (Number.isNaN(dt.getTime())) continue;
+
+    out.push({
+      value: prevRoll,
+      analysis: 37,
+      triggerAt: dt,
+      gaps: collectGaps(rows, i, dt),
+    });
+  }
+  return out;
+}
+
+/**
+ * Análise 38 — Gatilho: pedra (1 a 14) posterior ao "0". Verifica os próximos 14 gaps.
+ * Segue o mesmo modelo da análise de "minutos".
+ */
+export function buildA38(rows: Row[]): Cycle[] {
+  const out: Cycle[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const currentRoll = Number(rows[i].roll);
+    if (!Number.isFinite(currentRoll) || currentRoll < 1 || currentRoll > 14) continue;
+
+    const prevRoll = Number(rows[i - 1].roll);
+    if (prevRoll !== 0) continue;
+
+    const dt = parseUtcDate(rows[i].created_at);
+    if (Number.isNaN(dt.getTime())) continue;
+
+    out.push({
+      value: currentRoll,
+      analysis: 38,
+      triggerAt: dt,
+      gaps: collectGaps(rows, i, dt),
+    });
+  }
+  return out;
+}
+
+/**
  * Análise 19 — Padrão 3 Pedras: Pontas Iguais (P1 - P2 - P1, com P2 != P1).
  * Verifica tempo até o branco indexado pela numeração da 1ª e última pedra (P1).
  */

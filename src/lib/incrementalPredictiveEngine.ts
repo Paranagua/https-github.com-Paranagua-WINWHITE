@@ -93,7 +93,7 @@ export const ANALYSIS_NAME_Q = "Quebra de Recuperação";
 
 export const MAIN_ANALYSIS_IDS: number[] = [
   2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
-  31, 32, 33, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56,
+  31, 32, 33, 34, 35, 36, 37, 38, 50, 51, 52, 53, 54, 55, 56,
 ];
 for (let id = 60; id <= 114; id++) {
   MAIN_ANALYSIS_IDS.push(id);
@@ -502,6 +502,34 @@ export class IncrementalPredictiveEngine {
             triggerAt: currentDate,
           });
         }
+      }
+    }
+
+    // --- Análise 37: Gatilho Pedra (1 a 14) anterior ao "0" ---
+    // Ativa no momento em que o "0" (Branco) ocorre, indexado pela pedra anterior (1 a 14)
+    if (len >= 2 && currentRoll === 0) {
+      const prevRow = buffer[len - 2];
+      const prevRoll = Number(prevRow.roll);
+      if (Number.isFinite(prevRoll) && prevRoll >= 1 && prevRoll <= 14) {
+        triggers.push({
+          analysisId: 37,
+          value: prevRoll,
+          triggerAt: currentDate,
+        });
+      }
+    }
+
+    // --- Análise 38: Gatilho Pedra (1 a 14) posterior ao "0" ---
+    // Ativa no momento em que a pedra posterior (1 a 14) é confirmada após o "0" (Branco)
+    if (len >= 2 && currentRoll >= 1 && currentRoll <= 14) {
+      const prevRow = buffer[len - 2];
+      const prevRoll = Number(prevRow.roll);
+      if (prevRoll === 0) {
+        triggers.push({
+          analysisId: 38,
+          value: currentRoll,
+          triggerAt: currentDate,
+        });
       }
     }
 

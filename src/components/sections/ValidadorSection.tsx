@@ -59,6 +59,8 @@ import {
   buildA1Minuto8,
   buildA2Minuto8,
   buildA1Minuto9,
+  buildA37,
+  buildA38,
   buildASandwichPontas,
   buildASandwichMeio,
   buildA7_11,
@@ -722,6 +724,24 @@ export default function SignalPercentageValidator() {
         isPrimary: false,
         group: "minutos",
         groupName: "Minutos",
+      },
+      {
+        key: "A37",
+        label: "A37 · Pedra Anterior ao 0",
+        fn: buildA37,
+        isTop1: true,
+        isPrimary: true,
+        group: "white_neighbors",
+        groupName: "Pedras do Branco",
+      },
+      {
+        key: "A38",
+        label: "A38 · Pedra Posterior ao 0",
+        fn: buildA38,
+        isTop1: true,
+        isPrimary: true,
+        group: "white_neighbors",
+        groupName: "Pedras do Branco",
       },
     ];
 

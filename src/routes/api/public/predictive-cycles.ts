@@ -114,9 +114,13 @@ export const Route = createFileRoute("/api/public/predictive-cycles")({
                 analysis_code: r.analysis_code ? String(r.analysis_code) : `A${r.analysis}`,
                 analysis_name: r.analysis_name
                   ? String(r.analysis_name)
-                  : Number(r.analysis) >= 60 && Number(r.analysis) <= 114
-                    ? `Quebra de Recuperação (Giro ${Number(r.analysis) - 34})`
-                    : `Análise ${r.analysis}`,
+                  : Number(r.analysis) === 37
+                    ? "Pedra Anterior ao 0"
+                    : Number(r.analysis) === 38
+                      ? "Pedra Posterior ao 0"
+                      : Number(r.analysis) >= 60 && Number(r.analysis) <= 114
+                        ? `Quebra de Recuperação (Giro ${Number(r.analysis) - 34})`
+                        : `Análise ${r.analysis}`,
                 value: Number(r.value),
                 trigger_at: new Date(r.trigger_at).toISOString(),
                 gaps: Array.isArray(r.gaps) ? r.gaps.map(Number) : [],

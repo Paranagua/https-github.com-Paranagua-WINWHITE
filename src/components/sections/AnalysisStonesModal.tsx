@@ -39,6 +39,8 @@ import {
   buildA1Minuto8,
   buildA2Minuto8,
   buildA1Minuto9,
+  buildA37,
+  buildA38,
   computeTop,
   isValidCycle,
   type Cycle,
@@ -186,6 +188,10 @@ function getCyclesForAnalysis(key: string, id: number | undefined, rows: Row[]):
         return buildA1Minuto9(rows);
       case "A3":
         return buildA3(rows);
+      case "A37":
+        return buildA37(rows);
+      case "A38":
+        return buildA38(rows);
       default:
         if (id === 2) return buildA2(rows);
         if (id === 19) return buildASandwichPontas(rows);
@@ -210,6 +216,8 @@ function getCyclesForAnalysis(key: string, id: number | undefined, rows: Row[]):
         if (id === 35) return buildA2Minuto8(rows);
         if (id === 36) return buildA1Minuto9(rows);
         if (id === 3) return buildA3(rows);
+        if (id === 37) return buildA37(rows);
+        if (id === 38) return buildA38(rows);
         if (typeof id === "number" && id >= 50 && id <= 56) {
           const map: Record<number, string> = {
             50: "alternados",

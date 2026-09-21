@@ -78,9 +78,14 @@ export function cycleToRecord(
 
   const isRecoveryBreak = cycle.analysis >= 60 && cycle.analysis <= 114;
   const defCode = `A${cycle.analysis}`;
-  const defName = isRecoveryBreak
-    ? `Quebra de Recuperação (Giro ${cycle.analysis - 34})`
-    : `Análise ${cycle.analysis}`;
+  const defName =
+    cycle.analysis === 37
+      ? "Pedra Anterior ao 0"
+      : cycle.analysis === 38
+        ? "Pedra Posterior ao 0"
+        : isRecoveryBreak
+          ? `Quebra de Recuperação (Giro ${cycle.analysis - 34})`
+          : `Análise ${cycle.analysis}`;
 
   return {
     cycle_key: getCycleKey(cycle.analysis, cycle.value, triggerDate),

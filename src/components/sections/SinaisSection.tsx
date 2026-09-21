@@ -45,7 +45,15 @@ interface PrimaryAnalysisMetadataItem {
   analysisId?: number;
   name: string;
   shortLabel: string;
-  category: "pedras" | "sequencia" | "somas" | "cores" | "minutos" | "recuperacao" | "estrategias";
+  category:
+    | "pedras"
+    | "sequencia"
+    | "somas"
+    | "cores"
+    | "minutos"
+    | "recuperacao"
+    | "estrategias"
+    | "white_neighbors";
   categoryLabel: string;
   badge: string;
   description: string;
@@ -891,6 +899,28 @@ const ALL_PRIMARY_ANALYSES_METADATA: PrimaryAnalysisMetadataItem[] = [
     parentKey: "B",
     ponta: p,
   })),
+
+  // 7. Pedras do Branco (A37 e A38)
+  {
+    key: "A37",
+    analysisId: 37,
+    name: "Análise 37 · Pedra Anterior ao 0",
+    shortLabel: "A37",
+    category: "white_neighbors",
+    categoryLabel: "Pedras do Branco",
+    badge: "bg-fuchsia-500/15 text-fuchsia-400 border-fuchsia-500/30",
+    description: "Pedra (1 a 14) imediatamente anterior ao Branco (0)",
+  },
+  {
+    key: "A38",
+    analysisId: 38,
+    name: "Análise 38 · Pedra Posterior ao 0",
+    shortLabel: "A38",
+    category: "white_neighbors",
+    categoryLabel: "Pedras do Branco",
+    badge: "bg-fuchsia-500/15 text-fuchsia-400 border-fuchsia-500/30",
+    description: "Pedra (1 a 14) imediatamente posterior ao Branco (0)",
+  },
 ];
 
 type Result = {
@@ -1092,7 +1122,15 @@ function SinaisSectionContent() {
   const [predictiveList, setPredictiveList] = useState<PredictiveSignal[]>(getPredictiveSignals());
   const [auditFilter, setAuditFilter] = useState<"geral" | "hoje">("geral");
   const [primaryTabFilter, setPrimaryTabFilter] = useState<
-    "todas" | "pedras" | "sequencia" | "somas" | "cores" | "minutos" | "recuperacao" | "estrategias"
+    | "todas"
+    | "pedras"
+    | "sequencia"
+    | "somas"
+    | "cores"
+    | "minutos"
+    | "recuperacao"
+    | "estrategias"
+    | "white_neighbors"
   >("todas");
   const [selectedMinuteFilter, setSelectedMinuteFilter] = useState<number | null>(null);
   const [selectedStrategyGroup, setSelectedStrategyGroup] = useState<
@@ -2027,6 +2065,21 @@ function SinaisSectionContent() {
                     >
                       Quebra de Recuperação (
                       {primaryAnalysisStats.filter((s) => s.category === "recuperacao").length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPrimaryTabFilter("white_neighbors");
+                        setActiveSubcategoryParent(null);
+                      }}
+                      className={`px-3 py-1 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                        primaryTabFilter === "white_neighbors"
+                          ? "bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30"
+                          : "text-fuchsia-400/50 hover:text-fuchsia-300"
+                      }`}
+                    >
+                      Pedras do Branco (
+                      {primaryAnalysisStats.filter((s) => s.category === "white_neighbors").length})
                     </button>
                     <button
                       type="button"
