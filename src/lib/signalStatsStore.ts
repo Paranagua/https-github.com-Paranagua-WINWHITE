@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { SignalAuditInfo } from "./signalAuditEngine";
 import { extractSignalTimestampMs } from "./whiteStreakFreeze";
+import { isSignalCardEligible } from "./signalHierarchy";
 
 export interface SignalHistoryEntry {
   key: string;
@@ -107,6 +108,11 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
 
       recordCompletedSignal: (signal) =>
         set((state) => {
+          // O painel auditor audita única e exclusivamente sinais que se tornaram cards
+          if (!isSignalCardEligible(signal)) {
+            return state;
+          }
+
           const existingIndex = state.recentSignals.findIndex((s) => s.key === signal.key);
           const alreadyExists = existingIndex >= 0;
           const prevEntry = alreadyExists ? state.recentSignals[existingIndex] : null;
@@ -348,7 +354,8 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
       syncWithServerData: (data) =>
         set((state) => {
           if (!data) return state;
-          const incomingSignals = Array.isArray(data.recentSignals) ? data.recentSignals : [];
+          const incomingSignals = (Array.isArray(data.recentSignals) ? data.recentSignals : [])
+            .filter(isSignalCardEligible);
 
           // Se o servidor foi limpo (recentSignals vazio e sem stats), zera tudo localmente também
           if (
@@ -365,9 +372,9 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
 
           // Mescla os sinais com base na chave única
           const signalMap = new Map<string, SignalHistoryEntry>();
-          // Primeiro adiciona os locais que sejam posteriores ao clearedAt
+          // Primeiro adiciona os locais elegíveis que sejam posteriores ao clearedAt
           state.recentSignals
-            .filter((s) => (s.timestamp || 0) > effectiveClearedAt)
+            .filter((s) => isSignalCardEligible(s) && (s.timestamp || 0) > effectiveClearedAt)
             .forEach((s) => signalMap.set(s.key, s));
           // Depois mescla com os do servidor autônomo (priorizando dados de auditoria confirmados)
           incomingSignals
@@ -481,6 +488,11 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
     }),
     {
       name: "freitas-signal-stats-v4",
+      onRehydrateStorage: () => (state) => {
+        if (state && Array.isArray(state.recentSignals)) {
+          state.recentSignals = state.recentSignals.filter(isSignalCardEligible);
+        }
+      },
     },
   ),
 );

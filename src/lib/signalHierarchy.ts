@@ -328,10 +328,11 @@ export function getCanonicalSignalKey(entryDate: Date | string | number): string
 }
 
 /**
- * Obtém o ranking numérico (1 a 4) de um sinal ou categoria.
+ * Obtém o ranking numérico (1 a 5) de um sinal ou categoria.
+ * Retorna NO_CONFLUENCE (0) se o sinal não atende aos requisitos mínimos dos cards.
  */
 export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): SignalRank {
-  if (!sig) return SignalRank.TOP1_TOP3;
+  if (!sig) return SignalRank.NO_CONFLUENCE;
 
   if (typeof sig === "string") {
     const cat = sig.toLowerCase();
@@ -341,7 +342,9 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
     if (cat.includes("alavanc")) return SignalRank.ALAVANCAGEM;
     if (cat.includes("suprem") || cat.includes("winn")) return SignalRank.SUPREME;
     if (cat.includes("rare") || cat.includes("raro")) return SignalRank.RARE;
-    return SignalRank.TOP1_TOP3;
+    if (cat.includes("top1_top3") || cat.includes("top 1 & top 3") || cat.includes("top 1 & 3"))
+      return SignalRank.TOP1_TOP3;
+    return SignalRank.NO_CONFLUENCE;
   }
 
   if (sig.isNoConfluence || (sig.category || "").toLowerCase() === "no_confluence") {
@@ -403,6 +406,8 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
     if (distinctTop1.size === 1 && distinctTop3.size >= 1) {
       return SignalRank.TOP1_TOP3;
     }
+    // Top 1 isolado (1x Top 1 + 0 Top 2/3) ou apenas Top 3 (0x Top 1) NÃO formam card!
+    return SignalRank.NO_CONFLUENCE;
   }
 
   // Fallback por flags/tags
@@ -444,7 +449,48 @@ export function getSignalRank(sig?: Partial<PredictiveSignal> | string | null): 
     return SignalRank.RARE;
   }
 
-  return SignalRank.TOP1_TOP3;
+  if (
+    label.includes("TOP 1 & TOP 3") ||
+    label.includes("TOP 1 & 3") ||
+    label.includes("TOP1 & TOP3") ||
+    medal.includes("TOP 1 & TOP 3") ||
+    conf.includes("TOP 1 & TOP 3")
+  ) {
+    return SignalRank.TOP1_TOP3;
+  }
+
+  return SignalRank.NO_CONFLUENCE;
+}
+
+/**
+ * Determina se um sinal é ELEGÍVEL para ser exibido como CARD na tela e contabilizado no PAINEL AUDITOR.
+ * REGRA ESTRITA: O painel auditor deve auditar ÚNICA E EXCLUSIVAMENTE os sinais que atingiram os critérios de card:
+ * - 🚀 Alavancagem (alavancagem): >= 4x Top 1
+ * - 👑 Supremo (supreme): 2x ou 3x Top 1 + 2 ou mais Top 2/3
+ * - 💎 Raro (rare): 2x ou 3x Top 1 + 0 ou 1 Top 2/3
+ * - ⚡ Top 1 & Top 3 (top1_top3): 1x Top 1 + 1 ou mais Top 2/3
+ * - 🔥 Em Alta (em_alta): Tendência 3/3
+ *
+ * Sinais sem confluência, Top 1 isolado, apenas Top 3 ou sem confluência NUNCA são elegíveis.
+ */
+export function isSignalCardEligible(sig?: Partial<PredictiveSignal> | any | null): boolean {
+  if (!sig) return false;
+  if (
+    sig.isNoConfluence === true ||
+    sig.category === "no_confluence" ||
+    (typeof sig.confluence === "string" &&
+      (sig.confluence.includes("Sem Confluência") || sig.confluence.includes("sem confluência")))
+  ) {
+    return false;
+  }
+  const rank = getSignalRank(sig);
+  return (
+    rank === SignalRank.ALAVANCAGEM ||
+    rank === SignalRank.SUPREME ||
+    rank === SignalRank.RARE ||
+    rank === SignalRank.TOP1_TOP3 ||
+    rank === SignalRank.EM_ALTA
+  );
 }
 
 /**

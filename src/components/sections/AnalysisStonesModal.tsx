@@ -48,6 +48,7 @@ import {
 } from "@/lib/predictive";
 import { detectColorPatternBreaksById, colorBreaksToCycles } from "@/lib/colorPatternBreaks";
 import type { SignalHistoryEntry, AnalysisStat } from "@/lib/signalStatsStore";
+import { isSignalCardEligible } from "@/lib/signalHierarchy";
 import {
   ShieldCheck,
   AlertCircle,
@@ -267,6 +268,7 @@ export function AnalysisStonesModal({
 
     recentSignals.forEach((sig) => {
       if (sig.outcome !== "green" && sig.outcome !== "red") return;
+      if (!isSignalCardEligible(sig)) return;
       if (
         (sig as any).isNoConfluence ||
         sig.category === "no_confluence" ||

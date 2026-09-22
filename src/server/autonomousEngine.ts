@@ -19,6 +19,7 @@ import {
   buildEmAltaSignals,
   mergeSignalsLifecycle,
   getCanonicalSignalKey,
+  isSignalCardEligible,
   type RawCandidate,
 } from "../lib/signalHierarchy";
 import { DEFAULT_PRIMARY_SIGNAL_ANALYSIS_IDS } from "../lib/analysisSignalConfig";
@@ -467,6 +468,9 @@ class AutonomousAuditEngine {
       for (const sig of finalAutonomousSignals) {
         if (!sig || !sig.entryDate) continue;
 
+        // O auditor computa ÚNICA E EXCLUSIVAMENTE sinais que são elegíveis para virar cards na tela
+        if (!isSignalCardEligible(sig)) continue;
+
         const sigTime =
           sig.entryDate instanceof Date
             ? sig.entryDate.getTime()
@@ -736,6 +740,11 @@ class AutonomousAuditEngine {
     isEmAlta?: boolean;
     isTop1?: boolean;
   }) {
+    // O painel auditor computa única e exclusivamente sinais que se tornaram cards
+    if (!isSignalCardEligible(signal)) {
+      return;
+    }
+
     // Sinais sem confluência (E1-E15 isoladas) NUNCA são contabilizados no painel auditor
     if (
       (signal as any).isNoConfluence ||
@@ -1248,12 +1257,12 @@ class AutonomousAuditEngine {
       const raw = await fs.readFile(STORAGE_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (parsed && Array.isArray(parsed.recentSignals)) {
-        this.state.recentSignals = parsed.recentSignals;
+        this.state.recentSignals = parsed.recentSignals.filter(isSignalCardEligible);
         this.state.stats = parsed.stats || {};
-        this.state.totalAudited = parsed.totalAudited || parsed.recentSignals.length;
+        this.state.totalAudited = this.state.recentSignals.length;
         this.state.lastRoundId = parsed.lastRoundId || null;
         console.log(
-          `[AutonomousEngine] Loaded ${parsed.recentSignals.length} audited signals from disk.`,
+          `[AutonomousEngine] Loaded ${this.state.recentSignals.length} audited card signals from disk.`,
         );
       }
     } catch (err) {

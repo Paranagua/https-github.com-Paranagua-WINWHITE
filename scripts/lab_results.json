@@ -1,0 +1,522 @@
+{
+  "totalLoadedCycles": 230932,
+  "totalAnalyses": 87,
+  "minuteDistribution": {
+    "1-5": 114783,
+    "6-10": 58089,
+    "11-15": 29428,
+    "16-20": 14792,
+    "21-30": 10712,
+    "31-60": 3088,
+    "61-120": 40
+  },
+  "positionStats": [
+    {
+      "pos": 1,
+      "count": 230845,
+      "exact": 7.038055838333081,
+      "vic1": 21.27964651606056,
+      "mae": 6.039455045593363
+    },
+    {
+      "pos": 2,
+      "count": 230265,
+      "exact": 4.179097995787463,
+      "vic1": 14.279634334353897,
+      "mae": 7.761014483312705
+    },
+    {
+      "pos": 3,
+      "count": 229052,
+      "exact": 3.9545605364720675,
+      "vic1": 13.627473237518117,
+      "mae": 8.290654523863576
+    },
+    {
+      "pos": 4,
+      "count": 227985,
+      "exact": 3.8809570805096825,
+      "vic1": 13.573700024124394,
+      "mae": 8.459924995065466
+    },
+    {
+      "pos": 5,
+      "count": 226777,
+      "exact": 3.987176830101818,
+      "vic1": 13.638949276161163,
+      "mae": 8.535909726294994
+    },
+    {
+      "pos": 6,
+      "count": 225833,
+      "exact": 3.9750612178025357,
+      "vic1": 13.556034769055008,
+      "mae": 8.588939614671018
+    },
+    {
+      "pos": 7,
+      "count": 224889,
+      "exact": 3.891697681967549,
+      "vic1": 13.536900426432597,
+      "mae": 8.633459173192108
+    },
+    {
+      "pos": 8,
+      "count": 223152,
+      "exact": 4.007134150713415,
+      "vic1": 13.562056356205634,
+      "mae": 8.612775148777516
+    },
+    {
+      "pos": 9,
+      "count": 219622,
+      "exact": 4.027829634553915,
+      "vic1": 13.896604165338628,
+      "mae": 8.570216098569361
+    },
+    {
+      "pos": 10,
+      "count": 213344,
+      "exact": 3.9921441427928603,
+      "vic1": 13.585570721463927,
+      "mae": 8.600719964001799
+    },
+    {
+      "pos": 11,
+      "count": 204178,
+      "exact": 4.073406537433024,
+      "vic1": 13.930492021667368,
+      "mae": 8.454622927053846
+    },
+    {
+      "pos": 12,
+      "count": 191372,
+      "exact": 4.164141044666931,
+      "vic1": 14.031310745563614,
+      "mae": 8.35803565829902
+    },
+    {
+      "pos": 13,
+      "count": 174662,
+      "exact": 4.190951666647582,
+      "vic1": 14.444469890416919,
+      "mae": 8.125699923280393
+    },
+    {
+      "pos": 14,
+      "count": 147079,
+      "exact": 4.09779778214429,
+      "vic1": 14.610515437282004,
+      "mae": 7.998728574439587
+    }
+  ],
+  "modelResultsTable": [
+    {
+      "model": "CURRENT_GAPS",
+      "window": 3,
+      "totalPredictions": 230690,
+      "exactHits": 2487,
+      "exactRate": 1.0780701374138455,
+      "vicinity1Hits": 7872,
+      "vicinity1Rate": 3.4123715809094457,
+      "vicinity2Hits": 13267,
+      "vicinity2Rate": 5.751007846027136,
+      "mae": 35.895205687285966,
+      "medianAe": 30,
+      "coverage": 100
+    },
+    {
+      "model": "FIRST_GAP_ONLY",
+      "window": 3,
+      "totalPredictions": 230690,
+      "exactHits": 20009,
+      "exactRate": 8.673544583640384,
+      "vicinity1Hits": 55175,
+      "vicinity1Rate": 23.91737829988296,
+      "vicinity2Hits": 83219,
+      "vicinity2Rate": 36.07395205687286,
+      "mae": 5.908210152152239,
+      "medianAe": 4,
+      "coverage": 100
+    },
+    {
+      "model": "HYBRID_90_10",
+      "window": 3,
+      "totalPredictions": 230690,
+      "exactHits": 14818,
+      "exactRate": 6.423338679613335,
+      "vicinity1Hits": 43560,
+      "vicinity1Rate": 18.882482985825135,
+      "vicinity2Hits": 68288,
+      "vicinity2Rate": 29.601629892929903,
+      "mae": 6.907377866400798,
+      "medianAe": 5,
+      "coverage": 100
+    },
+    {
+      "model": "HYBRID_80_20",
+      "window": 3,
+      "totalPredictions": 230690,
+      "exactHits": 14818,
+      "exactRate": 6.423338679613335,
+      "vicinity1Hits": 43560,
+      "vicinity1Rate": 18.882482985825135,
+      "vicinity2Hits": 68288,
+      "vicinity2Rate": 29.601629892929903,
+      "mae": 6.907377866400798,
+      "medianAe": 5,
+      "coverage": 100
+    },
+    {
+      "model": "HYBRID_70_30",
+      "window": 3,
+      "totalPredictions": 230690,
+      "exactHits": 14155,
+      "exactRate": 6.135940006068751,
+      "vicinity1Hits": 41888,
+      "vicinity1Rate": 18.157700810611644,
+      "vicinity2Hits": 65875,
+      "vicinity2Rate": 28.555637435519525,
+      "mae": 8.75030993974598,
+      "medianAe": 5,
+      "coverage": 100
+    },
+    {
+      "model": "HYBRID_50_50",
+      "window": 3,
+      "totalPredictions": 230690,
+      "exactHits": 4715,
+      "exactRate": 2.0438683948155534,
+      "vicinity1Hits": 14875,
+      "vicinity1Rate": 6.448047162859248,
+      "vicinity2Hits": 24058,
+      "vicinity2Rate": 10.428713858424727,
+      "mae": 30.67243486930513,
+      "medianAe": 21,
+      "coverage": 100
+    },
+    {
+      "model": "FIRST_GAP_TOP2",
+      "window": 3,
+      "totalPredictions": 230690,
+      "exactHits": 31033,
+      "exactRate": 13.452251939832676,
+      "vicinity1Hits": 88033,
+      "vicinity1Rate": 38.16073518574711,
+      "vicinity2Hits": 127030,
+      "vicinity2Rate": 55.06523906541246,
+      "mae": 3.8373444882743075,
+      "medianAe": 2,
+      "coverage": 100
+    },
+    {
+      "model": "FIRST_GAP_TOP3",
+      "window": 3,
+      "totalPredictions": 230690,
+      "exactHits": 32224,
+      "exactRate": 13.968529195023624,
+      "vicinity1Hits": 91935,
+      "vicinity1Rate": 39.85218258268672,
+      "vicinity2Hits": 132633,
+      "vicinity2Rate": 57.49403962026962,
+      "mae": 3.4908578611990118,
+      "medianAe": 2,
+      "coverage": 100
+    },
+    {
+      "model": "CURRENT_GAPS",
+      "window": 5,
+      "totalPredictions": 230552,
+      "exactHits": 1934,
+      "exactRate": 0.8388563100732155,
+      "vicinity1Hits": 6828,
+      "vicinity1Rate": 2.9615878413546617,
+      "vicinity2Hits": 11864,
+      "vicinity2Rate": 5.1459106839238,
+      "mae": 37.754831881744686,
+      "medianAe": 32,
+      "coverage": 100
+    },
+    {
+      "model": "FIRST_GAP_ONLY",
+      "window": 5,
+      "totalPredictions": 230552,
+      "exactHits": 19945,
+      "exactRate": 8.650976786148028,
+      "vicinity1Hits": 55214,
+      "vicinity1Rate": 23.948610291821367,
+      "vicinity2Hits": 83145,
+      "vicinity2Rate": 36.0634477254589,
+      "mae": 5.9882325896110205,
+      "medianAe": 4,
+      "coverage": 100
+    },
+    {
+      "model": "HYBRID_90_10",
+      "window": 5,
+      "totalPredictions": 230552,
+      "exactHits": 16477,
+      "exactRate": 7.146760817516222,
+      "vicinity1Hits": 48428,
+      "vicinity1Rate": 21.00523959887574,
+      "vicinity2Hits": 75285,
+      "vicinity2Rate": 32.654238523196504,
+      "mae": 6.448206912106596,
+      "medianAe": 4,
+      "coverage": 100
+    },
+    {
+      "model": "HYBRID_80_20",
+      "window": 5,
+      "totalPredictions": 230552,
+      "exactHits": 16451,
+      "exactRate": 7.13548353516777,
+      "vicinity1Hits": 48346,
+      "vicinity1Rate": 20.969672785315243,
+      "vicinity2Hits": 75161,
+      "vicinity2Rate": 32.60045456122697,
+      "mae": 6.483500468440959,
+      "medianAe": 4,
+      "coverage": 100
+    },
+    {
+      "model": "HYBRID_70_30",
+      "window": 5,
+      "totalPredictions": 230552,
+      "exactHits": 15297,
+      "exactRate": 6.634945695548076,
+      "vicinity1Hits": 45317,
+      "vicinity1Rate": 19.65586939172074,
+      "vicinity2Hits": 70818,
+      "vicinity2Rate": 30.71671466740692,
+      "mae": 8.361402199937542,
+      "medianAe": 5,
+      "coverage": 100
+    },
+    {
+      "model": "HYBRID_50_50",
+      "window": 5,
+      "totalPredictions": 230552,
+      "exactHits": 4428,
+      "exactRate": 1.9206079322669072,
+      "vicinity1Hits": 14985,
+      "vicinity1Rate": 6.499618307366668,
+      "vicinity2Hits": 24492,
+      "vicinity2Rate": 10.623199972240535,
+      "mae": 31.57393126062667,
+      "medianAe": 21,
+      "coverage": 100
+    },
+    {
+      "model": "FIRST_GAP_TOP2",
+      "window": 5,
+      "totalPredictions": 230552,
+      "exactHits": 34841,
+      "exactRate": 15.111992088552691,
+      "vicinity1Hits": 97508,
+      "vicinity1Rate": 42.29327873972032,
+      "vicinity2Hits": 137045,
+      "vicinity2Rate": 59.44212151705472,
+      "mae": 3.667871022589264,
+      "medianAe": 2,
+      "coverage": 100
+    },
+    {
+      "model": "FIRST_GAP_TOP3",
+      "window": 5,
+      "totalPredictions": 230552,
+      "exactHits": 40922,
+      "exactRate": 17.74957493320379,
+      "vicinity1Hits": 116123,
+      "vicinity1Rate": 50.367379159582214,
+      "vicinity2Hits": 159208,
+      "vicinity2Rate": 69.05513723585135,
+      "mae": 2.760340400430272,
+      "medianAe": 1,
+      "coverage": 100
+    },
+    {
+      "model": "CURRENT_GAPS",
+      "window": 10,
+      "totalPredictions": 230248,
+      "exactHits": 1936,
+      "exactRate": 0.8408324936590111,
+      "vicinity1Hits": 7142,
+      "vicinity1Rate": 3.1018727632813317,
+      "vicinity2Hits": 13026,
+      "vicinity2Rate": 5.657378131406135,
+      "mae": 36.532495396268374,
+      "medianAe": 31,
+      "coverage": 100
+    },
+    {
+      "model": "FIRST_GAP_ONLY",
+      "window": 10,
+      "totalPredictions": 230248,
+      "exactHits": 20724,
+      "exactRate": 9.000729648031687,
+      "vicinity1Hits": 59647,
+      "vicinity1Rate": 25.905545325040823,
+      "vicinity2Hits": 88570,
+      "vicinity2Rate": 38.467217956290604,
+      "mae": 5.782378131406136,
+      "medianAe": 4,
+      "coverage": 100
+    },
+    {
+      "model": "HYBRID_90_10",
+      "window": 10,
+      "totalPredictions": 230248,
+      "exactHits": 18709,
+      "exactRate": 8.125586324311177,
+      "vicinity1Hits": 56164,
+      "vicinity1Rate": 24.392828602202844,
+      "vicinity2Hits": 85043,
+      "vicinity2Rate": 36.93539140405128,
+      "mae": 5.850022584343838,
+      "medianAe": 4,
+      "coverage": 100
+    },
+    {
+      "model": "HYBRID_80_20",
+      "window": 10,
+      "totalPredictions": 230248,
+      "exactHits": 18461,
+      "exactRate": 8.017876376776345,
+      "vicinity1Hits": 55493,
+      "vicinity1Rate": 24.10140370383239,
+      "vicinity2Hits": 84187,
+      "vicinity2Rate": 36.563618359334285,
+      "mae": 5.906426983079115,
+      "medianAe": 4,
+      "coverage": 100
+    },
+    {
+      "model": "HYBRID_70_30",
+      "window": 10,
+      "totalPredictions": 230248,
+      "exactHits": 17380,
+      "exactRate": 7.54838261352976,
+      "vicinity1Hits": 52496,
+      "vicinity1Rate": 22.79976373301831,
+      "vicinity2Hits": 80083,
+      "vicinity2Rate": 34.78119245335464,
+      "mae": 6.778577881241096,
+      "medianAe": 4,
+      "coverage": 100
+    },
+    {
+      "model": "HYBRID_50_50",
+      "window": 10,
+      "totalPredictions": 230248,
+      "exactHits": 5133,
+      "exactRate": 2.229335325388277,
+      "vicinity1Hits": 17349,
+      "vicinity1Rate": 7.534918870087905,
+      "vicinity2Hits": 28741,
+      "vicinity2Rate": 12.482627427816963,
+      "mae": 29.541229456933394,
+      "medianAe": 19,
+      "coverage": 100
+    },
+    {
+      "model": "FIRST_GAP_TOP2",
+      "window": 10,
+      "totalPredictions": 230248,
+      "exactHits": 35746,
+      "exactRate": 15.524999131371391,
+      "vicinity1Hits": 101425,
+      "vicinity1Rate": 44.05032834161426,
+      "vicinity2Hits": 140025,
+      "vicinity2Rate": 60.81486049824537,
+      "mae": 3.6573303568326327,
+      "medianAe": 2,
+      "coverage": 100
+    },
+    {
+      "model": "FIRST_GAP_TOP3",
+      "window": 10,
+      "totalPredictions": 230248,
+      "exactHits": 46002,
+      "exactRate": 19.979326639102187,
+      "vicinity1Hits": 130463,
+      "vicinity1Rate": 56.66194711789028,
+      "vicinity2Hits": 172457,
+      "vicinity2Rate": 74.90054202425212,
+      "mae": 2.5232488447239496,
+      "medianAe": 1,
+      "coverage": 100
+    }
+  ],
+  "temporalResults": [
+    {
+      "model": "CURRENT_GAPS",
+      "blockRates": [
+        3.3810453263934073,
+        3.133810453263934,
+        3.1663413576230752,
+        3.8429841682932118,
+        3.5366645035691113
+      ],
+      "mean": 3.4121691618285483,
+      "std": 0.2607620497682459,
+      "amp": 0.7091737150292778
+    },
+    {
+      "model": "FIRST_GAP_ONLY",
+      "blockRates": [
+        24.400346996313164,
+        23.491650401214486,
+        23.582736933420083,
+        24.805898937323793,
+        23.307376162664937
+      ],
+      "mean": 23.917601886187292,
+      "std": 0.5810437384911654,
+      "amp": 1.4985227746588556
+    },
+    {
+      "model": "HYBRID_80_20",
+      "blockRates": [
+        19.156365213619605,
+        18.49056603773585,
+        18.442854044675773,
+        19.75710258078508,
+        18.56802941812676
+      ],
+      "mean": 18.882983458988612,
+      "std": 0.5070943116534812,
+      "amp": 1.3142485361093073
+    }
+  ],
+  "distributionComparison": {
+    "totalEval": 230690,
+    "targets": {
+      "1-5": 114631,
+      "6-10": 58022,
+      "11-15": 29415,
+      "16-20": 14787,
+      "21-30": 10709,
+      "31-60": 3086,
+      "61-120": 40
+    },
+    "currentGaps": {
+      "1-5": 21871,
+      "6-10": 20124,
+      "11-15": 16031,
+      "16-20": 14927,
+      "21-30": 27085,
+      "31-60": 66308,
+      "61-120": 64344
+    },
+    "firstGapOnly": {
+      "1-5": 167821,
+      "6-10": 44952,
+      "11-15": 10678,
+      "16-20": 4036,
+      "21-30": 2478,
+      "31-60": 719,
+      "61-120": 6
+    }
+  }
+}

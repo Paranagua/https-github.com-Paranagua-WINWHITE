@@ -96,7 +96,7 @@ export function cycleToRecord(
     trigger_at: triggerDate.toISOString(),
     gaps,
     total_whites: gaps.length,
-    first_white_gap: gaps.length > 0 ? gaps[0] : null,
+    first_white_gap: cycle.firstWhiteGap ?? (gaps.length > 0 ? gaps[0] : null),
     status,
     updated_at: new Date().toISOString(),
   };
@@ -110,6 +110,12 @@ export function recordToCycle(record: PersistedCycleRecord): Cycle {
     value: record.value,
     triggerAt: new Date(record.trigger_at),
     gaps,
+    firstWhiteGap:
+      typeof record.first_white_gap === "number" && record.first_white_gap > 0
+        ? record.first_white_gap
+        : gaps.length > 0
+          ? gaps[0]
+          : undefined,
   };
 }
 

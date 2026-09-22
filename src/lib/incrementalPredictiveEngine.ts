@@ -214,11 +214,19 @@ export class IncrementalPredictiveEngine {
       const lastGap = gaps.length > 0 ? gaps[gaps.length - 1] : 0;
       const lastWhiteTimeMs = triggerDate.getTime() + lastGap * 60000;
 
+      const firstWhiteGap =
+        typeof c.firstWhiteGap === "number" && c.firstWhiteGap > 0
+          ? c.firstWhiteGap
+          : gaps.length > 0
+            ? gaps[0]
+            : undefined;
+
       const incCycle: IncrementalCycle = {
         analysis: c.analysis,
         value: c.value,
         triggerAt: triggerDate,
         gaps,
+        firstWhiteGap,
         whiteResultIds: Array.from(processedIdentities),
         processedWhiteIdentities: processedIdentities,
         lastWhiteTimeMs: gaps.length > 0 ? lastWhiteTimeMs : triggerDate.getTime(),
@@ -311,6 +319,9 @@ export class IncrementalPredictiveEngine {
           // Quando não conseguir carregar o tempo ou for <= 0, deixa em branco (não preenche com 0)
           if (gap !== null && gap > 0) {
             cycle.gaps.push(gap);
+            if (cycle.firstWhiteGap === undefined && cycle.gaps.length === 1) {
+              cycle.firstWhiteGap = gap;
+            }
             cycle.processedWhiteIdentities.add(rowIdentity);
             if (!cycle.whiteResultIds) cycle.whiteResultIds = [];
             cycle.whiteResultIds.push(rowIdentity);
@@ -697,6 +708,7 @@ export class IncrementalPredictiveEngine {
           value: c.value,
           triggerAt: c.triggerAt,
           gaps: [...c.gaps],
+          firstWhiteGap: c.firstWhiteGap ?? (c.gaps.length > 0 ? c.gaps[0] : undefined),
           isSecondary: c.isSecondary,
         });
       }
@@ -725,6 +737,7 @@ export class IncrementalPredictiveEngine {
           value: c.value,
           triggerAt: c.triggerAt,
           gaps: [...c.gaps],
+          firstWhiteGap: c.firstWhiteGap ?? (c.gaps.length > 0 ? c.gaps[0] : undefined),
           isSecondary: c.isSecondary,
         });
       }

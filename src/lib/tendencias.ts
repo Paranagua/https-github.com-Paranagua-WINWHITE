@@ -1,4 +1,4 @@
-import { fmtClock, type Cycle } from "./predictive";
+import { fmtClock, getCycleFirstGap, type Cycle } from "./predictive";
 
 export interface IdentifiedTendency {
   gap: number;
@@ -66,15 +66,15 @@ export function computeAnalysisTendency(
   // Pega exatamente os 3 ciclos anteriores mais recentes daquela análise
   const recent3 = pastValidCycles.slice(-3);
 
-  // Gaps registrados em cada um dos 3 ciclos (apenas positivos > 0)
-  const gapSets = recent3.map(
-    (c) =>
-      new Set((c.gaps || []).filter((g) => typeof g === "number" && !Number.isNaN(g) && g > 0)),
-  );
-  const allGapsFlat = recent3
-    .flatMap((c) => c.gaps || [])
-    .filter((g) => typeof g === "number" && !Number.isNaN(g) && g > 0);
-  const maxGap = allGapsFlat.length > 0 ? Math.max(30, ...allGapsFlat) : 30;
+  // Gaps do PRIMEIRO BRANCO registrados em cada um dos 3 ciclos anteriores (First White Gap)
+  const gapSets = recent3.map((c) => {
+    const fg = getCycleFirstGap(c);
+    return fg !== null ? new Set([fg]) : new Set<number>();
+  });
+  const allFirstGaps = recent3
+    .map((c) => getCycleFirstGap(c))
+    .filter((g): g is number => g !== null && g > 0);
+  const maxGap = allFirstGaps.length > 0 ? Math.max(30, ...allFirstGaps) : 30;
 
   const candidates: IdentifiedTendency[] = [];
   const upperLimit = Math.min(60, maxGap + 2);
