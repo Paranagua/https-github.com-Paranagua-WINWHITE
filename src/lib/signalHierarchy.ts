@@ -601,6 +601,8 @@ export interface RawCandidate {
   isRecAlert?: boolean;
   strategyKey?: string;
   cycleKey?: string;
+  gap?: number;
+  triggerAt?: Date;
 }
 
 export interface ConfluenceGroup {
@@ -759,71 +761,38 @@ export function groupCandidatesByTimeProximity(candidates: RawCandidate[]): Conf
 
     if (clusterCandidates.length === 0) continue;
 
-    // A. Determina horário representativo e se permite oscilação:
-    let representativeTimestamp: number;
-    let allowsOscillation = false;
-    let isConsecutive = false;
+    // A. Determina horário representativo pelo gap mais assertivo da análise geradora (Top 1):
+    // "Os sinais devem seguir o gap da analise geradora, as conflencia devem apenas acompanhar o horario (m-1, m , m+1) gerado.
+    // Quando mais de uma analise geradora tiver horarios vizinhos, deve verificar qual gap está mais assertivo."
+    const top1Cluster = clusterCandidates.filter((c) => c.isTop1);
+    let dominantCand: RawCandidate | undefined = undefined;
 
-    if (cluster.length >= 3) {
-      // 3 minutos consecutivos [m-1, m, m+1] -> Centro m (cluster[1]), fixo sem oscilação
-      representativeTimestamp = cluster[1];
-      allowsOscillation = false;
-      isConsecutive = true;
-    } else if (cluster.length === 2) {
-      const m1 = cluster[0];
-      const m2 = cluster[1];
-      const span = m2 - m1;
-
-      if (span >= 120_000) {
-        // Regra 1: Vizinhos com o do meio faltando (ex: 13:55 + 13:57) -> Horário faltante do meio (13:56) como referência, fixo sem oscilação
-        representativeTimestamp = m1 + 60_000;
-        allowsOscillation = false;
-        isConsecutive = true;
-      } else {
-        // Regra 3: Dois vizinhos seguidos (ex: 12:34 + 12:35) -> Escolhe por assertividade/peso e PERMITE OSCILAÇÃO (+1/-1)
-        allowsOscillation = true;
-        isConsecutive = false;
-
-        const c1 = clusterCandidates.filter((c) => c.targetDate.getTime() === m1);
-        const c2 = clusterCandidates.filter((c) => c.targetDate.getTime() === m2);
-
-        const top1_c1 = c1.filter((c) => c.isTop1);
-        const top1_c2 = c2.filter((c) => c.isTop1);
-
-        const bestPct1 =
-          top1_c1.length > 0
-            ? Math.max(...top1_c1.map((c) => c.pct))
-            : c1.length > 0
-              ? Math.max(...c1.map((c) => c.pct))
-              : 0;
-        const bestPct2 =
-          top1_c2.length > 0
-            ? Math.max(...top1_c2.map((c) => c.pct))
-            : c2.length > 0
-              ? Math.max(...c2.map((c) => c.pct))
-              : 0;
-
-        if (bestPct2 > bestPct1) {
-          representativeTimestamp = m2;
-        } else if (bestPct1 > bestPct2) {
-          representativeTimestamp = m1;
-        } else {
-          // Empate de assertividade: quem tiver mais Top 1
-          if (top1_c2.length > top1_c1.length) {
-            representativeTimestamp = m2;
-          } else if (top1_c1.length > top1_c2.length) {
-            representativeTimestamp = m1;
-          } else {
-            representativeTimestamp = m1; // Padrão estável
+    if (top1Cluster.length > 0) {
+      dominantCand = top1Cluster[0];
+      for (let i = 1; i < top1Cluster.length; i++) {
+        const cand = top1Cluster[i];
+        if (cand.pct > dominantCand.pct) {
+          dominantCand = cand;
+        } else if (cand.pct === dominantCand.pct) {
+          if ((cand.rank || 1) < (dominantCand.rank || 1)) {
+            dominantCand = cand;
+          } else if (cand.analysis < dominantCand.analysis) {
+            dominantCand = cand;
           }
         }
       }
-    } else {
-      // 1 minuto único -> próprio minuto, fixo sem oscilação
-      representativeTimestamp = cluster[0];
-      allowsOscillation = false;
-      isConsecutive = false;
+    } else if (clusterCandidates.length > 0) {
+      dominantCand = clusterCandidates[0];
+      for (let i = 1; i < clusterCandidates.length; i++) {
+        if (clusterCandidates[i].pct > dominantCand.pct) {
+          dominantCand = clusterCandidates[i];
+        }
+      }
     }
+
+    const representativeTimestamp = dominantCand ? dominantCand.targetDate.getTime() : cluster[0];
+    const allowsOscillation = false;
+    const isConsecutive = cluster.length >= 3;
 
     const representativeDate = new Date(representativeTimestamp);
 
@@ -1195,28 +1164,72 @@ export function buildStrategyTriggeredSignals(
     minuteMap.set(cand.normalizedTime, list);
   }
 
-  const sortedMinutes = Array.from(minuteMap.keys()).sort((a, b) => a - b);
+  // Agrupa candidatos primários em clusters de horários vizinhos priorizando a assertividade do gap:
+  // "Os sinais devem seguir o gap da analise geradora, as conflencia devem apenas acompanhar o horario (m-1, m , m+1) gerado.
+  // Ex. 13:30 analise geradora. 13:31,13:30,13:29,13:29,13:29 analises confluencia. O horario do sinal permanece 13:30.
+  // Quando mais de uma analise geradora tiver horarios vizinhos, deve verificar qual gap está mais assertivo."
 
-  // Clusters de proximidade temporal de até 2 min (janela primária de 3 min M-1..M+1)
-  const clusters: number[][] = [];
-  let currentCluster: number[] = [];
+  // 1. Cria lista ordenada de candidatos primários por assertividade decrescente do gap
+  const unassignedPrimary = [...normalizedPrimary].sort((a, b) => {
+    if (b.pct !== a.pct) return b.pct - a.pct;
+    const rA = a.rank || 1;
+    const rB = b.rank || 1;
+    if (rA !== rB) return rA - rB;
+    if (a.normalizedTime !== b.normalizedTime) return a.normalizedTime - b.normalizedTime;
+    return a.analysis - b.analysis;
+  });
 
-  for (const m of sortedMinutes) {
-    if (currentCluster.length === 0) {
-      currentCluster.push(m);
-    } else {
-      const first = currentCluster[0];
-      if (m - first <= 120_000) {
-        currentCluster.push(m);
-      } else {
-        clusters.push(currentCluster);
-        currentCluster = [m];
+  interface PrimaryCluster {
+    dominantPrimary: (typeof normalizedPrimary)[0];
+    repTimestamp: number;
+    repDate: Date;
+    clusterPrimary: typeof normalizedPrimary;
+    clusterWindowStart: number;
+    clusterWindowEnd: number;
+  }
+
+  const primaryClusters: PrimaryCluster[] = [];
+  const assignedCandKeys = new Set<string>();
+
+  for (const candidate of unassignedPrimary) {
+    const candKey = `${candidate.analysis}_${candidate.value}_${candidate.normalizedTime}`;
+    if (assignedCandKeys.has(candKey)) continue;
+
+    // Este candidato tem o gap mais assertivo entre os restantes e se torna a análise geradora
+    const dominantPrimary = candidate;
+    const repTimestamp = candidate.normalizedTime;
+    const repDate = new Date(repTimestamp);
+
+    // Janela de confluência rigorosamente fixada em (m-1, m, m+1) a partir do horário gerado
+    const clusterWindowStart = repTimestamp - 60_000;
+    const clusterWindowEnd = repTimestamp + 60_000;
+
+    // Coleta todas as análises geradoras vizinhas (horários m-1, m, m+1) para acompanhar este sinal
+    const clusterPrimary: typeof normalizedPrimary = [];
+
+    for (const other of unassignedPrimary) {
+      const oKey = `${other.analysis}_${other.value}_${other.normalizedTime}`;
+      if (assignedCandKeys.has(oKey)) continue;
+
+      // Se for vizinho temporal (dentro de m-1, m, m+1 do horário gerado)
+      if (other.normalizedTime >= clusterWindowStart && other.normalizedTime <= clusterWindowEnd) {
+        clusterPrimary.push(other);
+        assignedCandKeys.add(oKey);
       }
     }
+
+    primaryClusters.push({
+      dominantPrimary,
+      repTimestamp,
+      repDate,
+      clusterPrimary,
+      clusterWindowStart,
+      clusterWindowEnd,
+    });
   }
-  if (currentCluster.length > 0) {
-    clusters.push(currentCluster);
-  }
+
+  // Ordena os clusters cronologicamente pelo horário gerado
+  primaryClusters.sort((a, b) => a.repTimestamp - b.repTimestamp);
 
   // Atribuição EXCLUSIVA de tendências 3/3 para evitar que a MESMA tendência
   // seja associada a múltiplos sinais/clusters com diferença de 1 minuto
@@ -1230,11 +1243,9 @@ export function buildStrategyTriggeredSignals(
     let bestClusterIdx = -1;
     let bestDist = Infinity;
 
-    clusters.forEach((cluster, idx) => {
-      const cStart = cluster[0] - 60_000;
-      const cEnd = cluster[cluster.length - 1] + 60_000;
-      if (t >= cStart && t <= cEnd) {
-        const dist = Math.abs(cluster[0] - t);
+    primaryClusters.forEach((c, idx) => {
+      if (t >= c.clusterWindowStart && t <= c.clusterWindowEnd) {
+        const dist = Math.abs(c.repTimestamp - t);
         if (dist < bestDist) {
           bestDist = dist;
           bestClusterIdx = idx;
@@ -1251,21 +1262,20 @@ export function buildStrategyTriggeredSignals(
 
   const signals: PredictiveSignal[] = [];
 
-  for (let clusterIdx = 0; clusterIdx < clusters.length; clusterIdx++) {
-    const cluster = clusters[clusterIdx];
-    const clusterPrimary: typeof normalizedPrimary = [];
-    for (const m of cluster) {
-      const list = minuteMap.get(m) || [];
-      clusterPrimary.push(...list);
-    }
+  for (let clusterIdx = 0; clusterIdx < primaryClusters.length; clusterIdx++) {
+    const {
+      dominantPrimary,
+      repTimestamp,
+      repDate,
+      clusterPrimary,
+      clusterWindowStart,
+      clusterWindowEnd,
+    } = primaryClusters[clusterIdx];
+
     if (clusterPrimary.length === 0) continue;
 
-    const repTimestamp = cluster[0];
-    const repDate = new Date(repTimestamp);
-    const clusterWindowStart = cluster[0] - 60_000;
-    const clusterWindowEnd = cluster[cluster.length - 1] + 60_000;
-
     // 1. Busca confluências das Demais Análises (Minutos 0..9)
+    // As confluências apenas acompanham o horário (m-1, m, m+1) gerado pela análise geradora
     const matchingConfluenceAnalyses = confluenceCandidates.filter((ac) => {
       const t = ac.targetDate.getTime();
       return t >= clusterWindowStart && t <= clusterWindowEnd;
@@ -1530,7 +1540,7 @@ export function buildStrategyTriggeredSignals(
 
     const canonicalKey = getCanonicalSignalKey(repDate);
     const computedStrategyKey =
-      clusterPrimary[0]?.strategyKey || `A${clusterPrimary[0]?.analysis}` || "A2";
+      dominantPrimary.strategyKey || formatAnalysisCode(dominantPrimary.analysis) || "A2";
 
     const hasYellowSeal = clusterConfirmed.some((c) => c.type === "yellow");
     const hasBlueSeal = clusterConfirmed.some((c) => c.type === "blue");
@@ -1558,14 +1568,19 @@ export function buildStrategyTriggeredSignals(
       strategyKey: computedStrategyKey,
       primaryAnalyses: Array.from(new Set(clusterPrimary.map((p) => p.analysis))),
       sources: allSources,
-      clusterTimestamps: cluster,
-      allowsOscillation: cluster.length === 2,
-      isConsecutive: cluster.length >= 3,
+      clusterTimestamps: Array.from(new Set(clusterPrimary.map((p) => p.normalizedTime))),
+      allowsOscillation: false,
+      isConsecutive: false,
       levelOffset: 0,
       confirmedStrategies: clusterConfirmed,
       hasYellowSeal,
       hasBlueSeal,
       isVerified,
+      dominantGap: dominantPrimary.gap,
+      gap: dominantPrimary.gap,
+      generatorAnalysis: dominantPrimary.analysis,
+      generatorPct: dominantPrimary.pct,
+      generatorGap: dominantPrimary.gap,
     });
   }
 
@@ -1887,14 +1902,18 @@ export function mergeSignalsLifecycle(
         ? sig.entryDate.getTime()
         : parseUtcDate(sig.entryDate as any).getTime();
 
-    // Sinais concluídos que já passaram da janela de 5 minutos de exibição são descartados da tela ao vivo
-    if (
-      !options?.allowHistorical &&
-      sig.outcome &&
-      sig.outcome !== "pending" &&
-      sig.completedAt &&
-      now - sig.completedAt > 300_000
-    ) {
+    // Sinais concluídos que já passaram da janela de 3 minutos de exibição são descartados da tela ao vivo
+    if (!options?.allowHistorical && sig.outcome && sig.outcome !== "pending") {
+      const compTime = sig.completedAt || sigTime;
+      if (now - compTime > 180_000) {
+        continue;
+      }
+      // Sinais concluídos válidos na janela de 3 minutos são mantidos 100% intactos e imutáveis
+      resultMap.set(canonicalKey, {
+        ...sig,
+        key: sig.key || canonicalKey,
+        isLocked: true,
+      });
       continue;
     }
 
@@ -1989,7 +2008,7 @@ export function mergeSignalsLifecycle(
         : parseUtcDate(cand.entryDate as any).getTime();
 
     // Procura sinal existente correspondente:
-    // Primeiro por chave canônica exata; se não houver, por proximidade de ±1 minuto (60.000 ms)
+    // Primeiro por chave canônica exata; se não houver, por confluência temporal ou compartilhamento de fontes
     let existingKey: string | undefined = undefined;
     let existing: PredictiveSignal | undefined = undefined;
 
@@ -1997,17 +2016,57 @@ export function mergeSignalsLifecycle(
       existingKey = canonicalKey;
       existing = resultMap.get(canonicalKey);
     } else {
-      // Busca QUALQUER sinal existente em janela de ±1 minuto (confluência temporal ou conflito)
+      // Coleta análises primárias do novo candidato
+      const candPrimaryAnalyses = new Set<number>();
+      if (Array.isArray(cand.primaryAnalyses)) {
+        cand.primaryAnalyses.forEach((id) => candPrimaryAnalyses.add(id));
+      }
+      (cand.sources || []).forEach((s: any) => {
+        if (!s.top3 && s.analysis) candPrimaryAnalyses.add(s.analysis);
+      });
+
+      // Busca QUALQUER sinal existente na janela de confluência (±2 minutos) ou que compartilhe fontes validadas
       for (const [k, s] of resultMap.entries()) {
         if (!s || !s.entryDate) continue;
         const sTime =
           s.entryDate instanceof Date
             ? s.entryDate.getTime()
             : parseUtcDate(s.entryDate as any).getTime();
-        if (Math.abs(candTime - sTime) <= 60_000) {
-          existingKey = k;
-          existing = s;
-          break;
+        const timeDiff = Math.abs(candTime - sTime);
+
+        // Regra do Usuário: "As análises quando agrupadas em uma confluência gerando o horário do sinal,
+        // não devem ser separadas quando esse sinal for validado (win/loss), após essa validação esse sinal deve apenas aguardar o tempo para sair da tela."
+        if (s.outcome && s.outcome !== "pending") {
+          const sAnalyses = new Set<number>();
+          if (Array.isArray(s.primaryAnalyses)) {
+            s.primaryAnalyses.forEach((id) => sAnalyses.add(id));
+          }
+          (s.sources || []).forEach((src: any) => {
+            if (src.analysis) sAnalyses.add(src.analysis);
+          });
+
+          // Se compartilha qualquer análise da confluência validada dentro da janela de execução (M-1 a M+2 / 3 minutos):
+          const sharesAnalysis = Array.from(candPrimaryAnalyses).some((id) => sAnalyses.has(id));
+          const inExecutionWindow = candTime >= sTime - 60_000 && candTime <= sTime + 180_000;
+          const inCluster =
+            Array.isArray(s.clusterTimestamps) &&
+            s.clusterTimestamps.some((ct: number) => Math.abs(candTime - ct) <= 60_000);
+
+          if ((sharesAnalysis && inExecutionWindow) || inCluster || timeDiff <= 120_000) {
+            existingKey = k;
+            existing = s;
+            break;
+          }
+        } else {
+          // Sinal pendente: confluência por proximidade de até 2 minutos (120.000 ms) ou pertencimento ao cluster
+          const inCluster =
+            Array.isArray(s.clusterTimestamps) &&
+            s.clusterTimestamps.some((ct: number) => Math.abs(candTime - ct) <= 60_000);
+          if (timeDiff <= 120_000 || inCluster) {
+            existingKey = k;
+            existing = s;
+            break;
+          }
         }
       }
     }
@@ -2183,26 +2242,34 @@ export function mergeSignalsLifecycle(
       }
       const combinedSources = Array.from(mergedSourcesMap.values());
 
-      // Regra de Oscilação de Horários da Confluência:
-      // - 3 horários vizinhos primários (ex: 12:33, 12:34, 12:35): centro fixo (12:34), NÃO oscila (+1/-1).
-      // - 2 vizinhos com o do meio faltando (ex: 13:55 + 13:57): centro faltante fixo (13:56), NÃO oscila (+1/-1).
-      // - 2 horários vizinhos seguidos (ex: 12:34 e 12:35): pode oscilar (+1/-1) entre esses 2 horários específicos conforme assertividade.
-      // - 1 horário único: horário fixo.
-      const allowsOscillation = cand.allowsOscillation ?? existing.allowsOscillation ?? false;
+      // O sinal segue o gap da análise geradora; confluências apenas acompanham o horário (m-1, m, m+1)
+      let targetEntryDate: Date | string = existing.entryDate || cand.entryDate || new Date();
+      const candGenPct = (cand as any).generatorPct ?? (cand as any).pct ?? 0;
+      const existGenPct = (existing as any).generatorPct ?? (existing as any).pct ?? 0;
 
-      const targetEntryDate: Date | string =
-        (allowsOscillation
-          ? cand.entryDate || existing.entryDate
-          : existing.entryDate || cand.entryDate) || new Date();
+      // Quando mais de uma análise geradora tiver horários vizinhos, verifica qual gap é mais assertivo
+      if (candGenPct > existGenPct && cand.entryDate) {
+        targetEntryDate = cand.entryDate;
+      }
 
       const targetTime =
         targetEntryDate instanceof Date ? fmtClock(targetEntryDate) : cand.time || existing.time;
       const targetKey = getCanonicalSignalKey(targetEntryDate);
 
-      // Se a chave mudou devido a oscilação válida de 2 horários, remove a chave antiga
+      // Se a chave mudou devido à análise geradora com gap mais assertivo, remove a chave antiga
       if (existingKey && existingKey !== targetKey) {
         resultMap.delete(existingKey);
       }
+
+      const finalDominantGap =
+        candGenPct > existGenPct
+          ? (cand as any).dominantGap || (cand as any).generatorGap
+          : (existing as any).dominantGap || (existing as any).generatorGap;
+      const finalGenAnalysis =
+        candGenPct > existGenPct
+          ? (cand as any).generatorAnalysis
+          : (existing as any).generatorAnalysis;
+      const finalGenPct = Math.max(candGenPct, existGenPct);
 
       const mergedConfirmed = mergeConfirmedStrategies(
         existing.confirmedStrategies || [],
@@ -2238,6 +2305,10 @@ export function mergeSignalsLifecycle(
           key: targetKey,
           time: targetTime,
           entryDate: targetEntryDate,
+          dominantGap: finalDominantGap,
+          gap: finalDominantGap,
+          generatorAnalysis: finalGenAnalysis,
+          generatorPct: finalGenPct,
           pct: Math.max(existing.pct, cand.pct),
           label: cand.label || existing.label,
           medal: cand.medal || existing.medal,
@@ -2253,7 +2324,7 @@ export function mergeSignalsLifecycle(
           strategyKey: cand.strategyKey || existing.strategyKey,
           sources: cand.sources && cand.sources.length > 0 ? cand.sources : combinedSources,
           clusterTimestamps: cand.clusterTimestamps || existing.clusterTimestamps,
-          allowsOscillation: cand.allowsOscillation ?? existing.allowsOscillation,
+          allowsOscillation: false,
           isHighTendency: cand.isHighTendency || existing.isHighTendency,
           isRecAlert: cand.isRecAlert || existing.isRecAlert,
           isVerified,
@@ -2269,14 +2340,18 @@ export function mergeSignalsLifecycle(
         resultMap.set(targetKey, {
           ...existing,
           key: targetKey,
-          time: allowsOscillation ? targetTime : existing.time || targetTime,
-          entryDate: allowsOscillation ? targetEntryDate : existing.entryDate || targetEntryDate,
+          time: targetTime,
+          entryDate: targetEntryDate,
+          dominantGap: finalDominantGap,
+          gap: finalDominantGap,
+          generatorAnalysis: finalGenAnalysis,
+          generatorPct: finalGenPct,
           pct: Math.max(existing.pct, cand.pct),
           strategies: mergedStrategies,
           isNoConfluence: (existing.isNoConfluence ?? false) && (cand.isNoConfluence ?? false),
           sources: combinedSources.length > 0 ? combinedSources : existing.sources,
           clusterTimestamps: cand.clusterTimestamps || existing.clusterTimestamps,
-          allowsOscillation: cand.allowsOscillation ?? existing.allowsOscillation,
+          allowsOscillation: false,
           isHighTendency: existing.isHighTendency || cand.isHighTendency,
           isRecAlert: existing.isRecAlert || cand.isRecAlert,
           isVerified,
@@ -2336,11 +2411,35 @@ export function mergeSignalsLifecycle(
     });
 
   const claimedCycleKeys = new Set<string>();
+  const completedAnalysesInWindow = new Map<number, number>(); // analysisId -> timestamp
+
+  // Regra do Usuário: "As análises quando agrupadas em uma confluência gerando o horário do sinal,
+  // não devem ser separadas quando esse sinal for validado (win/loss), após essa validação esse sinal deve apenas aguardar o tempo para sair da tela."
+  // 1. Sinais concluídos (WIN/LOSS) que aguardam para sair da tela reivindicam 100% de suas fontes e ciclos
+  for (const sig of resultMap.values()) {
+    if (sig && sig.outcome && sig.outcome !== "pending") {
+      const sTime =
+        sig.entryDate instanceof Date
+          ? sig.entryDate.getTime()
+          : parseUtcDate(sig.entryDate as any).getTime();
+      for (const src of sig.sources || []) {
+        claimedCycleKeys.add(getSourceCycleKey(src));
+        if (src.analysis) completedAnalysesInWindow.set(src.analysis, sTime);
+      }
+      if (Array.isArray(sig.primaryAnalyses)) {
+        sig.primaryAnalyses.forEach((aId) => completedAnalysesInWindow.set(aId, sTime));
+      }
+    }
+  }
 
   for (const sig of pendingSignals) {
     const sigKey = sig.key || getCanonicalSignalKey(sig.entryDate || new Date());
     const currentSources = sig.sources || [];
     const sourceCycleKeys = currentSources.map((s) => getSourceCycleKey(s));
+    const sigTime =
+      sig.entryDate instanceof Date
+        ? sig.entryDate.getTime()
+        : parseUtcDate(sig.entryDate as any).getTime();
 
     if (sig.isLocked) {
       // Sinais travados em M-1 mantêm todas as suas fontes e reivindicam seus ciclos
@@ -2350,14 +2449,28 @@ export function mergeSignalsLifecycle(
       continue;
     }
 
-    // Se algum cycleKey já foi reivindicado por um sinal pendente mais forte, remove a fonte conflitante
-    const hasConflict = sourceCycleKeys.some((ck) => claimedCycleKeys.has(ck));
+    // Se algum cycleKey já foi reivindicado por sinal concluído ou sinal mais forte, ou pertence a análise de sinal concluído recente:
+    const hasConflict = currentSources.some((src) => {
+      const ck = getSourceCycleKey(src);
+      if (claimedCycleKeys.has(ck)) return true;
+      if (src.analysis && completedAnalysesInWindow.has(src.analysis)) {
+        const completedTime = completedAnalysesInWindow.get(src.analysis)!;
+        if (Math.abs(sigTime - completedTime) <= 180_000) return true;
+      }
+      return false;
+    });
 
     if (hasConflict) {
-      // Filtra fontes exclusivas (cujo cycleKey não foi reivindicado)
-      const exclusiveSources = currentSources.filter(
-        (src) => !claimedCycleKeys.has(getSourceCycleKey(src)),
-      );
+      // Filtra fontes exclusivas (cujo cycleKey não foi reivindicado e não conflita com sinal concluído)
+      const exclusiveSources = currentSources.filter((src) => {
+        const ck = getSourceCycleKey(src);
+        if (claimedCycleKeys.has(ck)) return false;
+        if (src.analysis && completedAnalysesInWindow.has(src.analysis)) {
+          const completedTime = completedAnalysesInWindow.get(src.analysis)!;
+          if (Math.abs(sigTime - completedTime) <= 180_000) return false;
+        }
+        return true;
+      });
 
       // Tratamento especial para sinais 'Em Alta': eles são exclusivos de tendências
       // e NUNCA devem ser convertidos em Alavancagem, Supremo ou Raro

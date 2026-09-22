@@ -169,6 +169,11 @@ export type PredictiveSignal = {
   allowsOscillation?: boolean;
   audit?: SignalAuditInfo;
   primaryAnalyses?: number[];
+  dominantGap?: number;
+  gap?: number;
+  generatorAnalysis?: number;
+  generatorPct?: number;
+  generatorGap?: number;
   sources?: Array<{
     analysis: number;
     value: number;

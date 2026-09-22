@@ -559,7 +559,7 @@ class AutonomousAuditEngine {
         if (auditRes.outcome === "green") {
           // CAPTURADO: WIN (Branco confirmado)
           sig.outcome = "green";
-          sig.label = "WIN";
+          sig.label = sig.label || "WIN";
           sig.resultTime = auditRes.resultTime || sig.resultTime;
           sig.winningResultId = auditRes.winningResultId || sig.winningResultId;
           sig.completedAt = sig.completedAt || auditRes.completedAt || nowMs;
@@ -569,7 +569,7 @@ class AutonomousAuditEngine {
             key: sig.key || getCanonicalSignalKey(sig.entryDate),
             time: sig.time,
             outcome: "green",
-            label: "WIN",
+            label: sig.label || "WIN",
             confluence: sig.confluence,
             resultTime: sig.resultTime,
             strategyKey: sig.strategyKey,
@@ -594,7 +594,7 @@ class AutonomousAuditEngine {
         } else if (auditRes.outcome === "red") {
           // CAPTURADO: LOSS (6 rodadas concluídas sem branco)
           sig.outcome = "red";
-          sig.label = "LOSS";
+          sig.label = sig.label || "LOSS";
           sig.resultTime = auditRes.resultTime || sig.resultTime;
           sig.completedAt = sig.completedAt || auditRes.completedAt || nowMs;
           sig.audit = auditRes.audit || sig.audit;
@@ -603,7 +603,7 @@ class AutonomousAuditEngine {
             key: sig.key || getCanonicalSignalKey(sig.entryDate),
             time: sig.time,
             outcome: "red",
-            label: "LOSS",
+            label: sig.label || "LOSS",
             confluence: sig.confluence,
             resultTime: sig.resultTime,
             strategyKey: sig.strategyKey,
@@ -1116,6 +1116,8 @@ class AutonomousAuditEngine {
             value: item.value,
             pct: top1Candidate.pct,
             targetDate: at,
+            gap: targetMinutes,
+            triggerAt: item.open.triggerAt,
             isTop1: true,
             rank: 1,
             isHighTendency: isTendency,
@@ -1154,6 +1156,8 @@ class AutonomousAuditEngine {
             value: item.value,
             pct: top1Candidate.pct,
             targetDate: at,
+            gap: targetMinutes,
+            triggerAt: item.open.triggerAt,
             isTop1: false,
             rank: 2,
             isHighTendency: isTendency,
@@ -1192,6 +1196,8 @@ class AutonomousAuditEngine {
             value: item.value,
             pct: cand.pct,
             targetDate: at,
+            gap: m,
+            triggerAt: item.open.triggerAt,
             isTop1: false,
             rank: idx + 2,
             isHighTendency: isTendency,

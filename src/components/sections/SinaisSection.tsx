@@ -1685,7 +1685,7 @@ function SinaisSectionContent() {
                 ...s,
                 outcome: "green" as const,
                 resultTime: auditResult.resultTime,
-                label: "WIN",
+                label: s.label || "WIN",
                 completedAt: s.completedAt || auditResult.completedAt || now,
                 winningResultId: auditResult.winningResultId,
                 audit: auditResult.audit,
@@ -1735,7 +1735,7 @@ function SinaisSectionContent() {
               return {
                 ...s,
                 outcome: "red" as const,
-                label: "LOSS",
+                label: s.label || "LOSS",
                 completedAt: s.completedAt || auditResult.completedAt || now,
                 audit: auditResult.audit,
               };
