@@ -354,8 +354,9 @@ export const useSignalStatsStore = create<SignalStatsStore>()(
       syncWithServerData: (data) =>
         set((state) => {
           if (!data) return state;
-          const incomingSignals = (Array.isArray(data.recentSignals) ? data.recentSignals : [])
-            .filter(isSignalCardEligible);
+          const incomingSignals = (
+            Array.isArray(data.recentSignals) ? data.recentSignals : []
+          ).filter(isSignalCardEligible);
 
           // Se o servidor foi limpo (recentSignals vazio e sem stats), zera tudo localmente também
           if (

@@ -15,6 +15,9 @@ import {
   LayoutGrid,
   Zap,
   Shield,
+  ChevronDown,
+  ChevronUp,
+  Filter,
 } from "lucide-react";
 import { fmtDateTime } from "@/components/double/types";
 import { computeTop, isValidCycle, type Row, type Cycle } from "@/lib/predictive";
@@ -23,7 +26,7 @@ import {
   mergePersistedWithLiveCycles,
   sanitizeMonotonicGaps,
 } from "@/lib/cyclePersistence";
-import { useAnalysisSignalConfig } from "@/lib/analysisSignalConfig";
+import { useAnalysisSignalConfig, ALL_BLAZE_STONES } from "@/lib/analysisSignalConfig";
 import { Switch } from "@/components/ui/switch";
 
 interface ColorPatternBreaksPanelProps {
@@ -34,7 +37,17 @@ interface ColorPatternBreaksPanelProps {
 
 export function ColorPatternBreaksPanel({ rows, selectedPedra }: ColorPatternBreaksPanelProps) {
   const [activePattern, setActivePattern] = useState<ColorPatternType>("alternados");
-  const { isActive, toggle } = useAnalysisSignalConfig();
+  const {
+    isActive,
+    toggle,
+    isStoneActive,
+    toggleStone,
+    getActiveStonesForAnalysis,
+    selectAllStonesForAnalysis,
+    deselectAllStonesForAnalysis,
+    selectColorStonesForAnalysis,
+  } = useAnalysisSignalConfig();
+  const [showStonesMenu, setShowStonesMenu] = useState(false);
 
   // Detecção completa dos 7 padrões
   const allBreaks = useMemo(() => {
@@ -223,6 +236,52 @@ export function ColorPatternBreaksPanel({ rows, selectedPedra }: ColorPatternBre
               />
             </div>
 
+            <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 shadow-sm">
+              <div className="flex flex-col text-right">
+                <span className="text-[10px] font-bold leading-tight">
+                  {isStoneActive(patternDef.analysisId, selectedPedra) ? (
+                    <span className="text-emerald-400 flex items-center justify-end gap-1">
+                      <Zap className="h-3 w-3" /> Pedra {selectedPedra} Ativa
+                    </span>
+                  ) : (
+                    <span className="text-amber-400/90 flex items-center justify-end gap-1">
+                      <Shield className="h-3 w-3" /> Pedra {selectedPedra} Pausada
+                    </span>
+                  )}
+                </span>
+                <span className="text-[8px] text-muted-foreground font-medium">
+                  {isStoneActive(patternDef.analysisId, selectedPedra)
+                    ? `Dispara no gatilho ${selectedPedra}`
+                    : `Não envia no gatilho ${selectedPedra}`}
+                </span>
+              </div>
+              <Switch
+                checked={isStoneActive(patternDef.analysisId, selectedPedra)}
+                onCheckedChange={() => toggleStone(patternDef.analysisId, selectedPedra)}
+                id={`switch-color-stone-${patternDef.analysisId}-${selectedPedra}`}
+                className="data-[state=checked]:bg-emerald-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowStonesMenu((prev) => !prev)}
+                className={`ml-1 flex items-center gap-1 rounded border px-2 py-1 text-[10px] font-bold transition-colors ${
+                  showStonesMenu
+                    ? "border-primary/50 bg-primary/20 text-white"
+                    : getActiveStonesForAnalysis(patternDef.analysisId).length < 15
+                      ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
+                      : "border-white/10 bg-white/5 text-muted-foreground hover:text-white"
+                }`}
+                title="Configurar quais pedras deste padrão podem enviar sinais"
+              >
+                <span>{getActiveStonesForAnalysis(patternDef.analysisId).length}/15 pedras</span>
+                {showStonesMenu ? (
+                  <ChevronUp className="h-3 w-3" />
+                ) : (
+                  <ChevronDown className="h-3 w-3" />
+                )}
+              </button>
+            </div>
+
             <div className="flex items-center gap-2 text-xs">
               <span className="text-muted-foreground">Quebras da Pedra {selectedPedra}:</span>
               <span className="font-mono font-black text-white px-2 py-0.5 rounded bg-primary/20 text-primary border border-primary/30">
@@ -232,6 +291,90 @@ export function ColorPatternBreaksPanel({ rows, selectedPedra }: ColorPatternBre
               <span className="font-mono font-bold text-white/80">{activeBreaks.length}</span>
             </div>
           </div>
+
+          {showStonesMenu && (
+            <div className="mt-3 w-full rounded-lg border border-white/10 bg-black/60 p-2.5 space-y-2 text-left backdrop-blur-md">
+              <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-white/10 pb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <Filter className="h-3 w-3 text-primary" />
+                  Pedras Autorizadas para {patternDef.code} (
+                  {getActiveStonesForAnalysis(patternDef.analysisId).length}/15)
+                </span>
+                <div className="flex flex-wrap items-center gap-1 text-[9px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => selectAllStonesForAnalysis(patternDef.analysisId)}
+                    className="rounded bg-white/10 px-1.5 py-0.5 text-white hover:bg-white/20 transition-colors"
+                  >
+                    Todas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deselectAllStonesForAnalysis(patternDef.analysisId)}
+                    className="rounded bg-white/10 px-1.5 py-0.5 text-muted-foreground hover:bg-white/20 hover:text-white transition-colors"
+                  >
+                    Nenhuma
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectColorStonesForAnalysis(patternDef.analysisId, "white")}
+                    className="rounded bg-white px-1.5 py-0.5 text-zinc-950 font-bold hover:bg-zinc-200 transition-colors"
+                  >
+                    0
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectColorStonesForAnalysis(patternDef.analysisId, "red")}
+                    className="rounded bg-red-600/80 px-1.5 py-0.5 text-white hover:bg-red-600 transition-colors"
+                  >
+                    1-7
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectColorStonesForAnalysis(patternDef.analysisId, "black")}
+                    className="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-200 hover:bg-zinc-700 transition-colors"
+                  >
+                    8-14
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-[repeat(15,minmax(0,1fr))] gap-1">
+                {ALL_BLAZE_STONES.map((stone) => {
+                  const isAct = isStoneActive(patternDef.analysisId, stone);
+                  const isWhite = stone === 0;
+                  const isRed = stone >= 1 && stone <= 7;
+
+                  let colorStyles = "";
+                  if (isWhite) {
+                    colorStyles = isAct
+                      ? "bg-white text-zinc-950 border-white shadow-[0_0_8px_rgba(255,255,255,0.4)]"
+                      : "bg-white/10 text-white/30 border-white/10 line-through opacity-40";
+                  } else if (isRed) {
+                    colorStyles = isAct
+                      ? "bg-red-600 text-white border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.3)]"
+                      : "bg-red-950/30 text-red-500/30 border-red-900/30 line-through opacity-40";
+                  } else {
+                    colorStyles = isAct
+                      ? "bg-zinc-800 text-zinc-100 border-zinc-600 shadow-[0_0_8px_rgba(0,0,0,0.5)]"
+                      : "bg-zinc-900/40 text-zinc-600/30 border-zinc-800/30 line-through opacity-40";
+                  }
+
+                  return (
+                    <button
+                      key={stone}
+                      type="button"
+                      onClick={() => toggleStone(patternDef.analysisId, stone)}
+                      title={`Pedra ${stone}: ${isAct ? "Ativa para gerar sinais" : "Desativada (não gera sinais)"}`}
+                      className={`flex items-center justify-center rounded border text-[11px] font-black font-mono py-1 transition-all ${colorStyles}`}
+                    >
+                      {stone}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </Card>
 

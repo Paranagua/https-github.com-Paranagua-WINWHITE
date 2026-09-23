@@ -1,6 +1,6 @@
 /**
  * LABORATÓRIO FIRST GAP — BACKTEST COMPARATIVO (ISOLADO)
- * 
+ *
  * Versão otimizada em streaming:
  * - Complexidade de memória O(1) usando histograma de erro para mediana exata.
  * - Candidatos a m avaliados estritamente a partir do suporte da janela (sem loops vazios).
@@ -33,7 +33,8 @@ export interface PredictionCandidate {
 // -------------------------------------------------------------
 export function computeTopCurrentGaps(cyclesWindow: CleanCycle[], topN = 5): PredictionCandidate[] {
   const rowSets = cyclesWindow.map(
-    (c) => new Set((c.gaps || []).filter((g) => typeof g === "number" && !Number.isNaN(g) && g > 0))
+    (c) =>
+      new Set((c.gaps || []).filter((g) => typeof g === "number" && !Number.isNaN(g) && g > 0)),
   );
   const totalRows = cyclesWindow.length;
   if (!totalRows) return [];
@@ -87,7 +88,10 @@ export function computeTopCurrentGaps(cyclesWindow: CleanCycle[], topN = 5): Pre
 // -------------------------------------------------------------
 // MODELO B: FIRST_GAP_ONLY (Apenas cycle.firstWhiteGap)
 // -------------------------------------------------------------
-export function computeTopFirstGapOnly(cyclesWindow: CleanCycle[], topN = 5): PredictionCandidate[] {
+export function computeTopFirstGapOnly(
+  cyclesWindow: CleanCycle[],
+  topN = 5,
+): PredictionCandidate[] {
   const totalRows = cyclesWindow.length;
   if (!totalRows) return [];
 
@@ -143,7 +147,7 @@ export function computeTopHybrid(
   cyclesWindow: CleanCycle[],
   wPrimary: number,
   wSecondary: number,
-  topN = 5
+  topN = 5,
 ): PredictionCandidate[] {
   const totalRows = cyclesWindow.length;
   if (!totalRows) return [];
@@ -299,7 +303,10 @@ export function getMinuteBucket(m: number): string {
 // -------------------------------------------------------------
 // FETCH CYCLES POR ANÁLISE
 // -------------------------------------------------------------
-export async function fetchAnalysisCycles(analysisId: number, maxRecords = 10000): Promise<CleanCycle[]> {
+export async function fetchAnalysisCycles(
+  analysisId: number,
+  maxRecords = 10000,
+): Promise<CleanCycle[]> {
   const records: CleanCycle[] = [];
   const PAGE_SIZE = 1000;
   let offset = 0;
@@ -307,7 +314,9 @@ export async function fetchAnalysisCycles(analysisId: number, maxRecords = 10000
   while (records.length < maxRecords) {
     const { data, error } = await blazeSupabase
       .from("predictive_cycles")
-      .select("id, cycle_key, analysis, analysis_code, value, trigger_at, gaps, status, total_whites, first_white_gap")
+      .select(
+        "id, cycle_key, analysis, analysis_code, value, trigger_at, gaps, status, total_whites, first_white_gap",
+      )
       .eq("analysis", analysisId)
       .order("trigger_at", { ascending: true })
       .range(offset, offset + PAGE_SIZE - 1);

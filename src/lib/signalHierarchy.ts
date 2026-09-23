@@ -15,6 +15,7 @@ import {
   DEFAULT_PRIMARY_SIGNAL_ANALYSIS_IDS,
   getActiveSignalAnalysisIds,
   isAnalysisActiveForSignals,
+  isAnalysisStoneActive,
 } from "@/lib/analysisSignalConfig";
 
 /**
@@ -1152,11 +1153,13 @@ export function buildStrategyTriggeredSignals(
     minTargetTime?: number;
     maxTargetTime?: number;
     activeAnalysisIds?: Set<number>;
+    activeAnalysisStones?: Record<number, number[]>;
   },
   tendencyCandidates: RawTendencyCandidate[] = [],
 ): PredictiveSignal[] {
   // 1. Isola candidatos primários elegíveis para GERAR sinais:
   // - Apenas Análises Ativas para Envio de Sinais
+  // - Apenas Pedras Autorizadas para a Análise
   // - Apenas Top 1 (isTop1 === true e rank === 1)
   // - Assertividade de 80% a 100%
   // - Padrões de pedras (A2, A19, A20) elegíveis para qualquer pedra (0 a 14)
@@ -1165,6 +1168,9 @@ export function buildStrategyTriggeredSignals(
   const isEligiblePrimary = (ac: RawCandidate) => {
     if (!ac || !ac.targetDate) return false;
     if (!activeIds.has(ac.analysis)) return false;
+    if (!isAnalysisStoneActive(ac.analysis, ac.value, activeIds, options?.activeAnalysisStones)) {
+      return false;
+    }
     if (!ac.isTop1 || ac.rank !== 1) return false;
     if (ac.pct < 80 || ac.pct > 100) return false;
     return true;
@@ -1934,6 +1940,8 @@ export function mergeSignalsLifecycle(
   options?: {
     allowHistorical?: boolean;
     maxPastWindowMs?: number;
+    activeAnalysisIds?: Set<number>;
+    activeAnalysisStones?: Record<number, number[]>;
   },
 ): PredictiveSignal[] {
   const resultMap = new Map<string, PredictiveSignal>();
@@ -2007,16 +2015,26 @@ export function mergeSignalsLifecycle(
           continue;
         }
       } else {
-        const primaryList =
-          sig.primaryAnalyses && sig.primaryAnalyses.length > 0
-            ? sig.primaryAnalyses
-            : (sig.sources || [])
-                .filter((s) => !s.top3 && s.rank === 1 && (s.pct ?? 0) >= 80)
-                .map((s) => s.analysis);
+        const primarySources = (sig.sources || []).filter(
+          (s) => !s.top3 && s.rank === 1 && (s.pct ?? 0) >= 80,
+        );
 
-        if (primaryList.length > 0 && !primaryList.some((aId) => activeIds.has(aId))) {
-          // Nenhuma análise primária do sinal está ativa no momento -> remove da exibição
-          continue;
+        if (primarySources.length > 0) {
+          const hasActivePrimary = primarySources.some((s) =>
+            isAnalysisStoneActive(s.analysis, s.value, activeIds, options?.activeAnalysisStones),
+          );
+          if (!hasActivePrimary) {
+            // Nenhuma análise/pedra primária do sinal está ativa no momento -> remove da exibição
+            continue;
+          }
+        } else {
+          const primaryList =
+            sig.primaryAnalyses && sig.primaryAnalyses.length > 0 ? sig.primaryAnalyses : [];
+
+          if (primaryList.length > 0 && !primaryList.some((aId) => activeIds.has(aId))) {
+            // Nenhuma análise primária do sinal está ativa no momento -> remove da exibição
+            continue;
+          }
         }
       }
     }

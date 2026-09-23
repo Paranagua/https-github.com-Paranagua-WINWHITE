@@ -78,7 +78,9 @@ async function fetchCyclesForAnalysis(analysisId: number, maxRecords = 2000): Pr
   while (records.length < maxRecords) {
     const { data, error } = await blazeSupabase
       .from("predictive_cycles")
-      .select("id, cycle_key, analysis, analysis_code, value, trigger_at, gaps, status, total_whites, first_white_gap")
+      .select(
+        "id, cycle_key, analysis, analysis_code, value, trigger_at, gaps, status, total_whites, first_white_gap",
+      )
       .eq("analysis", analysisId)
       .order("trigger_at", { ascending: true })
       .range(offset, offset + PAGE_SIZE - 1);
@@ -176,7 +178,12 @@ function computeWindowMetrics(firstGaps: number[], windowSize: number): WindowEv
   };
 }
 
-function analyzeCycles(cycles: RawCycle[], analysisId: number, code: string, group: string): FirstGapStats | null {
+function analyzeCycles(
+  cycles: RawCycle[],
+  analysisId: number,
+  code: string,
+  group: string,
+): FirstGapStats | null {
   if (cycles.length === 0) return null;
 
   // Extrai o FIRST GAP de cada ciclo:
@@ -312,7 +319,7 @@ async function runLab() {
   console.log("📊 PARTE 1: ESTATÍSTICA DESCRITIVA DO PRIMEIRO ZERO (FIRST GAP)");
   console.log("================================================================================");
   console.log(
-    "Análise          | Grupo               | N Válidos | Média (min) | Mediana | DesvPad | Top 1 Gap (Freq) | Top 2 Gap (Freq) | Top 3 Gap (Freq)"
+    "Análise          | Grupo               | N Válidos | Média (min) | Mediana | DesvPad | Top 1 Gap (Freq) | Top 2 Gap (Freq) | Top 3 Gap (Freq)",
   );
   console.log("-".repeat(130));
 
@@ -324,16 +331,20 @@ async function runLab() {
     console.log(
       `${r.code.padEnd(16)} | ${r.group.padEnd(19)} | ${String(r.validCycles).padStart(9)} | ${r.mean
         .toFixed(2)
-        .padStart(11)} | ${String(r.median).padStart(7)} | ${r.stdDev.toFixed(2).padStart(7)} | ${t1.padEnd(
-        16
-      )} | ${t2.padEnd(16)} | ${t3.padEnd(16)}`
+        .padStart(
+          11,
+        )} | ${String(r.median).padStart(7)} | ${r.stdDev.toFixed(2).padStart(7)} | ${t1.padEnd(
+        16,
+      )} | ${t2.padEnd(16)} | ${t3.padEnd(16)}`,
     );
   }
 
   console.log("\n================================================================================");
   console.log("📈 PARTE 2: DISTRIBUIÇÃO P(firstGap = X) — PRIMEIROS 10 MINUTOS");
   console.log("================================================================================");
-  console.log("Análise          | 1m     | 2m     | 3m     | 4m     | 5m     | 6m     | 7m     | 8m     | 9m     | 10m    | >10m");
+  console.log(
+    "Análise          | 1m     | 2m     | 3m     | 4m     | 5m     | 6m     | 7m     | 8m     | 9m     | 10m    | >10m",
+  );
   console.log("-".repeat(105));
 
   for (const r of results) {
@@ -345,17 +356,19 @@ async function runLab() {
     console.log(
       `${r.code.padEnd(16)} | ${p(1)} | ${p(2)} | ${p(3)} | ${p(4)} | ${p(5)} | ${p(6)} | ${p(7)} | ${p(8)} | ${p(9)} | ${p(10)} | ${pGt10
         .toFixed(1)
-        .padStart(5)}%`
+        .padStart(5)}%`,
     );
   }
 
   console.log("\n================================================================================");
   console.log("🔄 PARTE 3: COMPARAÇÃO DAS JANELAS WALK-FORWARD (3, 5, 10, 20 CICLOS)");
   console.log("================================================================================");
-  console.log("Métricas calculadas SEM Look-Ahead Bias: Janela passada prevê o firstGap do próximo ciclo.\n");
+  console.log(
+    "Métricas calculadas SEM Look-Ahead Bias: Janela passada prevê o firstGap do próximo ciclo.\n",
+  );
 
   console.log(
-    "Análise          | Janela | Concentr. Top1 | Taxa Repet. | Acerto Exato Top1 | Acerto Vizinhança (±1m) | Erro Médio (MAE)"
+    "Análise          | Janela | Concentr. Top1 | Taxa Repet. | Acerto Exato Top1 | Acerto Vizinhança (±1m) | Erro Médio (MAE)",
   );
   console.log("-".repeat(110));
 
@@ -369,7 +382,7 @@ async function runLab() {
           .toFixed(2)
           .padStart(16)}% | ${w.vicinityTop1Rate.toFixed(2).padStart(22)}% | ${w.maeMedian
           .toFixed(2)
-          .padStart(15)} min`
+          .padStart(15)} min`,
       );
     };
     printRow(wm.w3);
@@ -382,7 +395,9 @@ async function runLab() {
   console.log("\n================================================================================");
   console.log("🔍 PARTE 4: AUDITORIA DO ATUAL gaps[] vs FIRST GAP REAL");
   console.log("================================================================================");
-  console.log("Comparação entre o comportamento do primeiro zero e os 14 zeros acumulados em gaps[].\n");
+  console.log(
+    "Comparação entre o comportamento do primeiro zero e os 14 zeros acumulados em gaps[].\n",
+  );
 
   for (const r of results.slice(0, 5)) {
     // Amostra de ciclos para inspecionar gaps[] vs first_white_gap
@@ -393,7 +408,7 @@ async function runLab() {
       const fg = g.length > 0 ? g[0] : "nenhum";
       const rest = g.slice(1, 5).join(", ");
       console.log(
-        `   Ciclo ${c.cycle_key.padEnd(28)} | FIRST GAP: ${String(fg).padStart(2)}m | Zeros Subsequentes: [${rest}...] (Total: ${g.length} zeros)`
+        `   Ciclo ${c.cycle_key.padEnd(28)} | FIRST GAP: ${String(fg).padStart(2)}m | Zeros Subsequentes: [${rest}...] (Total: ${g.length} zeros)`,
       );
     }
   }

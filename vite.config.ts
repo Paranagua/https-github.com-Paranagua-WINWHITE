@@ -12,4 +12,50 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  plugins: [
+    {
+      name: "silence-module-level-directives",
+      onLog(level, log) {
+        if (
+          log.code === "MODULE_LEVEL_DIRECTIVE" ||
+          (typeof log.message === "string" &&
+            (log.message.includes("MODULE_LEVEL_DIRECTIVE") ||
+              log.message.includes("use client") ||
+              log.message.includes("use server")))
+        ) {
+          return false;
+        }
+      },
+    },
+  ],
+  vite: {
+    build: {
+      rollupOptions: {
+        onLog(level, log, defaultHandler) {
+          if (
+            log.code === "MODULE_LEVEL_DIRECTIVE" ||
+            (typeof log.message === "string" &&
+              (log.message.includes("MODULE_LEVEL_DIRECTIVE") ||
+                log.message.includes("use client") ||
+                log.message.includes("use server")))
+          ) {
+            return;
+          }
+          defaultHandler(level, log);
+        },
+        onwarn(warning, defaultHandler) {
+          if (
+            warning.code === "MODULE_LEVEL_DIRECTIVE" ||
+            (typeof warning.message === "string" &&
+              (warning.message.includes("MODULE_LEVEL_DIRECTIVE") ||
+                warning.message.includes("use client") ||
+                warning.message.includes("use server")))
+          ) {
+            return;
+          }
+          defaultHandler(warning);
+        },
+      },
+    },
+  },
 });

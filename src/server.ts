@@ -89,19 +89,38 @@ export default {
             if (body && Array.isArray(body.activeAnalysisIds)) {
               autonomousEngine.setActiveSignalAnalysisIds(body.activeAnalysisIds);
             }
+            if (
+              body &&
+              body.activeAnalysisStones &&
+              typeof body.activeAnalysisStones === "object"
+            ) {
+              autonomousEngine.setActiveSignalAnalysisStones(body.activeAnalysisStones);
+            }
+            if (body && typeof body.autoAuditMode === "boolean") {
+              autonomousEngine.setAutoAuditMode(body.autoAuditMode);
+            }
           } catch (err) {
             console.warn("[Server] Error updating analysis signal settings:", err);
           }
         }
-        const active = autonomousEngine.getActiveSignalAnalysisIds();
-        return new Response(JSON.stringify({ activeAnalysisIds: active }), {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control": "no-store, no-cache, must-revalidate",
-            "Access-Control-Allow-Origin": "*",
+        const activeIds = autonomousEngine.getActiveSignalAnalysisIds();
+        const activeStones = autonomousEngine.getActiveSignalAnalysisStones();
+        const autoAudit = autonomousEngine.isAutoAuditMode();
+        return new Response(
+          JSON.stringify({
+            activeAnalysisIds: activeIds,
+            activeAnalysisStones: activeStones,
+            autoAuditMode: autoAudit,
+          }),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+              "Cache-Control": "no-store, no-cache, must-revalidate",
+              "Access-Control-Allow-Origin": "*",
+            },
           },
-        });
+        );
       }
 
       if (url.pathname === "/api/public/predictive-cycles") {

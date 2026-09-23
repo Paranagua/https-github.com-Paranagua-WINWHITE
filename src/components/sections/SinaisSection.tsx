@@ -36,6 +36,7 @@ import {
   extractSignalStrategies,
   extractSignalAnalyses,
   formatStrategyCode,
+  isSignalCardEligible,
 } from "@/lib/signalHierarchy";
 import { AnalysisStonesModal, type PrimaryAnalysisInfo } from "./AnalysisStonesModal";
 import type { Row } from "@/lib/predictive";
@@ -1307,6 +1308,7 @@ function SinaisSectionContent() {
     // 1. Percorre recentSignals (histórico auditado)
     recentSignals.forEach((sig) => {
       if (sig.outcome !== "green" && sig.outcome !== "red") return;
+      if (!isSignalCardEligible(sig)) return;
       if (
         (sig as any).isNoConfluence ||
         sig.category === "no_confluence" ||
@@ -1766,6 +1768,7 @@ function SinaisSectionContent() {
   // que NÃO estejam dentro de janelas de congelamento (> 24 giros sem branco)
   const validRecentSignals = useMemo(() => {
     return (recentSignals || []).filter((sig) => {
+      if (!isSignalCardEligible(sig)) return false;
       const sigTime = extractSignalTimestampMs(sig) || sig.timestamp || 0;
       return isSignalAuditableAfterFreeze(sigTime, freezeIntervals, whiteStreakStatus);
     });

@@ -471,6 +471,7 @@ export function AnalysisStonesModal({
     const shortClean = (analysis.shortLabel || "").toUpperCase();
     return recentSignals.filter((sig) => {
       if (sig.outcome !== "green" && sig.outcome !== "red") return false;
+      if (!isSignalCardEligible(sig)) return false;
       const strats = (sig.strategies || []).map((s) => s.toUpperCase());
       if (
         strats.includes(keyClean) ||

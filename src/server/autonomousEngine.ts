@@ -22,7 +22,11 @@ import {
   isSignalCardEligible,
   type RawCandidate,
 } from "../lib/signalHierarchy";
-import { DEFAULT_PRIMARY_SIGNAL_ANALYSIS_IDS } from "../lib/analysisSignalConfig";
+import {
+  DEFAULT_PRIMARY_SIGNAL_ANALYSIS_IDS,
+  isAnalysisStoneActive,
+  computeAutoAuditValidationMap,
+} from "../lib/analysisSignalConfig";
 import { computeAnalysisTendency, type RawTendencyCandidate } from "../lib/tendencias";
 import { auditSignalWithRounds, type AuditResultItem } from "../lib/signalAuditEngine";
 import type { PredictiveSignal } from "../lib/signalsStore";
@@ -109,10 +113,12 @@ class AutonomousAuditEngine {
   private activeSignalAnalysisIds: Set<number> = new Set<number>(
     DEFAULT_PRIMARY_SIGNAL_ANALYSIS_IDS,
   );
+  // Pedras autorizadas por análise para envio de sinais
+  private activeSignalAnalysisStones: Record<number, number[]> = {};
 
-  public setActiveSignalAnalysisIds(ids: number[]) {
-    this.activeSignalAnalysisIds = new Set<number>(ids);
+  private filterActiveSignalsByConfig() {
     const activeSet = this.activeSignalAnalysisIds;
+    const stonesMap = this.activeSignalAnalysisStones;
 
     // Remove imediatamente da lista ativa qualquer sinal pendente cujas fontes primárias não estejam mais ativas
     this.state.activeSignals = this.state.activeSignals.filter((sig) => {
@@ -130,16 +136,28 @@ class AutonomousAuditEngine {
         if (primaryList.length === 0) return false;
         return primaryList.some((aId: number) => activeSet.has(aId));
       }
+
+      const primarySources = (sig.sources || []).filter(
+        (s) => !s.top3 && s.rank === 1 && (s.pct ?? 0) >= 80,
+      );
+
+      if (primarySources.length > 0) {
+        return primarySources.some((s) =>
+          isAnalysisStoneActive(s.analysis, s.value, activeSet, stonesMap),
+        );
+      }
+
       const primaryList =
-        sig.primaryAnalyses && sig.primaryAnalyses.length > 0
-          ? sig.primaryAnalyses
-          : (sig.sources || [])
-              .filter((s) => !s.top3 && s.rank === 1 && (s.pct ?? 0) >= 80)
-              .map((s) => s.analysis);
+        sig.primaryAnalyses && sig.primaryAnalyses.length > 0 ? sig.primaryAnalyses : [];
       if (primaryList.length === 0) return false;
       return primaryList.some((aId) => activeSet.has(aId));
     });
+  }
 
+  public setActiveSignalAnalysisIds(ids: number[]) {
+    this.activeSignalAnalysisIds = new Set<number>(ids);
+    this.filterActiveSignalsByConfig();
+    this.savePersistedState().catch(() => {});
     console.log(
       `[AutonomousEngine] Análises ativas para envio atualizadas: ${ids.length} ativas, ${this.state.activeSignals.length} sinais pendentes mantidos`,
     );
@@ -147,6 +165,49 @@ class AutonomousAuditEngine {
 
   public getActiveSignalAnalysisIds(): number[] {
     return Array.from(this.activeSignalAnalysisIds);
+  }
+
+  public setActiveSignalAnalysisStones(stones: Record<number, number[]>) {
+    this.activeSignalAnalysisStones = stones || {};
+    this.filterActiveSignalsByConfig();
+    this.savePersistedState().catch(() => {});
+    console.log(
+      `[AutonomousEngine] Pedras ativas por análise atualizadas: ${Object.keys(stones || {}).length} análises configuradas`,
+    );
+  }
+
+  public getActiveSignalAnalysisStones(): Record<number, number[]> {
+    return { ...this.activeSignalAnalysisStones };
+  }
+
+  // Modo Auto: valida de forma autônoma apenas análises e pedras com assertividade >= 50% no Painel de Auditoria
+  private autoAuditMode: boolean = false;
+
+  public setAutoAuditMode(active: boolean) {
+    this.autoAuditMode = Boolean(active);
+    if (this.autoAuditMode) {
+      this.recalculateAutoAuditFilter();
+    }
+    this.savePersistedState().catch(() => {});
+    console.log(
+      `[AutonomousEngine] Modo Auto atualizado: ${this.autoAuditMode ? "ATIVO (assertividade >= 50%)" : "DESATIVADO"}`,
+    );
+  }
+
+  public isAutoAuditMode(): boolean {
+    return this.autoAuditMode;
+  }
+
+  public recalculateAutoAuditFilter() {
+    if (!this.autoAuditMode) return;
+    try {
+      const res = computeAutoAuditValidationMap(this.state.recentSignals, this.state.stats);
+      this.activeSignalAnalysisIds = new Set<number>(res.validAnalysisIds);
+      this.activeSignalAnalysisStones = res.validStonesMap;
+      this.filterActiveSignalsByConfig();
+    } catch (err) {
+      console.warn("[AutonomousEngine] Erro ao recalcular filtro do Modo Auto:", err);
+    }
   }
 
   private state: AutonomousAuditState = {
@@ -403,7 +464,11 @@ class AutonomousAuditEngine {
       }));
 
       // 3. Constrói sinais das análises primárias com todas as estratégias (B1-B3, F2, E1-E15, Soma 19, Soma 17)
-      // ativas servindo APENAS de confluência
+      // Se Modo Auto estiver ativo, recalcula de forma autônoma as análises/pedras com assertividade >= 50%
+      if (this.autoAuditMode) {
+        this.recalculateAutoAuditFilter();
+      }
+
       const triggeredSignals = buildStrategyTriggeredSignals(
         sumProjections,
         rawCandidates,
@@ -415,6 +480,7 @@ class AutonomousAuditEngine {
           minTargetTime: now.getTime() - 5 * 3600_000,
           maxTargetTime: undefined, // Sem limite de 60 minutos
           activeAnalysisIds: this.activeSignalAnalysisIds,
+          activeAnalysisStones: this.activeSignalAnalysisStones,
         },
         tendencyCandidates,
       );
@@ -446,6 +512,7 @@ class AutonomousAuditEngine {
           allowHistorical: true,
           maxPastWindowMs: 5 * 3600_000,
           activeAnalysisIds: this.activeSignalAnalysisIds,
+          activeAnalysisStones: this.activeSignalAnalysisStones,
         },
       );
 
@@ -1230,6 +1297,10 @@ class AutonomousAuditEngine {
     }, 1500);
   }
 
+  public savePersistedState(): Promise<void> {
+    return this.persistState();
+  }
+
   private async persistState(): Promise<void> {
     try {
       await fs.mkdir(path.dirname(STORAGE_FILE), { recursive: true });
@@ -1239,6 +1310,9 @@ class AutonomousAuditEngine {
         lastRoundId: this.state.lastRoundId,
         recentSignals: this.state.recentSignals,
         stats: this.state.stats,
+        activeAnalysisIds: Array.from(this.activeSignalAnalysisIds),
+        activeAnalysisStones: this.activeSignalAnalysisStones,
+        autoAuditMode: this.autoAuditMode,
       };
       await fs.writeFile(STORAGE_FILE, JSON.stringify(payload, null, 2), "utf-8");
     } catch (err) {
@@ -1261,8 +1335,17 @@ class AutonomousAuditEngine {
         this.state.stats = parsed.stats || {};
         this.state.totalAudited = this.state.recentSignals.length;
         this.state.lastRoundId = parsed.lastRoundId || null;
+        if (parsed.activeAnalysisIds && Array.isArray(parsed.activeAnalysisIds)) {
+          this.activeSignalAnalysisIds = new Set<number>(parsed.activeAnalysisIds);
+        }
+        if (parsed.activeAnalysisStones && typeof parsed.activeAnalysisStones === "object") {
+          this.activeSignalAnalysisStones = parsed.activeAnalysisStones;
+        }
+        if (typeof parsed.autoAuditMode === "boolean") {
+          this.autoAuditMode = parsed.autoAuditMode;
+        }
         console.log(
-          `[AutonomousEngine] Loaded ${this.state.recentSignals.length} audited card signals from disk.`,
+          `[AutonomousEngine] Loaded ${this.state.recentSignals.length} audited card signals and configuration from disk.`,
         );
       }
     } catch (err) {

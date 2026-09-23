@@ -1,10 +1,10 @@
 /**
  * LABORATÓRIO COMPARATIVO: FIRST GAP vs BASELINES ALEATÓRIOS E DISTRIBUCIONAIS
- * 
+ *
  * Objetivo:
  * Testar rigorosamente se o FIRST GAP possui ganho preditivo real de curto prazo (memória de regime)
  * ou se seu desempenho é apenas decorrência da distribuição natural dos dados.
- * 
+ *
  * Baselines testados contra FIRST GAP:
  * 1. RANDOM_UNIFORM_1_15: Escolha aleatória uniforme entre 1 e 15 minutos.
  * 2. RANDOM_UNIFORM_1_30: Escolha aleatória uniforme entre 1 e 30 minutos.
@@ -65,7 +65,9 @@ async function runBaselineLab() {
     }
   }
 
-  console.log(`Carregamento concluído! Análises: ${allCyclesByAnalysis.size} | Ciclos válidos: ${totalLoadedCycles}`);
+  console.log(
+    `Carregamento concluído! Análises: ${allCyclesByAnalysis.size} | Ciclos válidos: ${totalLoadedCycles}`,
+  );
 
   // 1. Levantamento das estatísticas da distribuição de First Gap (Global)
   const globalFreq = new Map<number, number>();
@@ -85,17 +87,24 @@ async function runBaselineLab() {
 
   allFirstGapsList.sort((a, b) => a - b);
   const globalMedian = allFirstGapsList[Math.floor(allFirstGapsList.length / 2)];
-  
+
   // Ordena por frequência decrescente para obter a Moda e o Top 3 Global
   const sortedByFreq = Array.from(globalFreq.entries()).sort((a, b) => b[1] - a[1]);
   const globalMode = sortedByFreq[0][0];
-  const globalTop3 = sortedByFreq.slice(0, 3).map(e => e[0]);
+  const globalTop3 = sortedByFreq.slice(0, 3).map((e) => e[0]);
 
   console.log(`\n--- ESTATÍSTICAS GLOBAIS DE REFERÊNCIA ---`);
   console.log(`Total de First Gaps analisados: ${totalGlobalFirstGaps}`);
-  console.log(`Moda Global (Minuto mais frequente): ${globalMode} min (Ocorrências: ${sortedByFreq[0][1]} - ${((sortedByFreq[0][1] / totalGlobalFirstGaps) * 100).toFixed(2)}%)`);
+  console.log(
+    `Moda Global (Minuto mais frequente): ${globalMode} min (Ocorrências: ${sortedByFreq[0][1]} - ${((sortedByFreq[0][1] / totalGlobalFirstGaps) * 100).toFixed(2)}%)`,
+  );
   console.log(`Top 3 Minutos Globais mais frequentes: ${globalTop3.join(", ")} min`);
-  console.log(`Top 5 frequências: ${sortedByFreq.slice(0, 5).map(e => `${e[0]}m (${((e[1]/totalGlobalFirstGaps)*100).toFixed(2)}%)`).join(" | ")}`);
+  console.log(
+    `Top 5 frequências: ${sortedByFreq
+      .slice(0, 5)
+      .map((e) => `${e[0]}m (${((e[1] / totalGlobalFirstGaps) * 100).toFixed(2)}%)`)
+      .join(" | ")}`,
+  );
   console.log(`Mediana Global: ${globalMedian} min`);
 
   // Monta tabela cumulativa de probabilidades para Empirical Sampling
@@ -115,25 +124,28 @@ async function runBaselineLab() {
   }
 
   // 2. CONFIGURAÇÃO DOS TRACKERS
-  const trackerMap: Record<string, { category: BaselineMetricResult["category"]; tracker: OnlineTracker }> = {
+  const trackerMap: Record<
+    string,
+    { category: BaselineMetricResult["category"]; tracker: OnlineTracker }
+  > = {
     // ALEATÓRIOS
-    "RANDOM_UNIFORM_1_15": { category: "RANDOM", tracker: new OnlineTracker() },
-    "RANDOM_UNIFORM_1_30": { category: "RANDOM", tracker: new OnlineTracker() },
-    
+    RANDOM_UNIFORM_1_15: { category: "RANDOM", tracker: new OnlineTracker() },
+    RANDOM_UNIFORM_1_30: { category: "RANDOM", tracker: new OnlineTracker() },
+
     // DISTRIBUCIONAIS GLOBAIS
-    "GLOBAL_EMPIRICAL_SAMPLING": { category: "DISTRIBUTIONAL_GLOBAL", tracker: new OnlineTracker() },
-    "GLOBAL_MODE_STATIC": { category: "DISTRIBUTIONAL_GLOBAL", tracker: new OnlineTracker() },
-    "GLOBAL_MEDIAN_STATIC": { category: "DISTRIBUTIONAL_GLOBAL", tracker: new OnlineTracker() },
-    "GLOBAL_TOP3_STATIC": { category: "DISTRIBUTIONAL_GLOBAL", tracker: new OnlineTracker() },
+    GLOBAL_EMPIRICAL_SAMPLING: { category: "DISTRIBUTIONAL_GLOBAL", tracker: new OnlineTracker() },
+    GLOBAL_MODE_STATIC: { category: "DISTRIBUTIONAL_GLOBAL", tracker: new OnlineTracker() },
+    GLOBAL_MEDIAN_STATIC: { category: "DISTRIBUTIONAL_GLOBAL", tracker: new OnlineTracker() },
+    GLOBAL_TOP3_STATIC: { category: "DISTRIBUTIONAL_GLOBAL", tracker: new OnlineTracker() },
 
     // HISTÓRICO CUMULATIVO POR ANÁLISE (Sem janela móvel curta, apenas a moda acumulada daquela análise até então)
-    "CUMULATIVE_ANALYSIS_MODE": { category: "ANALYSIS_HISTORIC", tracker: new OnlineTracker() },
+    CUMULATIVE_ANALYSIS_MODE: { category: "ANALYSIS_HISTORIC", tracker: new OnlineTracker() },
 
     // DINÂMICOS LOCAL FIRST GAP (Walk-Forward W ciclos)
-    "FIRST_GAP_W3": { category: "FIRST_GAP_DYNAMIC", tracker: new OnlineTracker() },
-    "FIRST_GAP_W5": { category: "FIRST_GAP_DYNAMIC", tracker: new OnlineTracker() },
-    "FIRST_GAP_W10": { category: "FIRST_GAP_DYNAMIC", tracker: new OnlineTracker() },
-    "FIRST_GAP_TOP3_W5": { category: "FIRST_GAP_DYNAMIC", tracker: new OnlineTracker() },
+    FIRST_GAP_W3: { category: "FIRST_GAP_DYNAMIC", tracker: new OnlineTracker() },
+    FIRST_GAP_W5: { category: "FIRST_GAP_DYNAMIC", tracker: new OnlineTracker() },
+    FIRST_GAP_W10: { category: "FIRST_GAP_DYNAMIC", tracker: new OnlineTracker() },
+    FIRST_GAP_TOP3_W5: { category: "FIRST_GAP_DYNAMIC", tracker: new OnlineTracker() },
   };
 
   console.log(`\n--- EXECUTANDO WALK-FORWARD COMPARATIVO EM TODOS OS CICLOS ---`);
@@ -173,7 +185,7 @@ async function runBaselineLab() {
 
       // 6. GLOBAL TOP 3 STATIC (pega o mais próximo entre os 3 minutos mais frequentes globais)
       const closestGlobalTop3 = globalTop3.reduce((closest, curr) =>
-        Math.abs(curr - target) < Math.abs(closest - target) ? curr : closest
+        Math.abs(curr - target) < Math.abs(closest - target) ? curr : closest,
       );
       trackerMap["GLOBAL_TOP3_STATIC"].tracker.add(closestGlobalTop3, target);
 
@@ -209,9 +221,9 @@ async function runBaselineLab() {
       // 11. FIRST_GAP_TOP3_W5 (Top 3 dinâmico local dos últimos 5 ciclos)
       const fgTop3 = computeTopFirstGapOnly(win5, 3);
       if (fgTop3.length > 0) {
-        const best3 = fgTop3.slice(0, 3).map(p => p.m);
+        const best3 = fgTop3.slice(0, 3).map((p) => p.m);
         const chosen = best3.reduce((closest, curr) =>
-          Math.abs(curr - target) < Math.abs(closest - target) ? curr : closest
+          Math.abs(curr - target) < Math.abs(closest - target) ? curr : closest,
         );
         trackerMap["FIRST_GAP_TOP3_W5"].tracker.add(chosen, target);
       }
@@ -220,9 +232,15 @@ async function runBaselineLab() {
 
   // 3. COMPILAÇÃO E EXIBIÇÃO DOS RESULTADOS
   const finalResults: BaselineMetricResult[] = [];
-  console.log("\n=========================================================================================================");
-  console.log("MODELO                          | CATEGORIA             | EXATO  | VIZ. ±1 | VIZ. ±2 | MAE (Méd) | MEDIANA");
-  console.log("=========================================================================================================");
+  console.log(
+    "\n=========================================================================================================",
+  );
+  console.log(
+    "MODELO                          | CATEGORIA             | EXATO  | VIZ. ±1 | VIZ. ±2 | MAE (Méd) | MEDIANA",
+  );
+  console.log(
+    "=========================================================================================================",
+  );
 
   for (const [name, entry] of Object.entries(trackerMap)) {
     const met = entry.tracker.getMetrics();
@@ -245,9 +263,13 @@ async function runBaselineLab() {
     const maePadded = `${met.mae.toFixed(2)} min`.padStart(9);
     const medPadded = `${met.medianAe} min`.padStart(7);
 
-    console.log(`${namePadded} | ${catPadded} | ${exPadded} | ${v1Padded} | ${v2Padded} | ${maePadded} | ${medPadded}`);
+    console.log(
+      `${namePadded} | ${catPadded} | ${exPadded} | ${v1Padded} | ${v2Padded} | ${maePadded} | ${medPadded}`,
+    );
   }
-  console.log("=========================================================================================================");
+  console.log(
+    "=========================================================================================================",
+  );
 
   // Salva os resultados no arquivo JSON do laboratório
   fs.writeFileSync(
@@ -261,8 +283,8 @@ async function runBaselineLab() {
         finalResults,
       },
       null,
-      2
-    )
+      2,
+    ),
   );
 
   console.log("\nResultados salvos em scripts/lab_baseline_results.json");

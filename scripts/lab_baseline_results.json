@@ -2,11 +2,7 @@
   "totalGlobalFirstGaps": 231052,
   "globalMode": 1,
   "globalMedian": 6,
-  "globalTop3": [
-    1,
-    2,
-    3
-  ],
+  "globalTop3": [1, 2, 3],
   "finalResults": [
     {
       "name": "RANDOM_UNIFORM_1_15",

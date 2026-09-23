@@ -17,9 +17,19 @@ import {
   Search,
   CheckCheck,
   XCircle,
+  ChevronDown,
+  ChevronUp,
+  Filter,
+  Bot,
 } from "lucide-react";
+import { toast } from "sonner";
+import { useSignalStatsStore } from "@/lib/signalStatsStore";
 import { Switch } from "@/components/ui/switch";
-import { ALL_ANALYSIS_DEFINITIONS, useAnalysisSignalConfig } from "@/lib/analysisSignalConfig";
+import {
+  ALL_ANALYSIS_DEFINITIONS,
+  useAnalysisSignalConfig,
+  ALL_BLAZE_STONES,
+} from "@/lib/analysisSignalConfig";
 import { ColorPatternBreaksPanel } from "@/components/sections/ColorPatternBreaksPanel";
 import { RecoveryBreaksPanel } from "@/components/sections/RecoveryBreaksPanel";
 import { detectAllRecoveryBreaks } from "@/lib/recoveryBreaks";
@@ -84,6 +94,168 @@ function fmtDateTime(d: Date | string | null | undefined): string {
   });
 }
 
+function StoneSelectorSubmenu({
+  analysisId,
+  isSignalActive,
+}: {
+  analysisId: number;
+  isSignalActive?: boolean;
+}) {
+  const {
+    getActiveStonesForAnalysis,
+    toggleStone,
+    selectAllStonesForAnalysis,
+    deselectAllStonesForAnalysis,
+    selectColorStonesForAnalysis,
+    isAutoAuditActive,
+    getStoneAuditMetric,
+  } = useAnalysisSignalConfig();
+
+  const activeStones = getActiveStonesForAnalysis(analysisId);
+  const activeSet = useMemo(() => new Set(activeStones), [activeStones]);
+
+  return (
+    <div className="mt-2.5 rounded-lg border border-white/10 bg-black/60 p-2.5 space-y-2 text-left backdrop-blur-md">
+      <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-white/10 pb-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+            <Filter className="h-3 w-3 text-primary" />
+            Pedras Autorizadas ({activeStones.length}/15)
+          </span>
+          {isAutoAuditActive && (
+            <span className="inline-flex items-center gap-1 rounded bg-emerald-500/20 border border-emerald-500/30 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">
+              <Bot className="h-2.5 w-2.5 animate-pulse" />
+              Auto ≥50%
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-1 text-[9px] font-bold">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              selectAllStonesForAnalysis(analysisId);
+            }}
+            className="rounded bg-white/10 px-1.5 py-0.5 text-white hover:bg-white/20 transition-colors"
+          >
+            Todas
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              deselectAllStonesForAnalysis(analysisId);
+            }}
+            className="rounded bg-white/10 px-1.5 py-0.5 text-muted-foreground hover:bg-white/20 hover:text-white transition-colors"
+          >
+            Nenhuma
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              selectColorStonesForAnalysis(analysisId, "white");
+            }}
+            className="rounded bg-white px-1.5 py-0.5 text-zinc-950 font-bold hover:bg-zinc-200 transition-colors"
+          >
+            0
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              selectColorStonesForAnalysis(analysisId, "red");
+            }}
+            className="rounded bg-red-600/80 px-1.5 py-0.5 text-white hover:bg-red-600 transition-colors"
+          >
+            1-7
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              selectColorStonesForAnalysis(analysisId, "black");
+            }}
+            className="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-200 hover:bg-zinc-700 transition-colors"
+          >
+            8-14
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-[repeat(15,minmax(0,1fr))] gap-1">
+        {ALL_BLAZE_STONES.map((stone) => {
+          const isAct = activeSet.has(stone);
+          const isWhite = stone === 0;
+          const isRed = stone >= 1 && stone <= 7;
+          const stoneMetric = isAutoAuditActive
+            ? getStoneAuditMetric(analysisId, stone)
+            : undefined;
+
+          let colorStyles = "";
+          if (isWhite) {
+            colorStyles = isAct
+              ? "bg-white text-zinc-950 border-white shadow-[0_0_8px_rgba(255,255,255,0.4)]"
+              : "bg-white/10 text-white/30 border-white/10 line-through opacity-40";
+          } else if (isRed) {
+            colorStyles = isAct
+              ? "bg-red-600 text-white border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.3)]"
+              : "bg-red-950/30 text-red-500/30 border-red-900/30 line-through opacity-40";
+          } else {
+            colorStyles = isAct
+              ? "bg-zinc-800 text-zinc-100 border-zinc-600 shadow-[0_0_8px_rgba(0,0,0,0.5)]"
+              : "bg-zinc-900/40 text-zinc-600/30 border-zinc-800/30 line-through opacity-40";
+          }
+
+          let tooltip = `Pedra ${stone}: ${isAct ? "Ativa para gerar sinais" : "Desativada (não gera sinais)"}`;
+          if (isAutoAuditActive && stoneMetric) {
+            if (stoneMetric.total > 0 && stoneMetric.assertividade !== null) {
+              tooltip = `Pedra ${stone}: Assertividade Auditoria ${stoneMetric.assertividade.toFixed(1)}% (${stoneMetric.wins}G / ${stoneMetric.losses}R) - ${stoneMetric.isValid ? "Validada (≥50%)" : "Bloqueada (<50%)"}`;
+            } else {
+              tooltip = `Pedra ${stone}: ${stoneMetric.isValid ? "Validada pelo Modo Auto (assertividade geral da análise ≥50%)" : "Bloqueada pelo Modo Auto (<50%)"}`;
+            }
+          }
+
+          return (
+            <button
+              key={stone}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleStone(analysisId, stone);
+              }}
+              title={tooltip}
+              className={`flex flex-col items-center justify-center rounded border text-[11px] font-black font-mono py-1 transition-all ${colorStyles}`}
+            >
+              <span>{stone}</span>
+              {isAutoAuditActive &&
+                stoneMetric &&
+                stoneMetric.total > 0 &&
+                stoneMetric.assertividade !== null && (
+                  <span
+                    className={`text-[7px] font-bold leading-none mt-0.5 ${
+                      stoneMetric.assertividade >= 50
+                        ? "text-emerald-300 font-extrabold"
+                        : "text-red-300"
+                    }`}
+                  >
+                    {stoneMetric.assertividade.toFixed(0)}%
+                  </span>
+                )}
+            </button>
+          );
+        })}
+      </div>
+      {isSignalActive === false && (
+        <p className="text-[8.5px] text-amber-300/80 italic">
+          * A análise está apenas como confluência. Ative o interruptor principal para disparar
+          sinais.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function AnalysisPanel({
   eyebrow,
   title,
@@ -140,6 +312,13 @@ function AnalysisPanel({
   // Regra dos 3 Ciclos:
   // - Requer no mínimo 3 ciclos anteriores válidos
   const isEligible = pastValidCycles.length >= 3;
+
+  const { isStoneActive, toggleStone, supportsStoneFilter, getActiveStonesForAnalysis } =
+    useAnalysisSignalConfig();
+  const [showStonesMenu, setShowStonesMenu] = useState(false);
+  const isStoneSupported = analysisId !== undefined && supportsStoneFilter(analysisId);
+  const isThisStoneActive = isStoneSupported ? isStoneActive(analysisId, pedra) : true;
+  const activeStones = isStoneSupported ? getActiveStonesForAnalysis(analysisId) : [];
 
   // Janela estatística usada para o cálculo: 3 ciclos passados anteriores ao gatilho
   const calculationBase = useMemo(() => {
@@ -233,6 +412,54 @@ function AnalysisPanel({
             </div>
           )}
 
+          {isStoneSupported && (
+            <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 shadow-sm">
+              <div className="flex flex-col text-right">
+                <span className="text-[10px] font-bold leading-tight">
+                  {isThisStoneActive ? (
+                    <span className="text-emerald-400 flex items-center justify-end gap-1">
+                      <Zap className="h-3 w-3" /> Pedra {pedra} Ativa
+                    </span>
+                  ) : (
+                    <span className="text-amber-400/90 flex items-center justify-end gap-1">
+                      <Shield className="h-3 w-3" /> Pedra {pedra} Pausada
+                    </span>
+                  )}
+                </span>
+                <span className="text-[8px] text-muted-foreground font-medium">
+                  {isThisStoneActive
+                    ? `Dispara no gatilho ${pedra}`
+                    : `Não envia no gatilho ${pedra}`}
+                </span>
+              </div>
+              <Switch
+                checked={isThisStoneActive}
+                onCheckedChange={() => toggleStone(analysisId, pedra)}
+                id={`switch-panel-stone-${analysisId}-${pedra}`}
+                className="data-[state=checked]:bg-emerald-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowStonesMenu((prev) => !prev)}
+                className={`ml-1 flex items-center gap-1 rounded border px-2 py-1 text-[10px] font-bold transition-colors ${
+                  showStonesMenu
+                    ? "border-primary/50 bg-primary/20 text-white"
+                    : activeStones.length < 15
+                      ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
+                      : "border-white/10 bg-white/5 text-muted-foreground hover:text-white"
+                }`}
+                title="Configurar quais pedras desta análise podem enviar sinais"
+              >
+                <span>{activeStones.length}/15 pedras</span>
+                {showStonesMenu ? (
+                  <ChevronUp className="h-3 w-3" />
+                ) : (
+                  <ChevronDown className="h-3 w-3" />
+                )}
+              </button>
+            </div>
+          )}
+
           <div className="flex flex-col items-end gap-1 text-xs font-bold text-muted-foreground">
             <span>
               {uiCycles.length} de {allStoneCycles.length} ciclos totais
@@ -243,6 +470,10 @@ function AnalysisPanel({
           </div>
         </div>
       </div>
+
+      {isStoneSupported && showStonesMenu && (
+        <StoneSelectorSubmenu analysisId={analysisId} isSignalActive={isSignalActive} />
+      )}
 
       {loading && (
         <div className="flex items-center justify-center py-12">
@@ -640,9 +871,52 @@ export default function AnaliseSection() {
     { id: "sums", label: "Somas Consecutivas", icon: Plus },
   ];
 
-  const { isActive, toggle, activateAll, deactivateAll, resetToDefault, countActive, totalCount } =
-    useAnalysisSignalConfig();
+  const {
+    isActive,
+    toggle,
+    activateAll,
+    deactivateAll,
+    resetToDefault,
+    countActive,
+    totalCount,
+    supportsStoneFilter,
+    getActiveStonesCount,
+    isAutoAuditActive,
+    toggleAutoAuditMode,
+    setAutoAuditMode,
+    applyAutoAuditFilter,
+  } = useAnalysisSignalConfig();
 
+  const recentSignals = useSignalStatsStore((s) => s.recentSignals);
+  const auditStoreStats = useSignalStatsStore((s) => s.stats);
+  const signalsLength = recentSignals.length;
+  const statsKeysLength = Object.keys(auditStoreStats || {}).length;
+  const lastRanRef = useRef<number>(0);
+
+  // Autonomia em tempo real quando o Modo Auto está acionado:
+  // Valida e autoriza de forma autônoma apenas análises e pedras com assertividade a partir de 50% no Painel de Auditoria
+  useEffect(() => {
+    if (!isAutoAuditActive) return;
+    const now = Date.now();
+    if (now - lastRanRef.current < 300) {
+      const timer = setTimeout(() => {
+        applyAutoAuditFilter(recentSignals, auditStoreStats);
+        lastRanRef.current = Date.now();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+    lastRanRef.current = now;
+    applyAutoAuditFilter(recentSignals, auditStoreStats);
+  }, [
+    isAutoAuditActive,
+    signalsLength,
+    statsKeysLength,
+    recentSignals,
+    auditStoreStats,
+    applyAutoAuditFilter,
+  ]);
+
+  const [expandedAnalysisIds, setExpandedAnalysisIds] = useState<Set<number>>(new Set());
   const [filterSearch, setFilterSearch] = useState("");
 
   const displayedFilterAnalyses = useMemo(() => {
@@ -763,7 +1037,15 @@ export default function AnaliseSection() {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={activateAll}
+                onClick={() => {
+                  if (isAutoAuditActive) {
+                    setAutoAuditMode(false);
+                    toast.info(
+                      "Modo Auto desativado para permitir ativação manual de todas as análises.",
+                    );
+                  }
+                  activateAll();
+                }}
                 className="flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-400 hover:bg-emerald-500/20 transition-all"
               >
                 <CheckCheck className="h-3.5 w-3.5" />
@@ -771,7 +1053,13 @@ export default function AnaliseSection() {
               </button>
               <button
                 type="button"
-                onClick={deactivateAll}
+                onClick={() => {
+                  if (isAutoAuditActive) {
+                    setAutoAuditMode(false);
+                    toast.info("Modo Auto desativado para definir todas como confluência.");
+                  }
+                  deactivateAll();
+                }}
                 className="flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold text-amber-300 hover:bg-amber-500/20 transition-all"
               >
                 <XCircle className="h-3.5 w-3.5" />
@@ -779,14 +1067,58 @@ export default function AnaliseSection() {
               </button>
               <button
                 type="button"
-                onClick={resetToDefault}
-                className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-bold text-muted-foreground hover:bg-white/10 hover:text-white transition-all"
+                onClick={() => {
+                  const next = toggleAutoAuditMode();
+                  if (next) {
+                    toast.success(
+                      "Modo Auto Ativado: Apenas análises e pedras com assertividade ≥ 50% no Painel de Auditoria validadas para envio de sinais.",
+                    );
+                  } else {
+                    toast.info(
+                      "Modo Auto Desativado: Seleção manual de análises e pedras habilitada.",
+                    );
+                  }
+                }}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1 text-[11px] font-black uppercase tracking-wider transition-all shadow-sm ${
+                  isAutoAuditActive
+                    ? "border-emerald-500/60 bg-gradient-to-r from-emerald-500/25 to-teal-500/25 text-emerald-300 ring-1 ring-emerald-500/40 shadow-emerald-500/20"
+                    : "border-white/10 bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-white"
+                }`}
+                title={
+                  isAutoAuditActive
+                    ? "Modo Auto Ativo: Apenas análises e pedras com assertividade a partir de 50% no Painel de Auditoria enviam sinais (clique para desativar)"
+                    : "Ativar Modo Auto: Valida de forma autônoma apenas análises e pedras com assertividade a partir de 50% no Painel de Auditoria"
+                }
               >
-                <RotateCcw className="h-3.5 w-3.5" />
-                <span>Restaurar Padrão</span>
+                <Bot
+                  className={`h-3.5 w-3.5 ${isAutoAuditActive ? "text-emerald-400 animate-pulse" : ""}`}
+                />
+                <span>Auto {isAutoAuditActive ? "(Ativo)" : ""}</span>
+                {isAutoAuditActive && (
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                )}
               </button>
             </div>
           </div>
+
+          {isAutoAuditActive && (
+            <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
+              <div className="flex items-center gap-2">
+                <Bot className="h-4 w-4 text-emerald-400 flex-shrink-0 animate-pulse" />
+                <span>
+                  <strong>Modo Auto Autônomo Ativo:</strong> Apenas análises (por pedra) com{" "}
+                  <strong>assertividade a partir de 50%</strong> no Painel de Auditoria estão
+                  validadas para envio de sinais.
+                </span>
+              </div>
+              <span className="text-[10px] font-mono bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 rounded text-emerald-200">
+                {countActive} análises validadas
+              </span>
+            </div>
+          )}
 
           <div className="mt-3 flex items-center gap-3">
             <div className="relative flex-1">
@@ -805,58 +1137,97 @@ export default function AnaliseSection() {
           </div>
 
           {/* Lista com interruptor ao lado de cada análise */}
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 max-h-72 overflow-y-auto pr-1">
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 max-h-80 overflow-y-auto pr-1">
             {displayedFilterAnalyses.map((item) => {
               const isAct = isActive(item.id);
+              const hasStoneFilter = supportsStoneFilter(item.id);
+              const stonesCount = getActiveStonesCount(item.id);
+              const isExpanded = expandedAnalysisIds.has(item.id);
+
               return (
                 <div
                   key={item.id}
-                  className={`flex items-center justify-between gap-2.5 rounded-lg border p-2.5 transition-all ${
+                  className={`flex flex-col rounded-lg border p-2.5 transition-all ${
                     isAct
                       ? "border-emerald-500/30 bg-emerald-500/[0.05] hover:bg-emerald-500/[0.09]"
                       : "border-white/10 bg-white/[0.02] hover:bg-white/[0.04]"
-                  }`}
+                  } ${isExpanded ? "ring-1 ring-primary/40 col-span-1 sm:col-span-2 md:col-span-3 lg:col-span-4" : ""}`}
                 >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-black ${
-                          isAct
-                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                            : "bg-white/10 text-muted-foreground"
-                        }`}
-                      >
-                        {item.code}
-                      </span>
-                      <span className="truncate text-xs font-bold text-white" title={item.name}>
-                        {item.name}
-                      </span>
+                  <div className="flex items-center justify-between gap-2.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-black ${
+                            isAct
+                              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                              : "bg-white/10 text-muted-foreground"
+                          }`}
+                        >
+                          {item.code}
+                        </span>
+                        <span className="truncate text-xs font-bold text-white" title={item.name}>
+                          {item.name}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center gap-1.5 text-[9.5px]">
+                        <span className="text-muted-foreground/70 truncate">
+                          {item.categoryLabel}
+                        </span>
+                        <span>•</span>
+                        {isAct ? (
+                          <span className="text-emerald-400 font-bold flex items-center gap-0.5 whitespace-nowrap">
+                            <Zap className="h-2.5 w-2.5" /> Envio Ativo
+                          </span>
+                        ) : (
+                          <span className="text-amber-400/90 font-medium flex items-center gap-0.5 whitespace-nowrap">
+                            <Shield className="h-2.5 w-2.5" /> Confluência
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="mt-1 flex items-center gap-1.5 text-[9.5px]">
-                      <span className="text-muted-foreground/70 truncate">
-                        {item.categoryLabel}
-                      </span>
-                      <span>•</span>
-                      {isAct ? (
-                        <span className="text-emerald-400 font-bold flex items-center gap-0.5 whitespace-nowrap">
-                          <Zap className="h-2.5 w-2.5" /> Envio Ativo
-                        </span>
-                      ) : (
-                        <span className="text-amber-400/90 font-medium flex items-center gap-0.5 whitespace-nowrap">
-                          <Shield className="h-2.5 w-2.5" /> Confluência
-                        </span>
+
+                    <div className="flex items-center gap-2 pl-1">
+                      {hasStoneFilter && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExpandedAnalysisIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(item.id)) next.delete(item.id);
+                              else next.add(item.id);
+                              return next;
+                            });
+                          }}
+                          className={`flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold border transition-colors ${
+                            isExpanded
+                              ? "border-primary/60 bg-primary/20 text-white"
+                              : stonesCount < 15
+                                ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
+                                : "border-white/10 bg-white/5 text-muted-foreground hover:text-white"
+                          }`}
+                          title="Configurar quais pedras desta análise podem enviar sinais"
+                        >
+                          <span>{stonesCount}/15 pedras</span>
+                          {isExpanded ? (
+                            <ChevronUp className="h-3 w-3" />
+                          ) : (
+                            <ChevronDown className="h-3 w-3" />
+                          )}
+                        </button>
                       )}
+
+                      <Switch
+                        checked={isAct}
+                        onCheckedChange={() => toggle(item.id)}
+                        id={`switch-filter-${item.id}`}
+                        className="data-[state=checked]:bg-emerald-500"
+                      />
                     </div>
                   </div>
 
-                  <div className="flex items-center pl-1">
-                    <Switch
-                      checked={isAct}
-                      onCheckedChange={() => toggle(item.id)}
-                      id={`switch-filter-${item.id}`}
-                      className="data-[state=checked]:bg-emerald-500"
-                    />
-                  </div>
+                  {hasStoneFilter && isExpanded && (
+                    <StoneSelectorSubmenu analysisId={item.id} isSignalActive={isAct} />
+                  )}
                 </div>
               );
             })}

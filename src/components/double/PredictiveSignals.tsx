@@ -58,7 +58,12 @@ import {
 import { IncrementalPredictiveEngine } from "@/lib/incrementalPredictiveEngine";
 import { mergePersistedWithLiveCycles, fetchPersistedCyclesMap } from "@/lib/cyclePersistence";
 import { MAIN_ANALYSIS_IDS } from "@/lib/incrementalPredictiveEngine";
-import { useAnalysisSignalConfig, getActiveSignalAnalysisIds } from "@/lib/analysisSignalConfig";
+import {
+  useAnalysisSignalConfig,
+  getActiveSignalAnalysisIds,
+  getActiveAnalysisStonesMap,
+  isAnalysisStoneActive,
+} from "@/lib/analysisSignalConfig";
 import { detectAllRecoveryBreaks } from "@/lib/recoveryBreaks";
 
 type Mode1Signal = {
@@ -474,7 +479,7 @@ const SignalCard = ({ signal: s }: { signal: any }) => {
 };
 
 export function PredictiveSignals() {
-  const { activeSet } = useAnalysisSignalConfig();
+  const { activeSet, stonesMap } = useAnalysisSignalConfig();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -933,6 +938,7 @@ export function PredictiveSignals() {
         now.getTime(),
         {
           activeAnalysisIds: activeSet,
+          activeAnalysisStones: stonesMap,
         },
         tendencyCandidates,
       );
@@ -987,7 +993,7 @@ export function PredictiveSignals() {
     } catch (err) {
       console.error("[PredictiveSignals] Signal generation error:", err);
     }
-  }, [rows, active, engine, whiteStreakStatus.isFrozen, activeSet]);
+  }, [rows, active, engine, whiteStreakStatus.isFrozen, activeSet, stonesMap]);
 
   // Inscrição em tempo real para sincronizar o status de validação dos sinais (WIN/LOSS/PENDENTE)
   const [liveStoredMap, setLiveStoredMap] = useState<Map<string, PredictiveSignal>>(() => {
@@ -1018,35 +1024,47 @@ export function PredictiveSignals() {
     const onVisible = () => {
       if (!document.hidden) generate();
     };
+    let configTimeout: NodeJS.Timeout | null = null;
     const onConfigChange = () => {
-      const activeIds = getActiveSignalAnalysisIds();
-      // Limpa imediatamente sinais pendentes que não tenham mais fonte primária ativa
-      const currentStored = getPredictiveSignals();
-      const cleaned = currentStored.filter((sig) => {
-        if (sig.outcome !== "pending") return true;
-        if (sig.category === "em_alta" || sig.isEmAlta) return true;
-        const primaries =
-          sig.primaryAnalyses && sig.primaryAnalyses.length > 0
-            ? sig.primaryAnalyses
-            : (sig.sources || [])
-                .filter((s) => !s.top3 && s.rank === 1 && (s.pct ?? 0) >= 80)
-                .map((s) => s.analysis);
-        if (primaries.length === 0) return false;
-        return primaries.some((aId) => activeIds.has(aId));
-      });
-      setPredictiveSignals(cleaned);
-      setLiveStoredMap(new Map(cleaned.map((s) => [s.key, s])));
-      generate();
+      if (configTimeout) clearTimeout(configTimeout);
+      configTimeout = setTimeout(() => {
+        const activeIds = getActiveSignalAnalysisIds();
+        const stones = getActiveAnalysisStonesMap();
+        // Limpa imediatamente sinais pendentes que não tenham mais fonte primária ativa com sua pedra
+        const currentStored = getPredictiveSignals();
+        const cleaned = currentStored.filter((sig) => {
+          if (sig.outcome !== "pending") return true;
+          if (sig.category === "em_alta" || sig.isEmAlta) return true;
+          const primarySources = (sig.sources || []).filter(
+            (s) => !s.top3 && s.rank === 1 && (s.pct ?? 0) >= 80,
+          );
+          if (primarySources.length > 0) {
+            return primarySources.some((s) =>
+              isAnalysisStoneActive(s.analysis, s.value, activeIds, stones),
+            );
+          }
+          const primaries =
+            sig.primaryAnalyses && sig.primaryAnalyses.length > 0 ? sig.primaryAnalyses : [];
+          if (primaries.length === 0) return false;
+          return primaries.some((aId) => activeIds.has(aId));
+        });
+        setPredictiveSignals(cleaned);
+        setLiveStoredMap(new Map(cleaned.map((s) => [s.key, s])));
+        generate();
+      }, 50);
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
     window.addEventListener("freitas_signal_analysis_config_changed", onConfigChange);
+    window.addEventListener("freitas_signal_analysis_stones_changed", onConfigChange);
 
     return () => {
       clearInterval(interval);
+      if (configTimeout) clearTimeout(configTimeout);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
       window.removeEventListener("freitas_signal_analysis_config_changed", onConfigChange);
+      window.removeEventListener("freitas_signal_analysis_stones_changed", onConfigChange);
     };
   }, [rows, loading, generate]);
 
